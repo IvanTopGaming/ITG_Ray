@@ -3,18 +3,25 @@ package logging
 
 import "regexp"
 
+// Sensitive-keyword alternation used by multiple rules.
+// Note: bare 'sid' deliberately excluded — too common as session-id abbreviation.
+// 'shortid' / 'short_id' cover the Reality short-id case specifically.
+const secretKeywords = `uuid|password|passwd|pwd|pbk|publickey|public_key|shortid|short_id|token|bearer|basic|auth_key|authkey|api_key|apikey|secret`
+
 var redactors = []struct {
 	re   *regexp.Regexp
 	repl string
 }{
-	// key=value or key:"value" where key is a sensitive keyword and value is quoted (may contain spaces).
-	{regexp.MustCompile(`(?i)\b(uuid|password|pbk|publickey|shortid|sid|token|bearer|basic)\s*[:=]\s*"[^"]+"`), `$1=***redacted***`},
-	// key=value where key is a sensitive keyword and value is unquoted.
-	{regexp.MustCompile(`(?i)\b(uuid|password|pbk|publickey|shortid|sid|token|bearer|basic)\s*[:=]\s*[A-Za-z0-9+/=_\-\.]+`), `$1=***redacted***`},
-	// Bearer/Basic token appearing inside a quoted string value (any key).
-	{regexp.MustCompile(`(?i)"(Bearer|Basic)\s+[A-Za-z0-9+/=_\-\.]+"`), "$1 ***redacted***"},
-	// Bare UUID (runs last so uuid=<uuid> is caught by the key=value rules above first).
-	{regexp.MustCompile(`\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`), `***redacted***`},
+	// JSON-style: "key":"value"
+	{regexp.MustCompile(`(?i)"(` + secretKeywords + `)"\s*:\s*"[^"]*"`), `"$1":"***redacted***"`},
+	// key=value or key:"value" where value is quoted (may contain spaces).
+	{regexp.MustCompile(`(?i)\b(` + secretKeywords + `)\s*[:=]\s*"[^"]+"`), `$1=***redacted***`},
+	// key=value where value is unquoted.
+	{regexp.MustCompile(`(?i)\b(` + secretKeywords + `)\s*[:=]\s*[A-Za-z0-9+/=_\-\.]+`), `$1=***redacted***`},
+	// Bearer/Basic token — handles both quoted and unquoted forms, any outer key.
+	{regexp.MustCompile(`(?i)\b(Bearer|Basic)\s+[A-Za-z0-9+/=_\-\.]+`), `$1 ***redacted***`},
+	// Bare UUID (runs last — case-insensitive; VLESS UUIDs are spec'd lowercase but some tools emit uppercase).
+	{regexp.MustCompile(`(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`), `***redacted***`},
 }
 
 func Redact(s string) string {
