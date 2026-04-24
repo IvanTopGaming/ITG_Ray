@@ -19,11 +19,12 @@ var redactors = []struct {
 	// key=value where value is unquoted.
 	{regexp.MustCompile(`(?i)\b(` + secretKeywords + `)\s*[:=]\s*[A-Za-z0-9+/=_\-\.]+`), `$1=***redacted***`},
 	// Bearer/Basic token — handles both quoted and unquoted forms, any outer key.
-	{regexp.MustCompile(`(?i)\b(Bearer|Basic)\s+[A-Za-z0-9+/=_\-\.]+`), `$1 ***redacted***`},
+	{regexp.MustCompile(`(?i)\b(Bearer|Basic)\s+[A-Za-z0-9+/=_\-.]+`), `$1 ***redacted***`},
 	// Bare UUID (runs last — case-insensitive; VLESS UUIDs are spec'd lowercase but some tools emit uppercase).
 	{regexp.MustCompile(`(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`), `***redacted***`},
 }
 
+// Redact replaces known secret patterns in s with "***redacted***".
 func Redact(s string) string {
 	for _, r := range redactors {
 		s = r.re.ReplaceAllString(s, r.repl)
