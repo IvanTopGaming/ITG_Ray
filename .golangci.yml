@@ -12,6 +12,7 @@ linters:
     - unused
     - gofmt
     - goimports
+    - gosec
     - misspell
     - unconvert
     - gocritic
