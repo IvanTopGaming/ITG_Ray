@@ -80,3 +80,19 @@ func TestParseURL_Errors(t *testing.T) {
 		require.Error(t, err, "input=%q", u)
 	}
 }
+
+func TestSerializeURL_RoundTrip(t *testing.T) {
+	inputs := []string{
+		"vless://550e8400-e29b-41d4-a716-446655440000@example.com:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.cloudflare.com&fp=chrome&pbk=PUBKEY123&sid=0011&spx=%2F&type=xhttp&mode=packet-up&path=%2Fabc#NL-AMS-1",
+		"vless://abc@h:443?type=ws&security=tls&sni=h.example.com&path=%2Fws&host=cdn.example.com&alpn=h2%2Chttp%2F1.1#tag",
+		"vless://u@h:80#plain",
+	}
+	for _, in := range inputs {
+		c, err := ParseURL(in)
+		require.NoError(t, err)
+		out := c.URL()
+		c2, err := ParseURL(out)
+		require.NoError(t, err, "re-parse failed for %q", out)
+		require.Equal(t, c, c2, "round-trip mismatch:\nin=%s\nout=%s", in, out)
+	}
+}

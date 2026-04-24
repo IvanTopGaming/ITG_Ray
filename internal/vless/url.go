@@ -125,6 +125,91 @@ func ParseURL(raw string) (Config, error) {
 	return c, nil
 }
 
+// URL serializes the Config back into a vless:// URL.
+func (c Config) URL() string { //nolint:gocritic // Config is a value type; caller convenience outweighs copy cost
+	q := url.Values{}
+	if c.Flow != "" {
+		q.Set("flow", c.Flow)
+	}
+	if c.Encryption != "" {
+		q.Set("encryption", c.Encryption)
+	}
+	q.Set("security", c.Security.String())
+	if c.SNI != "" {
+		q.Set("sni", c.SNI)
+	}
+	if len(c.ALPN) > 0 {
+		q.Set("alpn", strings.Join(c.ALPN, ","))
+	}
+	if c.Fingerprint != "" {
+		q.Set("fp", c.Fingerprint)
+	}
+	if c.AllowInsecure {
+		q.Set("allowInsecure", "1")
+	}
+	if c.Security == SecurityReality {
+		if c.RealityPublicKey != "" {
+			q.Set("pbk", c.RealityPublicKey)
+		}
+		if c.RealityShortID != "" {
+			q.Set("sid", c.RealityShortID)
+		}
+		if c.RealitySpiderX != "" {
+			q.Set("spx", c.RealitySpiderX)
+		}
+	}
+	q.Set("type", c.Transport.String())
+	switch c.Transport {
+	case TransportWS, TransportHTTPUpgrade:
+		if c.Path != "" {
+			q.Set("path", c.Path)
+		}
+		if c.WSHost != "" {
+			q.Set("host", c.WSHost)
+		}
+	case TransportGRPC:
+		if c.GRPCServiceName != "" {
+			q.Set("serviceName", c.GRPCServiceName)
+		}
+		if c.GRPCMode != "" {
+			q.Set("mode", c.GRPCMode)
+		}
+	case TransportXHTTP:
+		if c.Path != "" {
+			q.Set("path", c.Path)
+		}
+		if c.XHTTPMode != "" {
+			q.Set("mode", c.XHTTPMode)
+		}
+	case TransportTCP:
+		if c.HeaderType != "" {
+			q.Set("headerType", c.HeaderType)
+		}
+	case TransportMKCP:
+		if c.HeaderType != "" {
+			q.Set("headerType", c.HeaderType)
+		}
+		if c.Seed != "" {
+			q.Set("seed", c.Seed)
+		}
+	case TransportQUIC:
+		if c.QUICSec != "" {
+			q.Set("quicSecurity", c.QUICSec)
+		}
+		if c.QUICKey != "" {
+			q.Set("key", c.QUICKey)
+		}
+	}
+	u := url.URL{
+		Scheme:   "vless",
+		User:     url.User(c.UUID),
+		Host:     fmt.Sprintf("%s:%d", c.Address, c.Port),
+		RawQuery: q.Encode(),
+		Fragment: c.Remark,
+	}
+	return u.String()
+}
+
 func orDefault(s, def string) string {
 	if s == "" {
 		return def
