@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 
 	"github.com/itg-team/itg-ray/internal/vless"
 )
@@ -43,7 +44,7 @@ func StableID(c vless.Config) string { //nolint:gocritic // Config is a value ty
 func New(c vless.Config, origin Origin, sourceID string) Server { //nolint:gocritic // Config is a value type; caller convenience outweighs copy cost
 	name := c.Remark
 	if name == "" {
-		name = fmt.Sprintf("%s:%d", c.Address, c.Port)
+		name = hostPort(c.Address, c.Port)
 	}
 	return Server{
 		ID:       StableID(c),
@@ -53,4 +54,12 @@ func New(c vless.Config, origin Origin, sourceID string) Server { //nolint:gocri
 		Remark:   c.Remark,
 		Vless:    c,
 	}
+}
+
+// hostPort formats address:port, bracketing IPv6 addresses per RFC 3986.
+func hostPort(addr string, port uint16) string {
+	if strings.Contains(addr, ":") {
+		return fmt.Sprintf("[%s]:%d", addr, port)
+	}
+	return fmt.Sprintf("%s:%d", addr, port)
 }

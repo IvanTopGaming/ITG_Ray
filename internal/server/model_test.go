@@ -46,3 +46,9 @@ func TestNew_FallbackNameWhenNoRemark(t *testing.T) {
 	s := New(c, OriginManual, "")
 	require.Equal(t, "h:443", s.Name)
 }
+
+func TestNew_IPv6NameFallbackIsBracketed(t *testing.T) {
+	c := vless.Config{Address: "2001:db8::1", Port: 443, UUID: "u"}
+	s := New(c, OriginManual, "")
+	require.Equal(t, "[2001:db8::1]:443", s.Name)
+}
