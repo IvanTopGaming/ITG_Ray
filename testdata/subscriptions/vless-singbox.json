@@ -1,0 +1,34 @@
+{
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "NL-AMS-1",
+      "server": "example.com",
+      "server_port": 443,
+      "uuid": "550e8400-e29b-41d4-a716-446655440000",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "www.cloudflare.com",
+        "reality": {
+          "enabled": true,
+          "public_key": "PUBKEY",
+          "short_id": "0011"
+        },
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "transport": {
+        "type": "ws",
+        "path": "/ws",
+        "headers": { "Host": "cdn.example.com" }
+      }
+    },
+    {
+      "type": "shadowsocks",
+      "tag": "skip-me"
+    }
+  ]
+}
