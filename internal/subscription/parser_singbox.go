@@ -96,13 +96,22 @@ func ParseSingbox(s string) (ParseResult, error) {
 				c.RealityShortID = o.TLS.Reality.ShortID
 			}
 		}
-		if o.Transport != nil {
-			if tr, ok := vless.ParseTransport(o.Transport.Type); ok {
-				c.Transport = tr
+		if o.Transport != nil && o.Transport.Type != "" {
+			tr, ok := vless.ParseTransport(o.Transport.Type)
+			if !ok {
+				r.Invalid++
+				continue
 			}
-			c.Path = o.Transport.Path
-			c.WSHost = o.Transport.Headers["Host"]
-			c.GRPCServiceName = o.Transport.ServiceName
+			c.Transport = tr
+			switch tr {
+			case vless.TransportWS, vless.TransportHTTPUpgrade:
+				c.Path = o.Transport.Path
+				c.WSHost = o.Transport.Headers["Host"]
+			case vless.TransportGRPC:
+				c.GRPCServiceName = o.Transport.ServiceName
+			case vless.TransportXHTTP:
+				c.Path = o.Transport.Path
+			}
 		}
 		if c.Address == "" || c.UUID == "" {
 			r.Invalid++

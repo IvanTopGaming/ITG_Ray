@@ -37,3 +37,53 @@ func TestParseSingboxJSON_NotJSON(t *testing.T) {
 	_, err := ParseSingbox("not json")
 	require.Error(t, err)
 }
+
+func TestParseSingboxJSON_UnknownTransportIsInvalid(t *testing.T) {
+	// An outbound with a transport type we don't support should count as Invalid,
+	// not silently decay to a TCP config carrying the foreign transport's metadata.
+	in := `{
+      "outbounds": [{
+        "type": "vless",
+        "server": "h",
+        "server_port": 443,
+        "uuid": "u",
+        "transport": {"type": "h2", "path": "/bad"}
+      }]
+    }`
+	r, err := ParseSingbox(in)
+	require.NoError(t, err)
+	require.Empty(t, r.Configs)
+	require.Equal(t, 1, r.Invalid)
+}
+
+func TestParseSingboxJSON_TLSWithoutReality(t *testing.T) {
+	in := `{
+      "outbounds": [{
+        "type": "vless",
+        "server": "h",
+        "server_port": 443,
+        "uuid": "u",
+        "tls": {"enabled": true, "server_name": "h.example.com"}
+      }]
+    }`
+	r, err := ParseSingbox(in)
+	require.NoError(t, err)
+	require.Len(t, r.Configs, 1)
+	require.Equal(t, vless.SecurityTLS, r.Configs[0].Security)
+	require.Equal(t, "h.example.com", r.Configs[0].SNI)
+}
+
+func TestParseSingboxJSON_PortOutOfRange(t *testing.T) {
+	in := `{
+      "outbounds": [{
+        "type": "vless",
+        "server": "h",
+        "server_port": 70000,
+        "uuid": "u"
+      }]
+    }`
+	r, err := ParseSingbox(in)
+	require.NoError(t, err)
+	require.Empty(t, r.Configs)
+	require.Equal(t, 1, r.Invalid)
+}
