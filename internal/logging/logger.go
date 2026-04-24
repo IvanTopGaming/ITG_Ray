@@ -29,14 +29,25 @@ func (h *humanHandler) Enabled(_ context.Context, l slog.Level) bool { return l 
 
 // Handle formats and writes r to the handler's writer after redacting secrets.
 func (h *humanHandler) Handle(_ context.Context, r slog.Record) error { //nolint:gocritic // slog.Handler interface requires slog.Record by value
+	scope := h.scope
+	if scope == "" {
+		r.Attrs(func(a slog.Attr) bool {
+			if a.Key == "scope" {
+				scope = a.Value.String()
+				return false
+			}
+			return true
+		})
+	}
+
 	var b strings.Builder
 	b.WriteString(r.Time.Format("2006-01-02T15:04:05.000Z07:00"))
 	b.WriteByte(' ')
 	b.WriteString(levelTag(r.Level))
 	b.WriteByte(' ')
-	if h.scope != "" {
+	if scope != "" {
 		b.WriteByte('[')
-		b.WriteString(h.scope)
+		b.WriteString(scope)
 		b.WriteString("] ")
 	}
 	b.WriteString(r.Message)
@@ -67,6 +78,9 @@ func (h *humanHandler) Handle(_ context.Context, r slog.Record) error { //nolint
 // instead of appearing as a trailing key=value pair.
 func (h *humanHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	dup := *h
+	// Clone attrs to prevent aliasing the parent's backing array.
+	// See slog.commonHandler.withAttrs in the stdlib for the canonical pattern.
+	dup.attrs = append([]slog.Attr(nil), h.attrs...)
 	for _, a := range attrs {
 		if a.Key == "scope" {
 			dup.scope = a.Value.String()
@@ -77,7 +91,7 @@ func (h *humanHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return &dup
 }
 
-// WithGroup returns the handler unchanged; groups are not supported.
+// WithGroup is a no-op; groups are intentionally unsupported for the human-readable format.
 func (h *humanHandler) WithGroup(_ string) slog.Handler { return h }
 
 func levelTag(l slog.Level) string {
