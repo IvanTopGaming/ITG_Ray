@@ -40,6 +40,11 @@ func lockForPath(path string) *sync.Mutex {
 // Stored is the on-disk shape of one subscription entry. It includes the
 // metadata fields populated by refresh.Driver: LastSyncAt and LastStatus
 // are written after every sync attempt (success or failure).
+//
+// Note: omitempty has no effect on time.Time (it's a struct), so a fresh
+// subscription that has never been synced will round-trip with
+// LastSyncAt = "0001-01-01T00:00:00Z" in JSON. Use LastSyncAt.IsZero() to
+// distinguish "never synced" from a real timestamp.
 type Stored struct {
 	ID             string    `json:"id"`
 	Name           string    `json:"name"`
