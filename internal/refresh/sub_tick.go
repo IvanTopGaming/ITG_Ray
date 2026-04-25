@@ -98,7 +98,7 @@ func (d *Driver) runSub(ctx context.Context, s subscription.Stored) {
 	}
 
 	d.randMu.Lock()
-	first := time.Duration(d.rand.Int63n(int64(firstSubJitterMax)))
+	first := time.Duration(d.rand.Int63n(int64(d.firstSubJitterMax)))
 	d.randMu.Unlock()
 	timer := time.NewTimer(first)
 	defer timer.Stop()

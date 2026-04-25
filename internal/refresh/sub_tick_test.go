@@ -161,13 +161,15 @@ func TestRunSub_FirstTickWithinJitterWindow(t *testing.T) {
 		syncCh <- time.Now()
 		return existing, subscription.SyncMeta{Status: "OK", Summary: "imported=0"}, nil
 	}
+	const testJitterMax = 50 * time.Millisecond
 	d := NewDriver(Config{
-		Subs:        st,
-		ServersPath: t.TempDir() + "/servers.json",
-		SyncFunc:    syncFn,
-		ProbeFunc:   noopProbe,
-		Rand:        rand.New(rand.NewSource(1)), //nolint:gosec
-		Log:         slog.New(slog.NewTextHandler(testWriter{t}, nil)),
+		Subs:              st,
+		ServersPath:       t.TempDir() + "/servers.json",
+		SyncFunc:          syncFn,
+		ProbeFunc:         noopProbe,
+		FirstSubJitterMax: testJitterMax,
+		Rand:              rand.New(rand.NewSource(1)), //nolint:gosec
+		Log:               slog.New(slog.NewTextHandler(testWriter{t}, nil)),
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -179,10 +181,10 @@ func TestRunSub_FirstTickWithinJitterWindow(t *testing.T) {
 	select {
 	case fired := <-syncCh:
 		elapsed := fired.Sub(start)
-		if elapsed > firstSubJitterMax+200*time.Millisecond {
-			t.Fatalf("first tick after %v, want ≤ %v", elapsed, firstSubJitterMax)
+		if elapsed > testJitterMax+200*time.Millisecond {
+			t.Fatalf("first tick after %v, want ≤ %v", elapsed, testJitterMax)
 		}
-	case <-time.After(firstSubJitterMax + 2*time.Second):
+	case <-time.After(testJitterMax + 2*time.Second):
 		t.Fatal("syncOne never fired within jitter window")
 	}
 	cancel()
@@ -227,7 +229,7 @@ func TestRunSub_ZeroIntervalUsesDriverDefault(t *testing.T) {
 		case <-syncCh:
 			count++
 		case <-deadline:
-			t.Fatalf("only saw %d ticks in 2s, want ≥ 2", count)
+			t.Fatalf("only saw %d ticks in 3s, want ≥ 2", count)
 		}
 	}
 	cancel()

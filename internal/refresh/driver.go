@@ -42,6 +42,7 @@ type Config struct {
 	SyncFunc           SyncFn
 	ProbeFunc          ProbeFn
 	DefaultSubInterval time.Duration
+	FirstSubJitterMax  time.Duration // override the default 30s startup-stagger window (mainly for tests)
 	ProbeInterval      time.Duration
 	ProbeTimeout       time.Duration
 	ProbeConcurrency   int
@@ -57,6 +58,7 @@ type Driver struct {
 	syncFunc           SyncFn
 	probeFunc          ProbeFn
 	defaultSubInterval time.Duration
+	firstSubJitterMax  time.Duration
 	probeInterval      time.Duration
 	probeTimeout       time.Duration
 	probeConcurrency   int
@@ -78,6 +80,7 @@ func NewDriver(c Config) *Driver {
 		syncFunc:           c.SyncFunc,
 		probeFunc:          c.ProbeFunc,
 		defaultSubInterval: c.DefaultSubInterval,
+		firstSubJitterMax:  c.FirstSubJitterMax,
 		probeInterval:      c.ProbeInterval,
 		probeTimeout:       c.ProbeTimeout,
 		probeConcurrency:   c.ProbeConcurrency,
@@ -93,6 +96,9 @@ func NewDriver(c Config) *Driver {
 	}
 	if d.defaultSubInterval == 0 {
 		d.defaultSubInterval = defaultSubInterval
+	}
+	if d.firstSubJitterMax <= 0 {
+		d.firstSubJitterMax = firstSubJitterMax
 	}
 	if d.probeInterval == 0 {
 		d.probeInterval = defaultProbeIntv
