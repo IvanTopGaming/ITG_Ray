@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,36 +12,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type subsFile struct {
-	Subs []storedSub `json:"subs"`
-}
-
-type storedSub struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	URL       string `json:"url"`
-	UserAgent string `json:"user_agent,omitempty"`
-}
-
 func subsPath() string    { return filepath.Join(dataDir, "subscriptions.json") }
 func serversPath() string { return filepath.Join(dataDir, "servers.json") }
 
-func loadSubs() subsFile {
-	b, err := os.ReadFile(subsPath()) //nolint:gosec // path is application-controlled
-	if err != nil {
-		return subsFile{}
-	}
-	var f subsFile
-	_ = json.Unmarshal(b, &f)
-	return f
-}
-
-func saveSubs(f subsFile) error {
-	b, _ := json.MarshalIndent(f, "", "  ")
-	if err := os.MkdirAll(dataDir, 0o700); err != nil {
-		return err
-	}
-	return os.WriteFile(subsPath(), b, 0o600)
+func subsStore() *subscription.FileStore {
+	return &subscription.FileStore{Path: subsPath()}
 }
 
 func newSubCmd() *cobra.Command {
@@ -55,57 +29,127 @@ func newSubCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name, _ := cmd.Flags().GetString("name")
 			ua, _ := cmd.Flags().GetString("ua")
-			f := loadSubs()
-			id := fmt.Sprintf("s%d", time.Now().Unix())
-			f.Subs = append(f.Subs, storedSub{ID: id, Name: name, URL: args[0], UserAgent: ua})
-			if err := saveSubs(f); err != nil {
+			st := subsStore()
+			subs, err := st.Load()
+			if err != nil {
 				return err
 			}
-			fmt.Println("added:", id)
+			id := fmt.Sprintf("s%d", time.Now().Unix())
+			subs = append(subs, subscription.Stored{
+				ID: id, Name: name, URL: args[0], UserAgent: ua,
+			})
+			if err := st.Save(subs); err != nil {
+				return err
+			}
+			fmt.Println(id)
 			return nil
 		},
 	}
 	addCmd.Flags().String("name", "", "display name")
-	addCmd.Flags().String("ua", "", "User-Agent")
-	sub.AddCommand(addCmd)
+	addCmd.Flags().String("ua", "", "User-Agent override")
 
-	sub.AddCommand(&cobra.Command{
+	listCmd := &cobra.Command{
 		Use:   "list",
-		Short: "list subscriptions",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			for _, s := range loadSubs().Subs {
-				fmt.Printf("%s\t%s\t%s\n", s.ID, s.Name, s.URL)
+		Short: "list subscriptions (id, name, last sync, status, url)",
+		RunE: func(*cobra.Command, []string) error {
+			subs, err := subsStore().Load()
+			if err != nil {
+				return err
+			}
+			now := time.Now()
+			for _, s := range subs {
+				lastSync := "-"
+				if !s.LastSyncAt.IsZero() {
+					lastSync = humanRelative(now.Sub(s.LastSyncAt))
+				}
+				status := s.LastStatus
+				if status == "" {
+					status = "-"
+				}
+				fmt.Printf("%s\t%s\t%s\t%s\t%s\n", s.ID, s.Name, lastSync, status, s.URL)
 			}
 			return nil
 		},
-	})
+	}
 
-	sub.AddCommand(&cobra.Command{
-		Use:   "sync [id]",
-		Short: "fetch and merge a subscription's servers",
-		Args:  cobra.MaximumNArgs(1),
+	removeCmd := &cobra.Command{
+		Use:   "remove [id]",
+		Short: "remove a subscription by id",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			f := loadSubs()
-			for _, s := range f.Subs {
-				if len(args) == 1 && s.ID != args[0] {
-					continue
+			st := subsStore()
+			subs, err := st.Load()
+			if err != nil {
+				return err
+			}
+			out := subs[:0]
+			for _, s := range subs {
+				if s.ID != args[0] {
+					out = append(out, s)
 				}
-				existing, _ := server.Load(serversPath())
-				merged, meta, err := subscription.Sync(context.Background(),
-					subscription.Subscription{ID: s.ID, URL: s.URL, UserAgent: s.UserAgent},
-					existing, 30*time.Second)
-				if err != nil {
-					fmt.Printf("%s\tERROR\t%v\n", s.ID, err)
-					continue
-				}
-				if err := server.Save(serversPath(), merged); err != nil {
+			}
+			return st.Save(out)
+		},
+	}
+
+	syncCmd := &cobra.Command{
+		Use:   "sync",
+		Short: "fetch and merge all subscriptions now",
+		RunE: func(*cobra.Command, []string) error {
+			st := subsStore()
+			subs, err := st.Load()
+			if err != nil {
+				return err
+			}
+			existing, err := server.Load(serversPath())
+			if err != nil {
+				if !os.IsNotExist(err) {
 					return err
 				}
-				fmt.Printf("%s\t%s\t%s\n", s.ID, meta.Status, meta.Summary)
+				existing = nil
 			}
-			return nil
+			ctx := context.Background()
+			for _, s := range subs {
+				merged, meta, err := subscription.Sync(ctx, s.ToSyncInput(), existing, 30*time.Second)
+				if err != nil {
+					fmt.Printf("%s\tERROR: %s\n", s.ID, err.Error())
+					_ = st.UpdateMeta(s.ID, time.Now(), "ERROR: "+truncate(err.Error(), 120))
+					continue
+				}
+				existing = merged
+				fmt.Printf("%s\t%s\t%s\n", s.ID, meta.Status, meta.Summary)
+				_ = st.UpdateMeta(s.ID, time.Now(), "OK "+meta.Summary)
+			}
+			return server.Save(serversPath(), existing)
 		},
-	})
+	}
 
+	sub.AddCommand(addCmd, listCmd, removeCmd, syncCmd)
 	return sub
+}
+
+// humanRelative renders a duration like "12s ago", "5m ago", "3h ago", "2d ago".
+// Negative durations are treated as 0.
+func humanRelative(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds ago", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	}
+}
+
+// truncate clips s to at most n runes, appending "…" if cut.
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n-1] + "…"
 }
