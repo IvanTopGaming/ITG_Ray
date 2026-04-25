@@ -73,6 +73,47 @@ func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
 	}
 }
 
+// applyTunModeKillswitch hardens the route block for TUN mode: it sets
+// the route's "final" outbound to "block" (killswitch — unmatched traffic
+// is dropped rather than leaked to the proxy) and prepends an
+// RFC1918+loopback ip_cidr→direct rule immediately after the leading
+// sniff action so the user can still reach their own LAN (printers, ssh,
+// NAS) without the tunnel. The type-switch mirrors the sniff-prepend
+// logic in BuildSingbox to handle both []map[string]any and []any rule
+// slices that can arise from JSON round-tripping. Note: sing-box's route
+// schema names this key "final" (not "default_outbound"); we keep that
+// nomenclature so library validation accepts the document.
+func applyTunModeKillswitch(route map[string]any) {
+	route["final"] = "block"
+	lanRule := map[string]any{
+		"ip_cidr": []string{
+			"10.0.0.0/8",
+			"172.16.0.0/12",
+			"192.168.0.0/16",
+			"127.0.0.0/8",
+		},
+		"outbound": "direct",
+	}
+	// Insert lanRule right after the first rule (which is the sniff
+	// action prepended in BuildSingbox).
+	switch existing := route["rules"].(type) {
+	case []map[string]any:
+		if len(existing) > 0 {
+			route["rules"] = append([]map[string]any{existing[0], lanRule}, existing[1:]...)
+		} else {
+			route["rules"] = []map[string]any{lanRule}
+		}
+	case []any:
+		if len(existing) > 0 {
+			route["rules"] = append([]any{existing[0], lanRule}, existing[1:]...)
+		} else {
+			route["rules"] = []any{lanRule}
+		}
+	default:
+		route["rules"] = []map[string]any{lanRule}
+	}
+}
+
 // BuildSingbox generates a sing-box config: mixed (HTTP+SOCKS5) inbound for
 // local apps, three outbounds (proxy/direct/block), and the compiled rule
 // engine driving routing decisions. The "proxy" outbound is a SOCKS5 client
@@ -96,6 +137,10 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 		route["rules"] = append([]any{sniffRule}, existing...)
 	default:
 		route["rules"] = []map[string]any{sniffRule}
+	}
+
+	if in.Mode == ModeTun {
+		applyTunModeKillswitch(route)
 	}
 
 	upstreams := in.DNSUpstreams

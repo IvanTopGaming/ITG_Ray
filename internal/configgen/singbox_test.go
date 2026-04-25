@@ -117,3 +117,85 @@ func TestBuildSingbox_NoFakeIPInSysProxy(t *testing.T) {
 	dns := doc["dns"].(map[string]any)
 	require.Nil(t, dns["fakeip"], "sysproxy mode must not emit fakeip block")
 }
+
+func TestBuildSingbox_TunMode_KillswitchBlock(t *testing.T) {
+	in := SingboxInput{
+		Mode:          ModeTun,
+		TunName:       "ITGRay-TUN",
+		TunIPv4:       "198.18.0.1/15",
+		XraySOCKSHost: "127.0.0.1",
+		XraySOCKSPort: 1081,
+		Rules:         rules.Model{DefaultAction: rules.ActionProxy},
+	}
+	b, err := BuildSingbox(&in)
+	require.NoError(t, err)
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(b, &doc))
+
+	route := doc["route"].(map[string]any)
+	// sing-box's route schema names the default outbound "final"
+	// (not "default_outbound" — the latter would fail library validation).
+	require.Equal(t, "block", route["final"],
+		"TUN mode default outbound must be block (killswitch)")
+}
+
+func TestBuildSingbox_TunMode_LANException(t *testing.T) {
+	in := SingboxInput{
+		Mode:          ModeTun,
+		TunName:       "ITGRay-TUN",
+		TunIPv4:       "198.18.0.1/15",
+		XraySOCKSHost: "127.0.0.1",
+		XraySOCKSPort: 1081,
+		Rules:         rules.Model{DefaultAction: rules.ActionProxy},
+	}
+	b, err := BuildSingbox(&in)
+	require.NoError(t, err)
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(b, &doc))
+
+	route := doc["route"].(map[string]any)
+	rules := route["rules"].([]any)
+
+	// Find a rule with ip_cidr including 192.168.0.0/16 routing to direct.
+	var found bool
+	for _, r := range rules {
+		m := r.(map[string]any)
+		if m["outbound"] != "direct" {
+			continue
+		}
+		cidrs, ok := m["ip_cidr"].([]any)
+		if !ok {
+			continue
+		}
+		for _, c := range cidrs {
+			if c == "192.168.0.0/16" {
+				found = true
+				break
+			}
+		}
+		if found {
+			break
+		}
+	}
+	require.True(t, found, "TUN mode must have ip_cidr rule sending RFC1918 LAN to direct")
+}
+
+func TestBuildSingbox_SysProxy_DefaultOutboundIsProxy(t *testing.T) {
+	// SysProxy mode keeps the legacy default-outbound=proxy behavior.
+	in := SingboxInput{
+		Mode:             ModeSysProxy,
+		SocksInboundPort: 1080,
+		XraySOCKSHost:    "127.0.0.1",
+		XraySOCKSPort:    1081,
+		Rules:            rules.Model{DefaultAction: rules.ActionProxy},
+	}
+	b, err := BuildSingbox(&in)
+	require.NoError(t, err)
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(b, &doc))
+	route := doc["route"].(map[string]any)
+	// sing-box's route schema uses "final" (not "default_outbound") for
+	// the default outbound; SysProxy mode is untouched by the killswitch
+	// branch, so the value compiled from rules.Model.DefaultAction stands.
+	require.Equal(t, "proxy", route["final"])
+}
