@@ -16,7 +16,6 @@ import (
 	"github.com/itg-team/itg-ray/internal/core"
 	"github.com/itg-team/itg-ray/internal/rules"
 	"github.com/itg-team/itg-ray/internal/vless"
-	sbinclude "github.com/sagernet/sing-box/include"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/proxy"
 )
@@ -58,8 +57,9 @@ func TestSmoke_EndToEnd(t *testing.T) {
 	require.NoError(t, err)
 
 	mgr := core.NewManager()
-	// sing-box options unmarshal needs the type registries from include.Context.
-	ctx := sbinclude.Context(context.Background())
+	// SingboxAdapter.Start wraps ctx with sbinclude.Context internally.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	require.NoError(t, mgr.Start(ctx, sb, xr))
 	defer func() { _ = mgr.Stop() }()
 	time.Sleep(500 * time.Millisecond)

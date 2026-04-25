@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	sb "github.com/sagernet/sing-box"
+	sbinclude "github.com/sagernet/sing-box/include"
 	sbopt "github.com/sagernet/sing-box/option"
 )
 
@@ -33,6 +34,10 @@ func (a *SingboxAdapter) Start(ctx context.Context, configJSON []byte) error {
 	if a.inst != nil {
 		return fmt.Errorf("sing-box already running")
 	}
+
+	// Wrap ctx with sing-box type registries so UnmarshalJSONContext can resolve
+	// type-tagged fields (inbounds, outbounds, …). Wrapping twice is idempotent.
+	ctx = sbinclude.Context(ctx)
 
 	var opts sbopt.Options
 	// UnmarshalJSONContext is required: it uses sing-box's context-aware JSON
