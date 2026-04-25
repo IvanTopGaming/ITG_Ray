@@ -27,7 +27,7 @@ func TestBuildSingbox_TunMode(t *testing.T) {
 	in0 := inbounds[0].(map[string]any)
 	require.Equal(t, "tun", in0["type"])
 	require.Equal(t, "ITGRay-TUN", in0["interface_name"])
-	require.Equal(t, false, in0["auto_route"])
+	require.Equal(t, true, in0["auto_route"])
 	addr := in0["address"].([]any)
 	require.Equal(t, "198.18.0.1/15", addr[0])
 }

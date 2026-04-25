@@ -158,6 +158,11 @@ func TestBuildSingbox_TunMode_KillswitchBlock(t *testing.T) {
 	var doc map[string]any
 	require.NoError(t, json.Unmarshal(b, &doc))
 
+	inbounds := doc["inbounds"].([]any)
+	inbound := inbounds[0].(map[string]any)
+	require.Equal(t, true, inbound["auto_route"],
+		"TUN inbound must enable auto_route so sing-box installs catch-all routes + DNS hijack natively")
+
 	route := doc["route"].(map[string]any)
 	// sing-box's route schema names the default outbound "final"
 	// (not "default_outbound" — the latter would fail library validation).

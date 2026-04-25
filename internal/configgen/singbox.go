@@ -180,7 +180,7 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 			"tag":            "in-tun",
 			"interface_name": in.TunName,
 			"address":        []string{in.TunIPv4},
-			"auto_route":     false,
+			"auto_route":     true,
 			"strict_route":   false,
 		}
 	default:
