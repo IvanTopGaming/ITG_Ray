@@ -66,3 +66,10 @@ func TestValidate_PortBothSingleAndRange(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "Single and From/To")
 }
+
+func TestValidate_GeoMustHavePrefix(t *testing.T) {
+	r := Rule{ID: "x", Action: ActionProxy, Conditions: Conditions{Geo: []string{"category-ads-all"}}}
+	err := r.Validate()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "geosite:")
+}

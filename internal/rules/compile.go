@@ -1,3 +1,7 @@
+// Package rules models routing rules and compiles them to sing-box config.
+// The compiler treats Geo entries as bare tag names: "geosite:NAME" emits "NAME"
+// into rule_set, expecting the sing-box config generator (A9.1) to declare matching
+// route.rule_set[] entries. "geoip:CC" emits "CC" into the legacy geoip field.
 package rules
 
 import (
@@ -80,7 +84,8 @@ func compileRule(r *Rule) map[string]any {
 	for _, g := range r.Conditions.Geo {
 		switch {
 		case strings.HasPrefix(g, "geosite:"):
-			geosite = append(geosite, g)
+			// sing-box rule_set takes the bare tag name; A9.1 declares matching route.rule_set[] entries.
+			geosite = append(geosite, strings.TrimPrefix(g, "geosite:"))
 		case strings.HasPrefix(g, "geoip:"):
 			geoip = append(geoip, strings.TrimPrefix(g, "geoip:"))
 		}

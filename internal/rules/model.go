@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"strings"
 )
 
 // Action is a rule verdict.
@@ -114,6 +115,11 @@ func (r *Rule) Validate() error {
 			if net.ParseIP(cidr) == nil {
 				return fmt.Errorf("rule.conditions.ip_cidrs[%d] %q invalid", i, cidr)
 			}
+		}
+	}
+	for i, g := range r.Conditions.Geo {
+		if !(strings.HasPrefix(g, "geosite:") || strings.HasPrefix(g, "geoip:")) {
+			return fmt.Errorf("rule.conditions.geo[%d] %q must start with geosite: or geoip:", i, g)
 		}
 	}
 	return nil

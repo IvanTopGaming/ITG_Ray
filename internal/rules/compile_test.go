@@ -52,7 +52,7 @@ func TestCompile_ProduceExpectedSingboxRules(t *testing.T) {
 
 	r1 := doc.Rules[1]
 	require.Equal(t, "block", r1["outbound"])
-	require.Equal(t, []any{"geosite:category-ads-all"}, r1["rule_set"])
+	require.Equal(t, []any{"category-ads-all"}, r1["rule_set"])
 }
 
 func TestCompile_RejectsInvalidModel(t *testing.T) {
@@ -88,4 +88,38 @@ func TestCompile_Domains(t *testing.T) {
 	require.Equal(t, []any{"b.com"}, r["domain_suffix"])
 	require.Equal(t, []any{"cnn"}, r["domain_keyword"])
 	require.Equal(t, []any{"^ads-.*"}, r["domain_regex"])
+}
+
+func TestCompile_GeoIPStripsPrefix(t *testing.T) {
+	m := Model{
+		DefaultAction: ActionProxy,
+		Groups: []Group{{ID: "g", Enabled: true, Rules: []Rule{
+			{ID: "r", Enabled: true, Action: ActionDirect,
+				Conditions: Conditions{Geo: []string{"geoip:ru", "geoip:private"}}},
+		}}},
+	}
+	out, err := Compile(m)
+	require.NoError(t, err)
+	var doc struct{ Rules []map[string]any }
+	require.NoError(t, json.Unmarshal(out, &doc))
+	require.Equal(t, []any{"ru", "private"}, doc.Rules[0]["geoip"])
+}
+
+func TestCompile_GroupWithOnlyDisabledRulesEmitsNothing(t *testing.T) {
+	m := Model{
+		DefaultAction: ActionProxy,
+		Groups: []Group{
+			{ID: "g1", Enabled: true, Rules: []Rule{
+				{ID: "r1", Enabled: false, Action: ActionDirect,
+					Conditions: Conditions{IPCIDRs: []string{"10.0.0.0/8"}}},
+			}},
+		},
+	}
+	out, err := Compile(m)
+	require.NoError(t, err)
+	var doc struct {
+		Rules []map[string]any `json:"rules"`
+	}
+	require.NoError(t, json.Unmarshal(out, &doc))
+	require.Empty(t, doc.Rules)
 }
