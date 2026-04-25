@@ -46,3 +46,20 @@ func TestParseHeaders_TitlePlaintext(t *testing.T) {
 	h.Set("profile-title", "My Panel")
 	require.Equal(t, "My Panel", ParseHeaders(h).ProfileTitle)
 }
+
+func TestParseHeaders_UserinfoMalformedEntriesSkipped(t *testing.T) {
+	h := http.Header{}
+	h.Set("Subscription-Userinfo", "upload=abc; total=500; weird-no-equals; download=42")
+	m := ParseHeaders(h)
+	require.NotNil(t, m.Userinfo)
+	require.Equal(t, int64(0), m.Userinfo.Upload)    // malformed, skipped
+	require.Equal(t, int64(500), m.Userinfo.Total)   // valid
+	require.Equal(t, int64(42), m.Userinfo.Download) // valid
+}
+
+func TestParseHeaders_UpdateIntervalNonNumericSkipped(t *testing.T) {
+	h := http.Header{}
+	h.Set("profile-update-interval", "weekly")
+	m := ParseHeaders(h)
+	require.Equal(t, 0, m.UpdateInterval)
+}
