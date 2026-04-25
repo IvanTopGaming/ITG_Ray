@@ -364,8 +364,6 @@ func dnsPriorAsList(prior *dns.Settings) []dns.Settings {
 // NewStopChainHandler is the OpStopChain handler. It tears the chain
 // down in reverse order. Best-effort: errors are accumulated and
 // returned in the response but no individual op aborts the chain.
-//
-//nolint:gocyclo,gocognit // best-effort sequence requires linear control flow
 func NewStopChainHandler() Handler {
 	return func(_ context.Context, args json.RawMessage) (json.RawMessage, error) {
 		var a StopChainArgs
@@ -384,69 +382,7 @@ func NewStopChainHandler() Handler {
 			return nil, fmt.Errorf("session id mismatch: caller=%s active=%s", a.SessionID, activeSess.sessionID)
 		}
 
-		s := activeSess
-		var errs []string
-
-		// 1. Stop cores (xray first, then sing-box).
-		if s.xray != nil {
-			if err := s.xray.Stop(5 * time.Second); err != nil {
-				errs = append(errs, "xray.Stop: "+err.Error())
-			}
-		}
-		if s.singbox != nil {
-			if err := s.singbox.Stop(5 * time.Second); err != nil {
-				errs = append(errs, "singbox.Stop: "+err.Error())
-			}
-		}
-
-		// 2. Remove catch-all route (sing-box may have already cleaned up).
-		_ = route.Remove(route.Entry{
-			DestCIDR:      "0.0.0.0/0",
-			NextHop:       "0.0.0.0",
-			InterfaceLUID: s.tunLUID,
-			Metric:        0,
-		})
-		// v6 catch-all
-		_ = route.Remove(route.Entry{
-			DestCIDR:      "::/0",
-			NextHop:       "::",
-			InterfaceLUID: s.tunLUID,
-			Metric:        0,
-		})
-
-		// 3. Restore DNS if we changed it.
-		if s.dnsPrior != nil {
-			if err := dns.Restore(*s.dnsPrior); err != nil {
-				errs = append(errs, "dns.Restore: "+err.Error())
-			}
-		}
-
-		// 4. Remove the peer-route.
-		_ = route.Remove(s.peerRoute)
-
-		// 5. Apply RouteRestore from snapshot (diff-add anything we evicted).
-		current, err := route.Snapshot()
-		if err == nil {
-			want := indexRouteEntries(s.snapshot)
-			have := indexRouteEntries(current)
-			for k, e := range want {
-				if _, ok := have[k]; !ok {
-					_ = route.Add(e)
-				}
-			}
-		} else {
-			errs = append(errs, "route.Snapshot(post): "+err.Error())
-		}
-
-		// 6. Clear undo journal.
-		if err := undo.Clear(undoPath()); err != nil {
-			errs = append(errs, "undo.Clear: "+err.Error())
-		}
-
-		// 7. Wipe runtime dir.
-		_ = os.RemoveAll(runtime.BasePath())
-
-		activeSess = nil
+		errs := stopActiveChainLocked()
 
 		resp := map[string]any{
 			"status": "stopped",
@@ -456,6 +392,101 @@ func NewStopChainHandler() Handler {
 		}
 		return json.Marshal(resp)
 	}
+}
+
+// StopActiveChain tears down the active chain synchronously, with no JSON
+// layer. It is intended for in-process callers — chiefly the SCM Stop /
+// Shutdown branch in cmd/itgray-helper/service_windows.go — that need to
+// kill the supervised cores and undo all host mutations before the helper
+// process exits, so we don't leak orphan sing-box.exe / xray.exe children.
+//
+// Safe to call when no chain is active (returns nil). Holds chainMu for
+// the duration so it serializes correctly against any in-flight
+// OpStopChain handler arriving on the named pipe.
+func StopActiveChain() error {
+	chainMu.Lock()
+	defer chainMu.Unlock()
+	if activeSess == nil {
+		return nil
+	}
+	errs := stopActiveChainLocked()
+	if len(errs) > 0 {
+		return fmt.Errorf("partial: %v", errs)
+	}
+	return nil
+}
+
+// stopActiveChainLocked runs the teardown sequence. The caller MUST hold
+// chainMu and MUST have verified activeSess != nil. Returns the list of
+// best-effort errors accumulated during teardown (empty slice on full
+// success). Always sets activeSess = nil before returning.
+//
+//nolint:gocyclo,gocognit // best-effort sequence requires linear control flow
+func stopActiveChainLocked() []string {
+	s := activeSess
+	var errs []string
+
+	// 1. Stop cores (xray first, then sing-box).
+	if s.xray != nil {
+		if err := s.xray.Stop(5 * time.Second); err != nil {
+			errs = append(errs, "xray.Stop: "+err.Error())
+		}
+	}
+	if s.singbox != nil {
+		if err := s.singbox.Stop(5 * time.Second); err != nil {
+			errs = append(errs, "singbox.Stop: "+err.Error())
+		}
+	}
+
+	// 2. Remove catch-all route (sing-box may have already cleaned up).
+	_ = route.Remove(route.Entry{
+		DestCIDR:      "0.0.0.0/0",
+		NextHop:       "0.0.0.0",
+		InterfaceLUID: s.tunLUID,
+		Metric:        0,
+	})
+	// v6 catch-all
+	_ = route.Remove(route.Entry{
+		DestCIDR:      "::/0",
+		NextHop:       "::",
+		InterfaceLUID: s.tunLUID,
+		Metric:        0,
+	})
+
+	// 3. Restore DNS if we changed it.
+	if s.dnsPrior != nil {
+		if err := dns.Restore(*s.dnsPrior); err != nil {
+			errs = append(errs, "dns.Restore: "+err.Error())
+		}
+	}
+
+	// 4. Remove the peer-route.
+	_ = route.Remove(s.peerRoute)
+
+	// 5. Apply RouteRestore from snapshot (diff-add anything we evicted).
+	current, err := route.Snapshot()
+	if err == nil {
+		want := indexRouteEntries(s.snapshot)
+		have := indexRouteEntries(current)
+		for k, e := range want {
+			if _, ok := have[k]; !ok {
+				_ = route.Add(e)
+			}
+		}
+	} else {
+		errs = append(errs, "route.Snapshot(post): "+err.Error())
+	}
+
+	// 6. Clear undo journal.
+	if err := undo.Clear(undoPath()); err != nil {
+		errs = append(errs, "undo.Clear: "+err.Error())
+	}
+
+	// 7. Wipe runtime dir.
+	_ = os.RemoveAll(runtime.BasePath())
+
+	activeSess = nil
+	return errs
 }
 
 // indexRouteEntries reuses the same key shape as the existing

@@ -71,6 +71,16 @@ func (h *handler) Execute(_ []string, r <-chan svc.ChangeRequest, s chan<- svc.S
 				s <- c.CurrentStatus
 			case svc.Stop, svc.Shutdown:
 				s <- svc.Status{State: svc.StopPending}
+				// Tear the active chain down BEFORE cancelling the
+				// listener. If cancel runs first, the listener goroutine
+				// exits and any in-flight OpStopChain races with us;
+				// holding chainMu inside StopActiveChain serializes
+				// correctly. Without this hook, sing-box.exe / xray.exe
+				// outlive the helper as orphans (Plan B.5 papercut).
+				if err := server.StopActiveChain(); err != nil {
+					slog.Warn("helper: chain teardown reported partial errors during SCM stop",
+						slog.String("err", err.Error()))
+				}
 				cancel()
 				<-listenerErr
 				return false, 0
