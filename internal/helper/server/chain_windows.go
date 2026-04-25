@@ -172,8 +172,8 @@ func NewStartChainHandler() Handler {
 
 		// Resolve ServerHost to an IPv4 literal — peer-route's CIDR must be parseable
 		// by netip.ParsePrefix. Resolution uses the host's DNS (the same one sing-box
-		// will inherit on spawn) and runs BEFORE the catch-all is installed, so it
-		// goes through the original network path.
+		// will inherit on spawn) and runs BEFORE sing-box spawns, so it goes through
+		// the original network path rather than sing-box's auto_route + DNS hijack.
 		serverIPs, err := net.LookupIP(a.ServerHost)
 		if err != nil {
 			rollback()
