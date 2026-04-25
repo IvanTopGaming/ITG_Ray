@@ -9,6 +9,14 @@ import (
 	"github.com/itg-team/itg-ray/internal/server"
 )
 
-func startHelperSession(_ context.Context, _ *server.Server, _, _ string) (cleanup func(), luid uint64, err error) {
-	return func() {}, 0, errors.New("--use-helper is Windows-only")
+type helperSession struct {
+	sessionID string
+}
+
+func (s *helperSession) cleanup(_ context.Context) {}
+
+func startHelperSession(
+	_ context.Context, _ *server.Server, _, _ []byte, _ string,
+) (*helperSession, error) {
+	return nil, errors.New("--use-helper is Windows-only")
 }

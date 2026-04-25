@@ -43,14 +43,34 @@ func newRunCmd() *cobra.Command {
 			defer cancel()
 
 			if useHelper {
-				cleanup, luid, err := startHelperSession(ctx, srv, tunName, tunIPv4)
+				sbCfg, err := configgen.BuildSingbox(&configgen.SingboxInput{
+					Mode:          configgen.ModeTun,
+					TunName:       tunName,
+					TunIPv4:       tunIPv4,
+					XraySOCKSHost: "127.0.0.1",
+					XraySOCKSPort: xrayPort,
+					Rules:         loadRules(),
+				})
+				if err != nil {
+					return err
+				}
+				xrCfg, err := configgen.BuildXray(&configgen.XrayInput{Server: srv.Vless, SocksPort: xrayPort})
+				if err != nil {
+					return err
+				}
+				sess, err := startHelperSession(ctx, srv, sbCfg, xrCfg, tunName)
 				if err != nil {
 					return fmt.Errorf("helper session: %w", err)
 				}
-				defer cleanup()
-				slog.Info("helper session up", slog.Uint64("tun_luid", luid))
+				defer sess.cleanup(context.Background())
 
-				return runWithTun(ctx, srv, tunName, tunIPv4, xrayPort)
+				slog.Info("helper session up", slog.String("session", sess.sessionID))
+				fmt.Fprintln(os.Stderr, "TUN-mode VPN is up via helper. Logs:")
+				fmt.Fprintln(os.Stderr, `  C:\ProgramData\ITG Ray\Helper\runtime\sing-box.log`)
+				fmt.Fprintln(os.Stderr, `  C:\ProgramData\ITG Ray\Helper\runtime\xray.log`)
+				fmt.Fprintln(os.Stderr, "Ctrl+C to stop.")
+
+				return waitForSignalNoMgr()
 			}
 			return runWithSysProxy(ctx, srv, socksPort, xrayPort)
 		},
@@ -89,31 +109,6 @@ func runWithSysProxy(ctx context.Context, srv *server.Server, socksPort, xrayPor
 	return waitForSignal(mgr)
 }
 
-func runWithTun(ctx context.Context, srv *server.Server, tunName, tunIPv4 string, xrayPort int) error {
-	sbCfg, err := configgen.BuildSingbox(&configgen.SingboxInput{
-		Mode:          configgen.ModeTun,
-		TunName:       tunName,
-		TunIPv4:       tunIPv4,
-		XraySOCKSHost: "127.0.0.1",
-		XraySOCKSPort: xrayPort,
-		Rules:         loadRules(),
-	})
-	if err != nil {
-		return err
-	}
-	xrCfg, err := configgen.BuildXray(&configgen.XrayInput{Server: srv.Vless, SocksPort: xrayPort})
-	if err != nil {
-		return err
-	}
-	mgr := core.NewManager()
-	if err := mgr.Start(ctx, sbCfg, xrCfg); err != nil {
-		return err
-	}
-	slog.Info("running tun", slog.String("tun", tunName), slog.String("server", srv.Name))
-	fmt.Fprintln(os.Stderr, "TUN attached to", tunName, "— Ctrl+C to stop")
-	return waitForSignal(mgr)
-}
-
 func waitForSignal(mgr *core.Manager) error {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
@@ -121,5 +116,12 @@ func waitForSignal(mgr *core.Manager) error {
 	if err := mgr.Stop(); err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
+	return nil
+}
+
+func waitForSignalNoMgr() error {
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	<-sig
 	return nil
 }
