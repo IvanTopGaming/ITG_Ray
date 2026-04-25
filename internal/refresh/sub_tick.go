@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/subscription"
@@ -79,10 +80,40 @@ func truncate(s string, n int) string {
 	return s[:n-len(ellipsis)] + ellipsis
 }
 
-// runSub is the per-subscription scheduler goroutine. Real implementation
-// in Task 6 — for now, this stub just blocks on ctx so Run() compiles.
+// runSub is the per-subscription scheduler. The first tick fires after a
+// random delay in [0, firstSubJitterMax) to stagger startup with multiple
+// subs; subsequent ticks fire after the effective interval (with ±10% jitter)
+// elapsed since the previous tick completed.
 func (d *Driver) runSub(ctx context.Context, s subscription.Stored) {
 	defer d.wg.Done()
-	_ = s
-	<-ctx.Done()
+	defer func() {
+		if r := recover(); r != nil {
+			d.log.Error("refresh.runSub panic", "id", s.ID, "panic", r)
+		}
+	}()
+
+	interval := time.Duration(s.UpdateInterval)
+	if interval <= 0 {
+		interval = d.defaultSubInterval
+	}
+
+	d.randMu.Lock()
+	first := time.Duration(d.rand.Int63n(int64(firstSubJitterMax)))
+	d.randMu.Unlock()
+	timer := time.NewTimer(first)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+			d.syncOne(ctx, s)
+			next := d.jittered(interval, tickJitterPct)
+			if next <= 0 {
+				next = interval
+			}
+			timer.Reset(next)
+		}
+	}
 }

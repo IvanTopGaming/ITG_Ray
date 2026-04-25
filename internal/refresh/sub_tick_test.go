@@ -151,3 +151,111 @@ func TestSyncOne_CtxCanceledMidSync_NoMetaUpdate(t *testing.T) {
 		t.Fatalf("UpdateMeta should not be called on shutdown; got %d calls", got)
 	}
 }
+
+func TestRunSub_FirstTickWithinJitterWindow(t *testing.T) {
+	st := &metaCaptureStore{}
+	st.subs = []subscription.Stored{{ID: "s1", URL: "https://a.test", UpdateInterval: subscription.Duration(time.Hour)}}
+
+	syncCh := make(chan time.Time, 4)
+	syncFn := func(_ context.Context, _ subscription.Subscription, existing []server.Server, _ time.Duration) ([]server.Server, subscription.SyncMeta, error) {
+		syncCh <- time.Now()
+		return existing, subscription.SyncMeta{Status: "OK", Summary: "imported=0"}, nil
+	}
+	d := NewDriver(Config{
+		Subs:        st,
+		ServersPath: t.TempDir() + "/servers.json",
+		SyncFunc:    syncFn,
+		ProbeFunc:   noopProbe,
+		Rand:        rand.New(rand.NewSource(1)), //nolint:gosec
+		Log:         slog.New(slog.NewTextHandler(testWriter{t}, nil)),
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	d.wg.Add(1)
+	start := time.Now()
+	go d.runSub(ctx, st.subs[0])
+
+	select {
+	case fired := <-syncCh:
+		elapsed := fired.Sub(start)
+		if elapsed > firstSubJitterMax+200*time.Millisecond {
+			t.Fatalf("first tick after %v, want ≤ %v", elapsed, firstSubJitterMax)
+		}
+	case <-time.After(firstSubJitterMax + 2*time.Second):
+		t.Fatal("syncOne never fired within jitter window")
+	}
+	cancel()
+	d.wg.Wait()
+}
+
+func TestRunSub_ZeroIntervalUsesDriverDefault(t *testing.T) {
+	st := &metaCaptureStore{}
+	// UpdateInterval not set → driver default applies. We set DefaultSubInterval
+	// to a small value so we can observe a SECOND tick within the test window.
+	st.subs = []subscription.Stored{{ID: "s1", URL: "https://a.test"}}
+
+	syncCh := make(chan struct{}, 8)
+	syncFn := func(_ context.Context, _ subscription.Subscription, existing []server.Server, _ time.Duration) ([]server.Server, subscription.SyncMeta, error) {
+		syncCh <- struct{}{}
+		return existing, subscription.SyncMeta{Status: "OK", Summary: "imported=0"}, nil
+	}
+	d := NewDriver(Config{
+		Subs:               st,
+		ServersPath:        t.TempDir() + "/servers.json",
+		SyncFunc:           syncFn,
+		ProbeFunc:          noopProbe,
+		DefaultSubInterval: 100 * time.Millisecond,
+		// Seed picked so Int63n(30s) yields ≈3ms — first tick fires almost
+		// immediately so the test can observe a 2nd tick within the deadline
+		// without waiting up to 30s of jitter.
+		Rand: rand.New(rand.NewSource(1516)), //nolint:gosec
+		Log:  slog.New(slog.NewTextHandler(testWriter{t}, nil)),
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	d.wg.Add(1)
+	go d.runSub(ctx, st.subs[0])
+
+	// First tick fires after ~3ms (seed-controlled jitter), second after
+	// ~100ms ±10%. 3 seconds of slop covers slow CI/race-detector overhead.
+	deadline := time.After(3 * time.Second)
+	count := 0
+	for count < 2 {
+		select {
+		case <-syncCh:
+			count++
+		case <-deadline:
+			t.Fatalf("only saw %d ticks in 2s, want ≥ 2", count)
+		}
+	}
+	cancel()
+	d.wg.Wait()
+}
+
+func TestRunSub_CtxCancel_ExitsPromptly(t *testing.T) {
+	st := &metaCaptureStore{}
+	st.subs = []subscription.Stored{{ID: "s1", URL: "https://a.test", UpdateInterval: subscription.Duration(time.Hour)}}
+	d := NewDriver(Config{
+		Subs:        st,
+		ServersPath: t.TempDir() + "/servers.json",
+		SyncFunc:    noopSync,
+		ProbeFunc:   noopProbe,
+		Rand:        rand.New(rand.NewSource(1)), //nolint:gosec
+		Log:         slog.New(slog.NewTextHandler(testWriter{t}, nil)),
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	d.wg.Add(1)
+	go d.runSub(ctx, st.subs[0])
+
+	cancel()
+	gotDone := make(chan struct{})
+	go func() { d.wg.Wait(); close(gotDone) }()
+	select {
+	case <-gotDone:
+		// good
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("runSub did not exit within 500ms of cancel")
+	}
+}
