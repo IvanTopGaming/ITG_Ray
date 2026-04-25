@@ -393,7 +393,11 @@ func dnsPriorAsList(prior *dns.Settings) []dns.Settings {
 // the TUN adapter's own IP and falls inside the FakeIP /15 range, so Windows
 // IPv4 longest-prefix routing sends UDP/53 to 198.18.0.1 over the TUN even
 // when the socket is bound to a different adapter (weak host outgoing).
-const tunDNSServer = "198.18.0.1"
+// Use a real external IP (Cloudflare 1.1.1.1) so packets traverse the TUN
+// catch-all route and reach sing-box's TUN inbound; UDP/53 to TUN's own IP
+// (198.18.0.1) is locally delivered by Windows and never enters the inbound
+// flow. Smoke B6.7.9 confirmed FakeIP works for any external dest.
+const tunDNSServer = "1.1.1.1"
 
 // overrideAdapterDNS points every active non-TUN adapter's DNS server list
 // at tunDNSServer, snapshotting prior state into state.dnsOverrides for
