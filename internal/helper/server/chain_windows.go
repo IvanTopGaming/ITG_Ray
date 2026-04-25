@@ -50,14 +50,15 @@ type StopChainArgs struct {
 
 // chainState tracks the active session inside the helper process.
 type chainState struct {
-	sessionID string
-	singbox   *supervisor.Child
-	xray      *supervisor.Child
-	tunLUID   uint64
-	peerRoute route.Entry // /32 host route we added for the VLESS server
-	snapshot  []route.Entry
-	dnsPrior  *dns.Settings // nil if no DNS override applied
-	dnsAlias  string
+	sessionID  string
+	singbox    *supervisor.Child
+	xray       *supervisor.Child
+	tunLUID    uint64
+	peerRoute  route.Entry // /32 host route we added for the VLESS server
+	snapshot   []route.Entry
+	dnsPrior   *dns.Settings // nil if no DNS override applied
+	dnsAlias   string
+	catchAllV6 bool // true once the ::/0 catch-all is installed
 }
 
 var (
@@ -118,6 +119,12 @@ func NewStartChainHandler() Handler {
 			doneRuntime, doneRouteSnap, donePeerRoute, doneDnsSnap, doneSingbox, doneXray, doneCatchAll bool
 		)
 		rollback := func() {
+			if state.catchAllV6 {
+				_ = route.Remove(route.Entry{
+					DestCIDR: "::/0", NextHop: "::",
+					InterfaceLUID: state.tunLUID, Metric: 0,
+				})
+			}
 			if doneCatchAll {
 				_ = route.Remove(route.Entry{
 					DestCIDR: "0.0.0.0/0", NextHop: "0.0.0.0",
@@ -286,6 +293,21 @@ func NewStartChainHandler() Handler {
 		}
 		doneCatchAll = true
 
+		// v6 catch-all to prevent IPv6 leak. v6 packets reaching the TUN are
+		// silently dropped by sing-box (no v6 inbound configured) and by the
+		// route.final=block killswitch from B6.2.1.
+		catchAllV6 := route.Entry{
+			DestCIDR:      "::/0",
+			NextHop:       "::",
+			InterfaceLUID: state.tunLUID,
+			Metric:        0,
+		}
+		if err := route.Add(catchAllV6); err != nil {
+			rollback()
+			return nil, fmt.Errorf("route.Add(catch-all v6): %w", err)
+		}
+		state.catchAllV6 = true
+
 		// Step 10: spawn xray.
 		xrExe, err := binaryPath("xray.exe")
 		if err != nil {
@@ -381,6 +403,13 @@ func NewStopChainHandler() Handler {
 		_ = route.Remove(route.Entry{
 			DestCIDR:      "0.0.0.0/0",
 			NextHop:       "0.0.0.0",
+			InterfaceLUID: s.tunLUID,
+			Metric:        0,
+		})
+		// v6 catch-all
+		_ = route.Remove(route.Entry{
+			DestCIDR:      "::/0",
+			NextHop:       "::",
 			InterfaceLUID: s.tunLUID,
 			Metric:        0,
 		})
