@@ -3,6 +3,7 @@ package refresh
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math/rand"
 	"sync/atomic"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/subscription"
+	"github.com/itg-team/itg-ray/internal/vless"
 )
 
 // fakeStore is an in-memory subscription.Store used in driver tests.
@@ -103,4 +105,65 @@ func TestNewDriver_AppliesDefaults(t *testing.T) {
 	if d.syncFunc == nil || d.probeFunc == nil {
 		t.Fatal("syncFunc/probeFunc must default to non-nil (subscription.Sync / latency.TCPConnect)")
 	}
+}
+
+func TestDriver_SyncAndProbe_RaceFree(t *testing.T) {
+	if testing.Short() {
+		t.Skip("race-stress test skipped under -short")
+	}
+	dir := t.TempDir()
+	serversPath := dir + "/servers.json"
+	if err := server.Save(serversPath, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	st := &fakeStore{
+		subs: []subscription.Stored{
+			{ID: "s1", URL: "https://a.test", UpdateInterval: subscription.Duration(10 * time.Millisecond)},
+			{ID: "s2", URL: "https://b.test", UpdateInterval: subscription.Duration(10 * time.Millisecond)},
+		},
+	}
+
+	var counter atomic.Int64
+	syncFn := func(_ context.Context, sub subscription.Subscription, existing []server.Server, _ time.Duration) ([]server.Server, subscription.SyncMeta, error) {
+		// Each sync replaces servers with a small randomised set.
+		n := int(counter.Add(1) % 5)
+		out := make([]server.Server, n)
+		for i := 0; i < n; i++ {
+			out[i] = server.Server{
+				ID:    fmt.Sprintf("%s-srv-%d", sub.ID, i),
+				Name:  fmt.Sprintf("%s-srv-%d", sub.ID, i),
+				Vless: vless.Config{Address: "x.test", Port: 443, UUID: "u"},
+			}
+		}
+		return out, subscription.SyncMeta{Status: "OK", Summary: fmt.Sprintf("imported=%d", n)}, nil
+	}
+	probeFn := func(_ context.Context, _ string, _ time.Duration) (time.Duration, error) {
+		return time.Duration(counter.Load()%30) * time.Millisecond, nil
+	}
+
+	d := NewDriver(Config{
+		Subs:               st,
+		ServersPath:        serversPath,
+		SyncFunc:           syncFn,
+		ProbeFunc:          probeFn,
+		DefaultSubInterval: 10 * time.Millisecond,
+		ProbeInterval:      15 * time.Millisecond,
+		FirstSubJitterMax:  1 * time.Millisecond,
+		Rand:               rand.New(rand.NewSource(7)), //nolint:gosec // deterministic test seed
+		Log:                slog.New(slog.NewTextHandler(testWriter{t}, nil)),
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 800*time.Millisecond)
+	defer cancel()
+	if err := d.Run(ctx); err != nil && !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Run: %v", err)
+	}
+
+	// Final invariant: servers.json must be valid JSON parseable by server.Load.
+	got, err := server.Load(serversPath)
+	if err != nil {
+		t.Fatalf("final servers.json corrupted: %v", err)
+	}
+	t.Logf("final state: %d servers, %d sync invocations", len(got), counter.Load())
 }
