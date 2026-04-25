@@ -6,7 +6,6 @@
 package dns
 
 import (
-	"bufio"
 	"fmt"
 	"os/exec"
 	"strconv"
@@ -59,30 +58,4 @@ func runNetsh(args ...string) (string, error) {
 		return "", fmt.Errorf("netsh %s: %w (%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
 	}
 	return string(out), nil
-}
-
-func parseDNSAddresses(text string) []string {
-	var out []string
-	scanner := bufio.NewScanner(strings.NewReader(text))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if !looksLikeIP(line) {
-			continue
-		}
-		out = append(out, line)
-	}
-	return out
-}
-
-func looksLikeIP(s string) bool {
-	dots := strings.Count(s, ".")
-	if dots != 3 {
-		return false
-	}
-	for _, r := range s {
-		if r != '.' && (r < '0' || r > '9') {
-			return false
-		}
-	}
-	return true
 }
