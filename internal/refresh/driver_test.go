@@ -2,6 +2,7 @@ package refresh
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"math/rand"
 	"sync/atomic"
@@ -18,8 +19,8 @@ type fakeStore struct {
 	updates atomic.Int64
 }
 
-func (f *fakeStore) Load() ([]subscription.Stored, error)            { return f.subs, nil }
-func (f *fakeStore) Save(s []subscription.Stored) error              { f.subs = s; return nil }
+func (f *fakeStore) Load() ([]subscription.Stored, error)             { return f.subs, nil }
+func (f *fakeStore) Save(s []subscription.Stored) error               { f.subs = s; return nil }
 func (f *fakeStore) UpdateMeta(_ string, _ time.Time, _ string) error { f.updates.Add(1); return nil }
 
 // noopSync / noopProbe are placeholders for the skeleton tests; later tasks
@@ -59,7 +60,7 @@ func TestDriver_Run_ReturnsOnContextCancel(t *testing.T) {
 	cancel()
 	select {
 	case err := <-done:
-		if err != nil && err != context.Canceled {
+		if err != nil && !errors.Is(err, context.Canceled) {
 			t.Fatalf("Run returned %v, want nil or context.Canceled", err)
 		}
 	case <-time.After(2 * time.Second):
@@ -73,7 +74,7 @@ func TestDriver_Run_NoSubs_ProbesNothing_ReturnsCleanly(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
-	if err := d.Run(ctx); err != nil && err != context.DeadlineExceeded {
+	if err := d.Run(ctx); err != nil && !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Run: %v", err)
 	}
 	if st.updates.Load() != 0 {

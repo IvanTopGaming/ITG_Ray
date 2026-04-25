@@ -21,7 +21,7 @@ const (
 	defaultProbeTO     = 5 * time.Second
 	defaultProbeConc   = 16
 
-	tickJitterPct     = 0.10            // ±10% on every tick
+	tickJitterPct     = 0.10             // ±10% on every tick
 	firstSubJitterMax = 30 * time.Second // first-sub-tick stagger window
 	firstProbeDelay   = 5 * time.Second  // probe waits this long before first run
 	syncFetchTimeout  = 30 * time.Second
@@ -65,6 +65,7 @@ type Driver struct {
 	log                *slog.Logger
 
 	serversMu sync.Mutex
+	randMu    sync.Mutex
 	wg        sync.WaitGroup
 }
 
@@ -138,13 +139,15 @@ func (d *Driver) Run(ctx context.Context) error {
 }
 
 // jittered returns base * (1 ± pct * rand-uniform-in-[0,1)) using d.rand.
-// It is safe to call from a single goroutine; the per-sub goroutine and the
-// probe goroutine each have their own callers, never overlapping.
+// Safe for concurrent use: per-sub goroutines and the probe goroutine all
+// share d.rand, so access is serialized via d.randMu.
 func (d *Driver) jittered(base time.Duration, pct float64) time.Duration {
 	if base <= 0 {
 		return 0
 	}
+	d.randMu.Lock()
 	delta := (d.rand.Float64()*2 - 1) * pct
+	d.randMu.Unlock()
 	return time.Duration(float64(base) * (1 + delta))
 }
 
