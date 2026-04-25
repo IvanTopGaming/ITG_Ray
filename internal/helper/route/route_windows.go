@@ -37,7 +37,11 @@ var (
 // resolution. See MIB_IPFORWARD_ROW2 docs.
 const infiniteLifetime uint32 = 0xFFFFFFFF
 
-// Snapshot reads the IPv4 forwarding table.
+// Snapshot reads the IPv4 forwarding table only. IPv6 routes are out of
+// scope for v0.1 — we add a v6 catch-all to TUN at OpStartChain time
+// (see chain_windows.go), but we don't snapshot v6 because we don't
+// restore them either; the helper is not allowed to evict host v6
+// routes that pre-existed the session.
 func Snapshot() ([]Entry, error) {
 	var table *windows.MibIpForwardTable2
 	if err := windows.GetIpForwardTable2(windows.AF_INET, &table); err != nil {
@@ -97,32 +101,41 @@ func Remove(e Entry) error {
 
 // helpers ------------------------------------------------------------
 
-// entryToRow packs an Entry into a MibIpForwardRow2. IPv4-only.
+// entryToRow packs an Entry into a MibIpForwardRow2. Accepts both IPv4 and
+// IPv6 destinations; the family is inferred from the parsed prefix.
 func entryToRow(e Entry) (*windows.MibIpForwardRow2, error) {
 	prefix, err := netip.ParsePrefix(e.DestCIDR)
 	if err != nil {
 		return nil, fmt.Errorf("dest cidr %q: %w", e.DestCIDR, err)
 	}
-	if !prefix.Addr().Is4() {
-		return nil, fmt.Errorf("dest cidr %q: only IPv4 supported", e.DestCIDR)
+	dst := prefix.Addr()
+	maxBits := 32
+	if dst.Is6() {
+		maxBits = 128
 	}
+	bits := prefix.Bits()
+	if bits < 0 || bits > maxBits {
+		return nil, fmt.Errorf("dest cidr %q: invalid prefix length %d for family", e.DestCIDR, bits)
+	}
+
 	nh, err := netip.ParseAddr(e.NextHop)
-	if err != nil || !nh.Is4() {
-		nh = netip.IPv4Unspecified()
+	if err != nil {
+		if dst.Is6() {
+			nh = netip.IPv6Unspecified()
+		} else {
+			nh = netip.IPv4Unspecified()
+		}
 	}
+
 	row := &windows.MibIpForwardRow2{
 		InterfaceLuid:     e.InterfaceLUID,
 		Metric:            e.Metric,
 		ValidLifetime:     infiniteLifetime, // infinite per Win32 docs; default zero is treated as expired
 		PreferredLifetime: infiniteLifetime,
 	}
-	bits := prefix.Bits()
-	if bits < 0 || bits > 32 {
-		return nil, fmt.Errorf("dest cidr %q: invalid prefix length %d", e.DestCIDR, bits)
-	}
-	row.DestinationPrefix.PrefixLength = uint8(bits)
-	setRawAddr4(&row.DestinationPrefix.Prefix, prefix.Addr())
-	setRawAddr4(&row.NextHop, nh)
+	row.DestinationPrefix.PrefixLength = uint8(bits) // #nosec G115 -- bits is bounded above by maxBits (32 or 128), both fit in uint8
+	setRawAddr(&row.DestinationPrefix.Prefix, dst)
+	setRawAddr(&row.NextHop, nh)
 	return row, nil
 }
 
@@ -136,6 +149,24 @@ func setRawAddr4(raw *windows.RawSockaddrInet, addr netip.Addr) {
 	a4.Port = 0
 	a4.Addr = addr.As4()
 	a4.Zero = [8]uint8{}
+}
+
+// setRawAddr6 writes an IPv6 address into a RawSockaddrInet union slot
+// by overlaying RawSockaddrInet6 onto the wider RawSockaddrInet.
+func setRawAddr6(raw *windows.RawSockaddrInet, addr netip.Addr) {
+	r6 := (*windows.RawSockaddrInet6)(unsafe.Pointer(raw)) // #nosec G103 -- canonical Win32 union cast (RawSockaddrInet ⊃ RawSockaddrInet6)
+	r6.Family = windows.AF_INET6
+	a := addr.As16()
+	copy(r6.Addr[:], a[:])
+}
+
+// setRawAddr dispatches based on the address family.
+func setRawAddr(raw *windows.RawSockaddrInet, addr netip.Addr) {
+	if addr.Is4() {
+		setRawAddr4(raw, addr)
+		return
+	}
+	setRawAddr6(raw, addr)
 }
 
 // rawAddrToString reads either an IPv4 or IPv6 RawSockaddrInet to a string.
