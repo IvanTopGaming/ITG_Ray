@@ -36,6 +36,7 @@ func main() {
 	root.AddCommand(newServerCmd())
 	root.AddCommand(newRuleCmd())
 	root.AddCommand(newRunCmd())
+	root.AddCommand(newHelperCmd())
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
