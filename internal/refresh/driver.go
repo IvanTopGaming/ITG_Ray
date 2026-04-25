@@ -156,9 +156,3 @@ func (d *Driver) jittered(base time.Duration, pct float64) time.Duration {
 	d.randMu.Unlock()
 	return time.Duration(float64(base) * (1 + delta))
 }
-
-// runProbe is implemented in probe_tick.go.
-func (d *Driver) runProbe(ctx context.Context) {
-	defer d.wg.Done()
-	<-ctx.Done()
-}
