@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 
 	"github.com/Microsoft/go-winio"
 )
@@ -58,7 +57,3 @@ func Listen(ctx context.Context, name string, d *Dispatcher) error {
 		go d.Serve(ctx, conn)
 	}
 }
-
-// requireOwnerSID verifies the peer SID matches the user that installed the
-// service. For B5.1 we accept any SID; B5.2 tightens this.
-func requireOwnerSID(_ net.Conn) error { return nil } //nolint:unparam // real check arrives in Phase B5.2

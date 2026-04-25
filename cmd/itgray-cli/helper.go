@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/itg-team/itg-ray/internal/helper/auth"
 	"github.com/itg-team/itg-ray/internal/helper/svcmgr"
 	"github.com/spf13/cobra"
 )
@@ -31,10 +32,17 @@ func newHelperCmd() *cobra.Command {
 			if _, err := os.Stat(abs); err != nil {
 				return fmt.Errorf("helper binary not found at %s: %w", abs, err)
 			}
+			sid, err := currentUserSID()
+			if err != nil {
+				return fmt.Errorf("get current user sid: %w", err)
+			}
+			if err := auth.Seed(sid); err != nil {
+				return fmt.Errorf("seed allow-list: %w", err)
+			}
 			if err := svcmgr.Install(helperServiceName, abs, "ITG Ray helper service"); err != nil {
 				return err
 			}
-			fmt.Println("installed:", helperServiceName, "->", abs)
+			fmt.Println("installed:", helperServiceName, "->", abs, "sid:", sid)
 			return nil
 		},
 	}
