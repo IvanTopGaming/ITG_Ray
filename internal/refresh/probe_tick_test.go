@@ -36,7 +36,7 @@ func TestProbeOnce_Success_SetsLatencyMS(t *testing.T) {
 		Subs:        &fakeStore{},
 		ServersPath: path,
 		ProbeFunc:   probeFn,
-		Rand:        rand.New(rand.NewSource(1)), //nolint:gosec
+		Rand:        rand.New(rand.NewSource(1)), //nolint:gosec // deterministic test seed
 		Log:         slog.New(slog.NewTextHandler(testWriter{t}, nil)),
 	})
 	d.probeOnce(context.Background())
@@ -69,7 +69,7 @@ func TestProbeOnce_Failure_ResetsLatencyToNil(t *testing.T) {
 		Subs:        &fakeStore{},
 		ServersPath: path,
 		ProbeFunc:   probeFn,
-		Rand:        rand.New(rand.NewSource(1)), //nolint:gosec
+		Rand:        rand.New(rand.NewSource(1)), //nolint:gosec // deterministic test seed
 		Log:         slog.New(slog.NewTextHandler(testWriter{t}, nil)),
 	})
 	d.probeOnce(context.Background())
@@ -109,7 +109,7 @@ func TestProbeOnce_ConcurrencyCappedAt16(t *testing.T) {
 		Subs:        &fakeStore{},
 		ServersPath: path,
 		ProbeFunc:   probeFn,
-		Rand:        rand.New(rand.NewSource(1)), //nolint:gosec
+		Rand:        rand.New(rand.NewSource(1)), //nolint:gosec // deterministic test seed
 		Log:         slog.New(slog.NewTextHandler(testWriter{t}, nil)),
 	})
 	d.probeOnce(context.Background())
@@ -141,7 +141,7 @@ func TestProbeOnce_SnapshotApply_NewServersAddedDuringProbeAreNotTouched(t *test
 		Subs:        &fakeStore{},
 		ServersPath: path,
 		ProbeFunc:   probeFn,
-		Rand:        rand.New(rand.NewSource(1)), //nolint:gosec
+		Rand:        rand.New(rand.NewSource(1)), //nolint:gosec // deterministic test seed
 		Log:         slog.New(slog.NewTextHandler(testWriter{t}, nil)),
 	})
 
@@ -190,7 +190,7 @@ func TestProbeOnce_EmptyServers_NoOp(t *testing.T) {
 		Subs:        &fakeStore{},
 		ServersPath: path,
 		ProbeFunc:   func(_ context.Context, _ string, _ time.Duration) (time.Duration, error) { t.Fatal("probe must not be called"); return 0, nil },
-		Rand:        rand.New(rand.NewSource(1)), //nolint:gosec
+		Rand:        rand.New(rand.NewSource(1)), //nolint:gosec // deterministic test seed
 		Log:         slog.New(slog.NewTextHandler(testWriter{t}, nil)),
 	})
 	d.probeOnce(context.Background())

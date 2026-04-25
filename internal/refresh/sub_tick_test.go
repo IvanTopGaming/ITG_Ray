@@ -54,7 +54,7 @@ func mkDriver(t *testing.T, st subscription.Store, serversPath string, syncFn Sy
 		SyncFunc:    syncFn,
 		ProbeFunc:   noopProbe,
 		Now:         func() time.Time { return time.Date(2026, 4, 26, 12, 0, 0, 0, time.UTC) },
-		Rand:        rand.New(rand.NewSource(1)), //nolint:gosec
+		Rand:        rand.New(rand.NewSource(1)), //nolint:gosec // deterministic test seed
 		Log:         slog.New(slog.NewTextHandler(testWriter{t}, nil)),
 	})
 }
@@ -168,7 +168,7 @@ func TestRunSub_FirstTickWithinJitterWindow(t *testing.T) {
 		SyncFunc:          syncFn,
 		ProbeFunc:         noopProbe,
 		FirstSubJitterMax: testJitterMax,
-		Rand:              rand.New(rand.NewSource(1)), //nolint:gosec
+		Rand:              rand.New(rand.NewSource(1)), //nolint:gosec // deterministic test seed
 		Log:               slog.New(slog.NewTextHandler(testWriter{t}, nil)),
 	})
 
@@ -211,7 +211,7 @@ func TestRunSub_ZeroIntervalUsesDriverDefault(t *testing.T) {
 		// Seed picked so Int63n(30s) yields ≈3ms — first tick fires almost
 		// immediately so the test can observe a 2nd tick within the deadline
 		// without waiting up to 30s of jitter.
-		Rand: rand.New(rand.NewSource(1516)), //nolint:gosec
+		Rand: rand.New(rand.NewSource(1516)), //nolint:gosec // deterministic test seed
 		Log:  slog.New(slog.NewTextHandler(testWriter{t}, nil)),
 	})
 
@@ -244,7 +244,7 @@ func TestRunSub_CtxCancel_ExitsPromptly(t *testing.T) {
 		ServersPath: t.TempDir() + "/servers.json",
 		SyncFunc:    noopSync,
 		ProbeFunc:   noopProbe,
-		Rand:        rand.New(rand.NewSource(1)), //nolint:gosec
+		Rand:        rand.New(rand.NewSource(1)), //nolint:gosec // deterministic test seed
 		Log:         slog.New(slog.NewTextHandler(testWriter{t}, nil)),
 	})
 	ctx, cancel := context.WithCancel(context.Background())

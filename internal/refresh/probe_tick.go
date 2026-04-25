@@ -47,6 +47,11 @@ func (d *Driver) probeOnce(ctx context.Context) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					d.log.Error("refresh.probe.worker panic", "id", snapshot[i].ID, "panic", r)
+				}
+			}()
 			select {
 			case sem <- struct{}{}:
 			case <-ctx.Done():
