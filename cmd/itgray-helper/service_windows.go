@@ -89,10 +89,7 @@ func buildDispatcher() *server.Dispatcher {
 	return d
 }
 
-// runListener is the per-connection dispatcher loop. The actual named-pipe
-// implementation lives in Phase B5.1; this stub keeps the SCM handler
-// compilable and lets the interactive mode no-op-loop until ctx is cancelled.
-func runListener(ctx context.Context, _ *server.Dispatcher) error {
-	<-ctx.Done()
-	return nil
+// runListener is the per-connection dispatcher loop.
+func runListener(ctx context.Context, d *server.Dispatcher) error {
+	return server.Listen(ctx, PipeName, d)
 }
