@@ -93,6 +93,8 @@ func buildDispatcher() *server.Dispatcher {
 	d.Register(protocol.OpRouteRemove, server.NewRouteRemoveHandler())
 	d.Register(protocol.OpRouteRestore, server.NewRouteRestoreHandler())
 	d.Register(protocol.OpRouteSnapshot, server.NewRouteSnapshotHandler())
+	d.Register(protocol.OpStartChain, server.NewStartChainHandler())
+	d.Register(protocol.OpStopChain, server.NewStopChainHandler())
 	return d
 }
 
