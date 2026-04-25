@@ -17,6 +17,8 @@ const (
 	OpRouteRestore  Op = "RouteRestore"
 	OpRouteSnapshot Op = "RouteSnapshot"
 	OpServiceStatus Op = "ServiceStatus"
+	OpStartChain    Op = "StartChain"
+	OpStopChain     Op = "StopChain"
 	OpTunCreate     Op = "TunCreate"
 	OpTunDestroy    Op = "TunDestroy"
 )

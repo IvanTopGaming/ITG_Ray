@@ -40,4 +40,6 @@ func TestOpStrings(t *testing.T) {
 	require.Equal(t, "TunCreate", OpTunCreate.String())
 	require.Equal(t, "RouteSnapshot", OpRouteSnapshot.String())
 	require.Equal(t, "DnsRestore", OpDnsRestore.String())
+	require.Equal(t, "StartChain", OpStartChain.String())
+	require.Equal(t, "StopChain", OpStopChain.String())
 }
