@@ -85,7 +85,8 @@ func runInteractive(h *handler) error {
 func buildDispatcher() *server.Dispatcher {
 	d := server.NewDispatcher()
 	d.Register(protocol.OpServiceStatus, server.NewServiceStatusHandler(Version, time.Now()))
-	// Additional handlers are registered in Phases B5–B7.
+	d.Register(protocol.OpTunCreate, server.NewTunCreateHandler())
+	d.Register(protocol.OpTunDestroy, server.NewTunDestroyHandler())
 	return d
 }
 
