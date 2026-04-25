@@ -355,7 +355,7 @@ func NewStartChainHandler() Handler {
 		if err := undo.Save(undoPath(), undo.Journal{
 			TunName:  a.TunName,
 			Routes:   state.snapshot,
-			DNSPrior: dnsPriorAsList(state.dnsPrior),
+			DNSPrior: collectDNSPrior(state),
 		}); err != nil {
 			rollback()
 			return nil, fmt.Errorf("undo.Save: %w", err)
@@ -387,6 +387,17 @@ func dnsPriorAsList(prior *dns.Settings) []dns.Settings {
 		return nil
 	}
 	return []dns.Settings{*prior}
+}
+
+// collectDNSPrior returns all DNS snapshots that need restoration on
+// crash recovery: the legacy single-adapter dns_alias path AND the
+// per-adapter overrides from B6.7.8. Both are packed into the same
+// []dns.Settings slice; recoverFromUndo iterates and calls dns.Restore
+// on each (idempotent if any overlap occurs).
+func collectDNSPrior(state *chainState) []dns.Settings {
+	out := dnsPriorAsList(state.dnsPrior)
+	out = append(out, state.dnsOverrides...)
+	return out
 }
 
 // tunDNSServer is the DNS server we point all non-TUN adapters at. It is
