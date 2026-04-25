@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,6 +15,24 @@ import (
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/spf13/cobra"
 )
+
+// resolveServerIPv4 resolves host to an IPv4 literal via the system resolver.
+// It is called BEFORE any TUN/DNS hijack is installed, so the lookup goes
+// through the host's normal LAN DNS path (not FakeIP). This lets xray dial an
+// IP literal and avoids a TUN → sing-box → FakeIP → xray loop in helper mode.
+// If host is already an IP literal, net.LookupIP returns it as-is.
+func resolveServerIPv4(host string) (string, error) {
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return "", fmt.Errorf("lookup %q: %w", host, err)
+	}
+	for _, ip := range ips {
+		if v4 := ip.To4(); v4 != nil {
+			return v4.String(), nil
+		}
+	}
+	return "", fmt.Errorf("no IPv4 address for server host %q", host)
+}
 
 func newRunCmd() *cobra.Command {
 	var serverID string
@@ -55,7 +74,11 @@ func newRunCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				xrCfg, err := configgen.BuildXray(&configgen.XrayInput{Server: srv.Vless, SocksPort: xrayPort})
+				serverIP, err := resolveServerIPv4(srv.Vless.Address)
+				if err != nil {
+					return fmt.Errorf("resolve server host %q: %w", srv.Vless.Address, err)
+				}
+				xrCfg, err := configgen.BuildXray(&configgen.XrayInput{Server: srv.Vless, ServerIP: serverIP, SocksPort: xrayPort})
 				if err != nil {
 					return err
 				}
@@ -97,7 +120,11 @@ func runWithSysProxy(ctx context.Context, srv *server.Server, socksPort, xrayPor
 	if err != nil {
 		return err
 	}
-	xrCfg, err := configgen.BuildXray(&configgen.XrayInput{Server: srv.Vless, SocksPort: xrayPort})
+	serverIP, err := resolveServerIPv4(srv.Vless.Address)
+	if err != nil {
+		return fmt.Errorf("resolve server host %q: %w", srv.Vless.Address, err)
+	}
+	xrCfg, err := configgen.BuildXray(&configgen.XrayInput{Server: srv.Vless, ServerIP: serverIP, SocksPort: xrayPort})
 	if err != nil {
 		return err
 	}
