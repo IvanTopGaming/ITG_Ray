@@ -18,6 +18,11 @@ import (
 
 	xcore "github.com/xtls/xray-core/core"
 	xserial "github.com/xtls/xray-core/infra/conf/serial"
+
+	// Blank-import the xray-core "all" distro so its init() side effects
+	// register every proxy/transport/feature handler. Without this,
+	// xcore.New() fails with "*proxyman.InboundConfig is not registered".
+	_ "github.com/xtls/xray-core/main/distro/all"
 )
 
 // XrayAdapter wraps an embedded xray-core instance.
