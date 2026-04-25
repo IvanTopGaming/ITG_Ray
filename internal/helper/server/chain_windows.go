@@ -50,16 +50,14 @@ type StopChainArgs struct {
 
 // chainState tracks the active session inside the helper process.
 type chainState struct {
-	sessionID    string
-	singbox      *supervisor.Child
-	xray         *supervisor.Child
-	tunLUID      uint64
-	peerRoute    route.Entry // /32 host route we added for the VLESS server
-	snapshot     []route.Entry
-	dnsPrior     *dns.Settings // nil if no DNS override applied
-	dnsAlias     string
-	dnsOverrides []dns.Settings // per-adapter prior settings captured during overrideAdapterDNS
-	catchAllV6   bool           // true once the ::/0 catch-all is installed
+	sessionID string
+	singbox   *supervisor.Child
+	xray      *supervisor.Child
+	tunLUID   uint64
+	peerRoute route.Entry // /32 host route we added for the VLESS server
+	snapshot  []route.Entry
+	dnsPrior  *dns.Settings // nil if no DNS override applied
+	dnsAlias  string
 }
 
 var (
@@ -88,9 +86,9 @@ func newSessionID() string {
 }
 
 // NewStartChainHandler is the OpStartChain handler. It atomically
-// captures restore state, applies routes, spawns the cores, discovers
-// the new TUN adapter, and installs the catch-all route. Any mid-flow
-// failure rolls back.
+// captures restore state, applies the peer-route, spawns the cores, and
+// discovers the new TUN adapter. Sing-box's auto_route owns the catch-all
+// routes and DNS hijack natively. Any mid-flow failure rolls back.
 //
 //nolint:gocyclo,gocognit // orchestration sequence requires linear control flow so the rollback-flag pattern stays obvious
 func NewStartChainHandler() Handler {
@@ -117,26 +115,9 @@ func NewStartChainHandler() Handler {
 		// rollback runs in reverse order of operations performed; only the
 		// operations whose `done` flag is set actually reverse.
 		var (
-			doneRuntime, doneRouteSnap, donePeerRoute, doneDnsSnap, doneSingbox, doneXray, doneCatchAll, doneDnsOverride bool
+			doneRuntime, doneRouteSnap, donePeerRoute, doneDnsSnap, doneSingbox, doneXray bool
 		)
 		rollback := func() {
-			if state.catchAllV6 {
-				_ = route.Remove(route.Entry{
-					DestCIDR: "::/0", NextHop: "::",
-					InterfaceLUID: state.tunLUID, Metric: 0,
-				})
-			}
-			if doneCatchAll {
-				_ = route.Remove(route.Entry{
-					DestCIDR: "0.0.0.0/0", NextHop: "0.0.0.0",
-					InterfaceLUID: state.tunLUID, Metric: 0,
-				})
-			}
-			if doneDnsOverride {
-				for _, prior := range state.dnsOverrides {
-					_ = dns.Restore(prior)
-				}
-			}
 			if doneXray && state.xray != nil {
 				_ = state.xray.Stop(2 * time.Second)
 			}
@@ -291,47 +272,8 @@ func NewStartChainHandler() Handler {
 		}
 		state.tunLUID = tunAdapter.LUID
 
-		// Step 9: install the catch-all via the new TUN.
-		catchAll := route.Entry{
-			DestCIDR:      "0.0.0.0/0",
-			NextHop:       "0.0.0.0",
-			InterfaceLUID: state.tunLUID,
-			Metric:        0,
-		}
-		if err := route.Add(catchAll); err != nil {
-			rollback()
-			return nil, fmt.Errorf("route.Add(catch-all): %w", err)
-		}
-		doneCatchAll = true
-
-		// v6 catch-all to prevent IPv6 leak. v6 packets reaching the TUN are
-		// silently dropped by sing-box (no v6 inbound configured) and by the
-		// route.final=block killswitch from B6.2.1.
-		catchAllV6 := route.Entry{
-			DestCIDR:      "::/0",
-			NextHop:       "::",
-			InterfaceLUID: state.tunLUID,
-			Metric:        0,
-		}
-		if err := route.Add(catchAllV6); err != nil {
-			rollback()
-			return nil, fmt.Errorf("route.Add(catch-all v6): %w", err)
-		}
-		state.catchAllV6 = true
-
-		// Step 9b: override DNS on all non-TUN active adapters so Windows
-		// DnsClient sends DNS queries to 198.18.0.1 (TUN's own IP). Sing-box's
-		// TUN inbound + hijack-dns route rule then funnel queries to the DNS
-		// engine, where FakeIP synthesizes A/AAAA responses. Must run AFTER
-		// the catch-all routes are installed (so 198.18.0.1 is reachable via
-		// TUN) and AFTER sing-box is up with its TUN inbound listening.
-		if err := overrideAdapterDNS(state); err != nil {
-			rollback()
-			return nil, fmt.Errorf("override adapter DNS: %w", err)
-		}
-		doneDnsOverride = true
-
-		// Step 10: spawn xray.
+		// Step 9: spawn xray. (sing-box auto_route now owns catch-all routes
+		// and DNS hijack natively; helper no longer installs them.)
 		xrExe, err := binaryPath("xray.exe")
 		if err != nil {
 			rollback()
@@ -351,11 +293,11 @@ func NewStartChainHandler() Handler {
 		}
 		doneXray = true
 
-		// Step 11: persist undo journal.
+		// Step 10: persist undo journal.
 		if err := undo.Save(undoPath(), undo.Journal{
 			TunName:  a.TunName,
 			Routes:   state.snapshot,
-			DNSPrior: collectDNSPrior(state),
+			DNSPrior: dnsPriorAsList(state.dnsPrior),
 		}); err != nil {
 			rollback()
 			return nil, fmt.Errorf("undo.Save: %w", err)
@@ -387,79 +329,6 @@ func dnsPriorAsList(prior *dns.Settings) []dns.Settings {
 		return nil
 	}
 	return []dns.Settings{*prior}
-}
-
-// collectDNSPrior returns all DNS snapshots that need restoration on
-// crash recovery: the legacy single-adapter dns_alias path AND the
-// per-adapter overrides from B6.7.8. Both are packed into the same
-// []dns.Settings slice; recoverFromUndo iterates and calls dns.Restore
-// on each (idempotent if any overlap occurs).
-func collectDNSPrior(state *chainState) []dns.Settings {
-	out := dnsPriorAsList(state.dnsPrior)
-	out = append(out, state.dnsOverrides...)
-	return out
-}
-
-// tunDNSServer is the DNS server we point all non-TUN adapters at. It is
-// the TUN adapter's own IP and falls inside the FakeIP /15 range, so Windows
-// IPv4 longest-prefix routing sends UDP/53 to 198.18.0.1 over the TUN even
-// when the socket is bound to a different adapter (weak host outgoing).
-// tunDNSServer is the synthetic DNS server we point all non-TUN active
-// adapters at. Constraints, learned across smoke iterations:
-//   - NOT TUN's own IP (198.18.0.1) — Windows delivers locally (no
-//     listener on it), packet never enters TUN inbound flow (B6.7.9).
-//   - NOT a known public DNS IP (1.1.1.1, 8.8.8.8, 9.9.9.9, etc.) —
-//     Windows DnsClient auto-upgrades those to DNS-over-HTTPS via the
-//     built-in template table, bypassing our UDP/53 hijack (B6.7.13).
-//   - NOT an in-TUN-prefix non-endpoint IP (198.18.0.2/15) — sing-box's
-//     TUN inbound silently drops UDP to in-range non-endpoint addresses
-//     (B6.7.15).
-//   - MUST be an external IP that the catch-all route sends through the
-//     TUN, so sing-box's TUN inbound captures the packet via standard
-//     route-engine path (proven working in B6.7.13 via -Server 1.1.1.1).
-//
-// 203.0.113.1 (RFC5737 TEST-NET-3 documentation range) satisfies all
-// four: external (not RFC1918, not in LAN exception), not a known DNS
-// resolver, never in any DoH template, and reaches sing-box via the
-// catch-all → TUN inbound path that worked for 1.1.1.1.
-const tunDNSServer = "203.0.113.1"
-
-// overrideAdapterDNS points every active non-TUN adapter's DNS server list
-// at tunDNSServer, snapshotting prior state into state.dnsOverrides for
-// later restore. Adapters that have no current DNS configured, that lack a
-// FriendlyName, or that fail netsh snapshot (e.g. virtual adapters) are
-// skipped silently rather than aborting the whole orchestration.
-func overrideAdapterDNS(state *chainState) error {
-	all, err := adapter.Snapshot()
-	if err != nil {
-		return fmt.Errorf("adapter.Snapshot: %w", err)
-	}
-	for _, a := range all {
-		// Skip the TUN itself.
-		if a.LUID == state.tunLUID {
-			continue
-		}
-		// Skip adapters with empty FriendlyName — netsh keys by alias.
-		alias := a.FriendlyName
-		if alias == "" {
-			continue
-		}
-		prior, err := dns.Snapshot(alias)
-		if err != nil {
-			// Virtual / non-netsh-friendly adapter — skip gracefully.
-			continue
-		}
-		// Nothing configured currently → no leak vector and nothing to
-		// redirect. Skip.
-		if len(prior.Addresses) == 0 {
-			continue
-		}
-		if err := dns.Set(dns.Settings{InterfaceAlias: alias, Addresses: []string{tunDNSServer}}); err != nil {
-			return fmt.Errorf("dns.Set %q: %w", alias, err)
-		}
-		state.dnsOverrides = append(state.dnsOverrides, prior)
-	}
-	return nil
 }
 
 // NewStopChainHandler is the OpStopChain handler. It tears the chain
@@ -539,37 +408,18 @@ func stopActiveChainLocked() []string {
 		}
 	}
 
-	// 2. Remove catch-all route (sing-box may have already cleaned up).
-	_ = route.Remove(route.Entry{
-		DestCIDR:      "0.0.0.0/0",
-		NextHop:       "0.0.0.0",
-		InterfaceLUID: s.tunLUID,
-		Metric:        0,
-	})
-	// v6 catch-all
-	_ = route.Remove(route.Entry{
-		DestCIDR:      "::/0",
-		NextHop:       "::",
-		InterfaceLUID: s.tunLUID,
-		Metric:        0,
-	})
-
-	// 3. Restore DNS if we changed it.
+	// 2. Restore DNS if we changed it (legacy dns_alias single-adapter path
+	// only; sing-box auto_route teardown handles its own DNS hijack restore).
 	if s.dnsPrior != nil {
 		if err := dns.Restore(*s.dnsPrior); err != nil {
 			errs = append(errs, "dns.Restore: "+err.Error())
 		}
 	}
-	for _, prior := range s.dnsOverrides {
-		if err := dns.Restore(prior); err != nil {
-			errs = append(errs, "dns.Restore override "+prior.InterfaceAlias+": "+err.Error())
-		}
-	}
 
-	// 4. Remove the peer-route.
+	// 3. Remove the peer-route.
 	_ = route.Remove(s.peerRoute)
 
-	// 5. Apply RouteRestore from snapshot (diff-add anything we evicted).
+	// 4. Apply RouteRestore from snapshot (diff-add anything we evicted).
 	current, err := route.Snapshot()
 	if err == nil {
 		want := indexRouteEntries(s.snapshot)
@@ -583,7 +433,7 @@ func stopActiveChainLocked() []string {
 		errs = append(errs, "route.Snapshot(post): "+err.Error())
 	}
 
-	// 6. Clear undo journal.
+	// 5. Clear undo journal.
 	if err := undo.Clear(undoPath()); err != nil {
 		errs = append(errs, "undo.Clear: "+err.Error())
 	}
