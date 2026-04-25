@@ -8,7 +8,10 @@ import (
 	"github.com/itg-team/itg-ray/internal/server"
 )
 
-// Subscription is a stored subscription source: URL, fetch UA/auth, refresh interval.
+// Subscription is the in-memory shape used by Sync. It is not the on-disk
+// representation: AuthFunc cannot be JSON-serialized. The CLI / Wails layer
+// owns the persistent DTO that converts auth-method-name + credentials into
+// an AuthFunc at load time.
 type Subscription struct {
 	ID             string
 	Name           string
@@ -29,8 +32,12 @@ type SyncMeta struct {
 
 // Sync fetches the subscription, parses its body in any supported format,
 // and reconciles the resulting servers against the existing list using
-// origin-aware merge. Returns the new server list, sync metadata, and any
-// transport/parse error.
+// origin-aware merge.
+//
+// On success: returns (merged, meta, nil) with meta.Status == "OK".
+// On failure: returns (nil, meta, err) — meta is still populated with
+// LastUpdate, Status="ERROR: <message>", and Headers if Fetch succeeded.
+// Callers should always persist meta regardless of err.
 func Sync(ctx context.Context, sub Subscription, existing []server.Server, timeout time.Duration) ([]server.Server, SyncMeta, error) { //nolint:gocritic // sub is a value type; caller convenience outweighs copy cost
 	meta := SyncMeta{LastUpdate: time.Now()}
 	ua := sub.UserAgent
