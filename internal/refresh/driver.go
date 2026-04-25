@@ -1,0 +1,161 @@
+// Package refresh runs the periodic subscription-sync and latency-probe
+// background loops while itgray-cli run holds the chain up.
+package refresh
+
+import (
+	"context"
+	"log/slog"
+	"math/rand"
+	"sync"
+	"time"
+
+	"github.com/itg-team/itg-ray/internal/latency"
+	"github.com/itg-team/itg-ray/internal/server"
+	"github.com/itg-team/itg-ray/internal/subscription"
+)
+
+// Driver-internal default constants (from spec §5).
+const (
+	defaultSubInterval = 12 * time.Hour
+	defaultProbeIntv   = 5 * time.Minute
+	defaultProbeTO     = 5 * time.Second
+	defaultProbeConc   = 16
+
+	tickJitterPct     = 0.10            // ±10% on every tick
+	firstSubJitterMax = 30 * time.Second // first-sub-tick stagger window
+	firstProbeDelay   = 5 * time.Second  // probe waits this long before first run
+	syncFetchTimeout  = 30 * time.Second
+	lastStatusMaxLen  = 120
+)
+
+// SyncFn matches subscription.Sync. The driver uses a function-typed field
+// (rather than calling subscription.Sync directly) so tests can inject a fake.
+type SyncFn func(ctx context.Context, sub subscription.Subscription, existing []server.Server, timeout time.Duration) ([]server.Server, subscription.SyncMeta, error)
+
+// ProbeFn matches latency.TCPConnect.
+type ProbeFn func(ctx context.Context, addr string, timeout time.Duration) (time.Duration, error)
+
+// Config wires a Driver. All fields are optional except Subs and ServersPath.
+type Config struct {
+	Subs               subscription.Store
+	ServersPath        string
+	SyncFunc           SyncFn
+	ProbeFunc          ProbeFn
+	DefaultSubInterval time.Duration
+	ProbeInterval      time.Duration
+	ProbeTimeout       time.Duration
+	ProbeConcurrency   int
+	Now                func() time.Time
+	Rand               *rand.Rand
+	Log                *slog.Logger
+}
+
+// Driver owns the background goroutines.
+type Driver struct {
+	subs               subscription.Store
+	serversPath        string
+	syncFunc           SyncFn
+	probeFunc          ProbeFn
+	defaultSubInterval time.Duration
+	probeInterval      time.Duration
+	probeTimeout       time.Duration
+	probeConcurrency   int
+	now                func() time.Time
+	rand               *rand.Rand
+	log                *slog.Logger
+
+	serversMu sync.Mutex
+	wg        sync.WaitGroup
+}
+
+// NewDriver returns a Driver with defaults applied for any Config field
+// left at its zero value.
+func NewDriver(c Config) *Driver {
+	d := &Driver{
+		subs:               c.Subs,
+		serversPath:        c.ServersPath,
+		syncFunc:           c.SyncFunc,
+		probeFunc:          c.ProbeFunc,
+		defaultSubInterval: c.DefaultSubInterval,
+		probeInterval:      c.ProbeInterval,
+		probeTimeout:       c.ProbeTimeout,
+		probeConcurrency:   c.ProbeConcurrency,
+		now:                c.Now,
+		rand:               c.Rand,
+		log:                c.Log,
+	}
+	if d.syncFunc == nil {
+		d.syncFunc = subscription.Sync
+	}
+	if d.probeFunc == nil {
+		d.probeFunc = latency.TCPConnect
+	}
+	if d.defaultSubInterval == 0 {
+		d.defaultSubInterval = defaultSubInterval
+	}
+	if d.probeInterval == 0 {
+		d.probeInterval = defaultProbeIntv
+	}
+	if d.probeTimeout == 0 {
+		d.probeTimeout = defaultProbeTO
+	}
+	if d.probeConcurrency == 0 {
+		d.probeConcurrency = defaultProbeConc
+	}
+	if d.now == nil {
+		d.now = time.Now
+	}
+	if d.rand == nil {
+		d.rand = rand.New(rand.NewSource(time.Now().UnixNano())) //nolint:gosec // jitter, not crypto
+	}
+	if d.log == nil {
+		d.log = slog.Default()
+	}
+	return d
+}
+
+// Run starts the per-sub goroutines and the probe ticker. It blocks until ctx
+// is cancelled, then waits for in-flight ticks to finish before returning.
+// Returns ctx.Err() (typically context.Canceled or DeadlineExceeded) on shutdown.
+func (d *Driver) Run(ctx context.Context) error {
+	subs, err := d.subs.Load()
+	if err != nil {
+		d.log.Error("refresh: load subs", "err", err)
+		// Still run probe loop — operator may add subs without restarting.
+		subs = nil
+	}
+	for _, s := range subs {
+		d.wg.Add(1)
+		go d.runSub(ctx, s)
+	}
+
+	d.wg.Add(1)
+	go d.runProbe(ctx)
+
+	<-ctx.Done()
+	d.wg.Wait()
+	return ctx.Err()
+}
+
+// jittered returns base * (1 ± pct * rand-uniform-in-[0,1)) using d.rand.
+// It is safe to call from a single goroutine; the per-sub goroutine and the
+// probe goroutine each have their own callers, never overlapping.
+func (d *Driver) jittered(base time.Duration, pct float64) time.Duration {
+	if base <= 0 {
+		return 0
+	}
+	delta := (d.rand.Float64()*2 - 1) * pct
+	return time.Duration(float64(base) * (1 + delta))
+}
+
+// runSub is implemented in sub_tick.go.
+func (d *Driver) runSub(ctx context.Context, s subscription.Stored) {
+	defer d.wg.Done()
+	<-ctx.Done()
+}
+
+// runProbe is implemented in probe_tick.go.
+func (d *Driver) runProbe(ctx context.Context) {
+	defer d.wg.Done()
+	<-ctx.Done()
+}
