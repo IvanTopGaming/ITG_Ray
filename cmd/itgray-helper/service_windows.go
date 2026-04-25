@@ -87,6 +87,8 @@ func buildDispatcher() *server.Dispatcher {
 	d.Register(protocol.OpServiceStatus, server.NewServiceStatusHandler(Version, time.Now()))
 	d.Register(protocol.OpTunCreate, server.NewTunCreateHandler())
 	d.Register(protocol.OpTunDestroy, server.NewTunDestroyHandler())
+	d.Register(protocol.OpDnsRestore, server.NewDnsRestoreHandler())
+	d.Register(protocol.OpDnsSet, server.NewDnsSetHandler())
 	d.Register(protocol.OpRouteAdd, server.NewRouteAddHandler())
 	d.Register(protocol.OpRouteRemove, server.NewRouteRemoveHandler())
 	d.Register(protocol.OpRouteRestore, server.NewRouteRestoreHandler())
