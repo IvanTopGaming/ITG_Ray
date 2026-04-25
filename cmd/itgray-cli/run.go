@@ -12,7 +12,9 @@ import (
 
 	"github.com/itg-team/itg-ray/internal/configgen"
 	"github.com/itg-team/itg-ray/internal/core"
+	"github.com/itg-team/itg-ray/internal/refresh"
 	"github.com/itg-team/itg-ray/internal/server"
+	"github.com/itg-team/itg-ray/internal/subscription"
 	"github.com/spf13/cobra"
 )
 
@@ -32,6 +34,28 @@ func resolveServerIPv4(host string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no IPv4 address for server host %q", host)
+}
+
+// startRefreshDriver spawns the refresh.Driver as a background goroutine
+// using a child context derived from parent. The returned cleanup function
+// cancels the child ctx and blocks until the driver returns. Caller must
+// `defer cleanup()` so cancellation runs before parent ctx unwinds.
+func startRefreshDriver(parent context.Context) func() {
+	d := refresh.NewDriver(refresh.Config{
+		Subs:        &subscription.FileStore{Path: subsPath()},
+		ServersPath: serversPath(),
+		Log:         slog.Default(),
+	})
+	ctx, cancel := context.WithCancel(parent)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = d.Run(ctx)
+	}()
+	return func() {
+		cancel()
+		<-done
+	}
 }
 
 func newRunCmd() *cobra.Command {
@@ -88,6 +112,8 @@ func newRunCmd() *cobra.Command {
 				}
 				defer sess.cleanup(context.Background())
 
+				stopRefresh := startRefreshDriver(ctx)
+				defer stopRefresh()
 				slog.Info("helper session up", slog.String("session", sess.sessionID))
 				fmt.Fprintln(os.Stderr, "TUN-mode VPN is up via helper. Logs:")
 				fmt.Fprintln(os.Stderr, `  C:\ProgramData\ITG Ray\Helper\runtime\sing-box.log`)
@@ -132,6 +158,8 @@ func runWithSysProxy(ctx context.Context, srv *server.Server, socksPort, xrayPor
 	if err := mgr.Start(ctx, sbCfg, xrCfg); err != nil {
 		return err
 	}
+	stopRefresh := startRefreshDriver(ctx)
+	defer stopRefresh()
 	slog.Info("running sysproxy", slog.Int("socks", socksPort), slog.String("server", srv.Name))
 	fmt.Fprintf(os.Stderr, "SOCKS5 inbound listening on 127.0.0.1:%d — Ctrl+C to stop\n", socksPort)
 	return waitForSignal(mgr)
