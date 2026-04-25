@@ -31,6 +31,12 @@ var (
 	procDeleteIpForwardEntry2 = iphlpapi.NewProc("DeleteIpForwardEntry2")
 )
 
+// infiniteLifetime is the Win32 sentinel for ValidLifetime/PreferredLifetime
+// meaning the route never expires. Default zero is treated by Windows as
+// already-expired, causing the row to be silently ignored during route
+// resolution. See MIB_IPFORWARD_ROW2 docs.
+const infiniteLifetime uint32 = 0xFFFFFFFF
+
 // Snapshot reads the IPv4 forwarding table.
 func Snapshot() ([]Entry, error) {
 	var table *windows.MibIpForwardTable2
@@ -105,8 +111,10 @@ func entryToRow(e Entry) (*windows.MibIpForwardRow2, error) {
 		nh = netip.IPv4Unspecified()
 	}
 	row := &windows.MibIpForwardRow2{
-		InterfaceLuid: e.InterfaceLUID,
-		Metric:        e.Metric,
+		InterfaceLuid:     e.InterfaceLUID,
+		Metric:            e.Metric,
+		ValidLifetime:     infiniteLifetime, // infinite per Win32 docs; default zero is treated as expired
+		PreferredLifetime: infiniteLifetime,
 	}
 	bits := prefix.Bits()
 	if bits < 0 || bits > 32 {
