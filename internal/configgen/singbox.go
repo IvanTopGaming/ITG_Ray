@@ -112,6 +112,20 @@ func applyTunModeKillswitch(route map[string]any) {
 	default:
 		route["rules"] = []map[string]any{lanRule}
 	}
+	// Append a catch-all proxy rule at the END so default traffic that
+	// didn't match LAN exception or user rules goes through the proxy
+	// instead of falling through to final="block" (which would drop
+	// every default packet, including DNS to the FakeIP layer).
+	// final="block" stays as defense-in-depth for malformed configs;
+	// killswitch behavior on proxy outbound failure is preserved by
+	// sing-box's drop-on-outbound-failure semantics.
+	catchAllProxy := map[string]any{"outbound": "proxy"}
+	switch existing := route["rules"].(type) {
+	case []map[string]any:
+		route["rules"] = append(existing, catchAllProxy)
+	case []any:
+		route["rules"] = append(existing, catchAllProxy)
+	}
 }
 
 // BuildSingbox generates a sing-box config: mixed (HTTP+SOCKS5) inbound for

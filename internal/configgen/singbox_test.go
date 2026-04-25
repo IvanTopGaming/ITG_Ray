@@ -199,3 +199,30 @@ func TestBuildSingbox_SysProxy_DefaultOutboundIsProxy(t *testing.T) {
 	// branch, so the value compiled from rules.Model.DefaultAction stands.
 	require.Equal(t, "proxy", route["final"])
 }
+
+func TestBuildSingbox_TunMode_CatchAllProxyBeforeFinal(t *testing.T) {
+	in := SingboxInput{
+		Mode:          ModeTun,
+		TunName:       "ITGRay-TUN",
+		TunIPv4:       "198.18.0.1/15",
+		XraySOCKSHost: "127.0.0.1",
+		XraySOCKSPort: 1081,
+		Rules:         rules.Model{DefaultAction: rules.ActionProxy},
+	}
+	b, err := BuildSingbox(&in)
+	require.NoError(t, err)
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(b, &doc))
+
+	route := doc["route"].(map[string]any)
+	rs := route["rules"].([]any)
+	require.NotEmpty(t, rs)
+
+	// Last rule should be a catch-all to proxy: just {outbound: "proxy"}
+	last := rs[len(rs)-1].(map[string]any)
+	require.Equal(t, "proxy", last["outbound"])
+	// And it should NOT have any match conditions (catch-all).
+	require.Nil(t, last["domain"])
+	require.Nil(t, last["ip_cidr"])
+	require.Nil(t, last["geosite"])
+}
