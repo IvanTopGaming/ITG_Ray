@@ -146,10 +146,16 @@ func humanRelative(d time.Duration) string {
 	}
 }
 
-// truncate clips s to at most n runes, appending "…" if cut.
+// truncate clips s so the result is at most n bytes, appending "…" if cut.
+// "…" is 3 bytes in UTF-8, so we reserve len("…") bytes from the prefix
+// rather than 1. Mirrors internal/refresh.truncate.
 func truncate(s string, n int) string {
+	const ellipsis = "…"
 	if len(s) <= n {
 		return s
 	}
-	return s[:n-1] + "…"
+	if n <= len(ellipsis) {
+		return s[:n]
+	}
+	return s[:n-len(ellipsis)] + ellipsis
 }
