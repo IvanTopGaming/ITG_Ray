@@ -189,9 +189,12 @@ func TestProbeOnce_EmptyServers_NoOp(t *testing.T) {
 	d := NewDriver(Config{
 		Subs:        &fakeStore{},
 		ServersPath: path,
-		ProbeFunc:   func(_ context.Context, _ string, _ time.Duration) (time.Duration, error) { t.Fatal("probe must not be called"); return 0, nil },
-		Rand:        rand.New(rand.NewSource(1)), //nolint:gosec // deterministic test seed
-		Log:         slog.New(slog.NewTextHandler(testWriter{t}, nil)),
+		ProbeFunc: func(_ context.Context, _ string, _ time.Duration) (time.Duration, error) {
+			t.Fatal("probe must not be called")
+			return 0, nil
+		},
+		Rand: rand.New(rand.NewSource(1)), //nolint:gosec // deterministic test seed
+		Log:  slog.New(slog.NewTextHandler(testWriter{t}, nil)),
 	})
 	d.probeOnce(context.Background())
 }
