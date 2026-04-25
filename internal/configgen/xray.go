@@ -11,6 +11,17 @@ import (
 type XrayInput struct {
 	Server    vless.Config
 	SocksPort int
+	// ServerIP, when non-empty, is a pre-resolved IPv4 literal that overrides
+	// Server.Address in the vnext outbound. Use this when the caller wants to
+	// bypass xray's runtime DNS resolution — specifically in TUN/FakeIP mode,
+	// where xray would otherwise resolve Server.Address through Windows
+	// DnsClient → TUN → sing-box DNS engine → FakeIP, get back a synthetic
+	// 198.18.x.x address, and then dial THAT for VLESS, creating a
+	// self-referential routing loop. See B6.7.18 in the smoke log.
+	//
+	// The override only swaps the dial target. Reality/TLS SNI is unaffected
+	// because buildStream populates serverName from c.SNI, not c.Address.
+	ServerIP string
 }
 
 // BuildXray emits an xray-core config: SOCKS5 inbound on 127.0.0.1:SocksPort,
@@ -18,13 +29,20 @@ type XrayInput struct {
 func BuildXray(in *XrayInput) ([]byte, error) {
 	stream := buildStream(&in.Server)
 
+	// Pre-resolved IP literal wins over hostname when caller supplies one
+	// (TUN/FakeIP-loop mitigation; see ServerIP doc above).
+	address := in.Server.Address
+	if in.ServerIP != "" {
+		address = in.ServerIP
+	}
+
 	out := map[string]any{
 		"protocol": "vless",
 		"tag":      "proxy",
 		"settings": map[string]any{
 			"vnext": []map[string]any{
 				{
-					"address": in.Server.Address,
+					"address": address,
 					"port":    int(in.Server.Port),
 					"users": []map[string]any{
 						{
