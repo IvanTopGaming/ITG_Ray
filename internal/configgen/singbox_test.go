@@ -100,6 +100,32 @@ func TestBuildSingbox_FakeIP(t *testing.T) {
 	require.Equal(t, true, dns["independent_cache"])
 }
 
+func TestBuildSingbox_FakeIP_RuleOrder(t *testing.T) {
+	in := SingboxInput{
+		Mode:          ModeTun,
+		FakeIP:        true,
+		TunName:       "ITGRay-TUN",
+		TunIPv4:       "198.18.0.1/15",
+		XraySOCKSHost: "127.0.0.1",
+		XraySOCKSPort: 1081,
+		Rules:         rules.Model{DefaultAction: rules.ActionProxy},
+	}
+	b, err := BuildSingbox(&in)
+	require.NoError(t, err)
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(b, &doc))
+	dns := doc["dns"].(map[string]any)
+	rs := dns["rules"].([]any)
+	require.GreaterOrEqual(t, len(rs), 2)
+	// First rule must be the fakeip rule (sing-box is first-match).
+	first := rs[0].(map[string]any)
+	require.Equal(t, "fakeip", first["server"], "fakeip rule must come before remote rule")
+	qts, ok := first["query_type"].([]any)
+	require.True(t, ok)
+	require.Contains(t, qts, "A")
+	require.Contains(t, qts, "AAAA")
+}
+
 func TestBuildSingbox_NoFakeIPInSysProxy(t *testing.T) {
 	// FakeIP only makes sense in TUN mode. Sys-proxy mode must NOT emit it.
 	in := SingboxInput{

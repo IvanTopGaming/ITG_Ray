@@ -54,8 +54,8 @@ func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
 				{"tag": "fakeip", "address": "fakeip"},
 			},
 			"rules": []map[string]any{
-				{"outbound": "any", "server": "remote"},
 				{"query_type": []string{"A", "AAAA"}, "server": "fakeip"},
+				{"outbound": "any", "server": "remote"},
 			},
 			"fakeip": map[string]any{
 				"enabled":     true,

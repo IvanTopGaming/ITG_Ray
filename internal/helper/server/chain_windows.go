@@ -492,8 +492,9 @@ func stopActiveChainLocked() []string {
 		errs = append(errs, "undo.Clear: "+err.Error())
 	}
 
-	// 7. Wipe runtime dir.
-	_ = os.RemoveAll(runtime.BasePath())
+	// Note: do NOT wipe runtime.BasePath() here. Next session's OpStartChain
+	// calls runtime.EnsureClean() which preserves *.log* and clears the rest.
+	// Wiping here would defeat log preservation across sessions.
 
 	activeSess = nil
 	return errs
