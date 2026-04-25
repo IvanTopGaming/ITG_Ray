@@ -50,15 +50,16 @@ type StopChainArgs struct {
 
 // chainState tracks the active session inside the helper process.
 type chainState struct {
-	sessionID  string
-	singbox    *supervisor.Child
-	xray       *supervisor.Child
-	tunLUID    uint64
-	peerRoute  route.Entry // /32 host route we added for the VLESS server
-	snapshot   []route.Entry
-	dnsPrior   *dns.Settings // nil if no DNS override applied
-	dnsAlias   string
-	catchAllV6 bool // true once the ::/0 catch-all is installed
+	sessionID    string
+	singbox      *supervisor.Child
+	xray         *supervisor.Child
+	tunLUID      uint64
+	peerRoute    route.Entry // /32 host route we added for the VLESS server
+	snapshot     []route.Entry
+	dnsPrior     *dns.Settings // nil if no DNS override applied
+	dnsAlias     string
+	dnsOverrides []dns.Settings // per-adapter prior settings captured during overrideAdapterDNS
+	catchAllV6   bool           // true once the ::/0 catch-all is installed
 }
 
 var (
@@ -116,7 +117,7 @@ func NewStartChainHandler() Handler {
 		// rollback runs in reverse order of operations performed; only the
 		// operations whose `done` flag is set actually reverse.
 		var (
-			doneRuntime, doneRouteSnap, donePeerRoute, doneDnsSnap, doneSingbox, doneXray, doneCatchAll bool
+			doneRuntime, doneRouteSnap, donePeerRoute, doneDnsSnap, doneSingbox, doneXray, doneCatchAll, doneDnsOverride bool
 		)
 		rollback := func() {
 			if state.catchAllV6 {
@@ -130,6 +131,11 @@ func NewStartChainHandler() Handler {
 					DestCIDR: "0.0.0.0/0", NextHop: "0.0.0.0",
 					InterfaceLUID: state.tunLUID, Metric: 0,
 				})
+			}
+			if doneDnsOverride {
+				for _, prior := range state.dnsOverrides {
+					_ = dns.Restore(prior)
+				}
 			}
 			if doneXray && state.xray != nil {
 				_ = state.xray.Stop(2 * time.Second)
@@ -313,6 +319,18 @@ func NewStartChainHandler() Handler {
 		}
 		state.catchAllV6 = true
 
+		// Step 9b: override DNS on all non-TUN active adapters so Windows
+		// DnsClient sends DNS queries to 198.18.0.1 (TUN's own IP). Sing-box's
+		// TUN inbound + hijack-dns route rule then funnel queries to the DNS
+		// engine, where FakeIP synthesizes A/AAAA responses. Must run AFTER
+		// the catch-all routes are installed (so 198.18.0.1 is reachable via
+		// TUN) and AFTER sing-box is up with its TUN inbound listening.
+		if err := overrideAdapterDNS(state); err != nil {
+			rollback()
+			return nil, fmt.Errorf("override adapter DNS: %w", err)
+		}
+		doneDnsOverride = true
+
 		// Step 10: spawn xray.
 		xrExe, err := binaryPath("xray.exe")
 		if err != nil {
@@ -369,6 +387,50 @@ func dnsPriorAsList(prior *dns.Settings) []dns.Settings {
 		return nil
 	}
 	return []dns.Settings{*prior}
+}
+
+// tunDNSServer is the DNS server we point all non-TUN adapters at. It is
+// the TUN adapter's own IP and falls inside the FakeIP /15 range, so Windows
+// IPv4 longest-prefix routing sends UDP/53 to 198.18.0.1 over the TUN even
+// when the socket is bound to a different adapter (weak host outgoing).
+const tunDNSServer = "198.18.0.1"
+
+// overrideAdapterDNS points every active non-TUN adapter's DNS server list
+// at tunDNSServer, snapshotting prior state into state.dnsOverrides for
+// later restore. Adapters that have no current DNS configured, that lack a
+// FriendlyName, or that fail netsh snapshot (e.g. virtual adapters) are
+// skipped silently rather than aborting the whole orchestration.
+func overrideAdapterDNS(state *chainState) error {
+	all, err := adapter.Snapshot()
+	if err != nil {
+		return fmt.Errorf("adapter.Snapshot: %w", err)
+	}
+	for _, a := range all {
+		// Skip the TUN itself.
+		if a.LUID == state.tunLUID {
+			continue
+		}
+		// Skip adapters with empty FriendlyName — netsh keys by alias.
+		alias := a.FriendlyName
+		if alias == "" {
+			continue
+		}
+		prior, err := dns.Snapshot(alias)
+		if err != nil {
+			// Virtual / non-netsh-friendly adapter — skip gracefully.
+			continue
+		}
+		// Nothing configured currently → no leak vector and nothing to
+		// redirect. Skip.
+		if len(prior.Addresses) == 0 {
+			continue
+		}
+		if err := dns.Set(dns.Settings{InterfaceAlias: alias, Addresses: []string{tunDNSServer}}); err != nil {
+			return fmt.Errorf("dns.Set %q: %w", alias, err)
+		}
+		state.dnsOverrides = append(state.dnsOverrides, prior)
+	}
+	return nil
 }
 
 // NewStopChainHandler is the OpStopChain handler. It tears the chain
@@ -467,6 +529,11 @@ func stopActiveChainLocked() []string {
 	if s.dnsPrior != nil {
 		if err := dns.Restore(*s.dnsPrior); err != nil {
 			errs = append(errs, "dns.Restore: "+err.Error())
+		}
+	}
+	for _, prior := range s.dnsOverrides {
+		if err := dns.Restore(prior); err != nil {
+			errs = append(errs, "dns.Restore override "+prior.InterfaceAlias+": "+err.Error())
 		}
 	}
 
