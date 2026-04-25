@@ -85,6 +85,11 @@ func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
 // nomenclature so library validation accepts the document.
 func applyTunModeKillswitch(route map[string]any) {
 	route["final"] = "block"
+	// hijackDnsRule feeds DNS traffic (detected via sniff in the rule
+	// preceding it) into sing-box's DNS engine so that FakeIP and other
+	// DNS rules can take effect. Without this, TUN inbound treats UDP/53
+	// as opaque traffic and bypasses the DNS module entirely.
+	hijackDnsRule := map[string]any{"protocol": "dns", "action": "hijack-dns"}
 	lanRule := map[string]any{
 		"ip_cidr": []string{
 			"10.0.0.0/8",
@@ -94,23 +99,26 @@ func applyTunModeKillswitch(route map[string]any) {
 		},
 		"outbound": "direct",
 	}
-	// Insert lanRule right after the first rule (which is the sniff
-	// action prepended in BuildSingbox).
+	// Insert hijack-dns then lanRule right after the first rule (which
+	// is the sniff action prepended in BuildSingbox). Order matters:
+	// sniff must run first to populate protocol metadata; hijack-dns
+	// must run before LAN-direct so DNS to the LAN gateway is also
+	// hijacked into the DNS engine, not shunted around it.
 	switch existing := route["rules"].(type) {
 	case []map[string]any:
 		if len(existing) > 0 {
-			route["rules"] = append([]map[string]any{existing[0], lanRule}, existing[1:]...)
+			route["rules"] = append([]map[string]any{existing[0], hijackDnsRule, lanRule}, existing[1:]...)
 		} else {
-			route["rules"] = []map[string]any{lanRule}
+			route["rules"] = []map[string]any{hijackDnsRule, lanRule}
 		}
 	case []any:
 		if len(existing) > 0 {
-			route["rules"] = append([]any{existing[0], lanRule}, existing[1:]...)
+			route["rules"] = append([]any{existing[0], hijackDnsRule, lanRule}, existing[1:]...)
 		} else {
-			route["rules"] = []any{lanRule}
+			route["rules"] = []any{hijackDnsRule, lanRule}
 		}
 	default:
-		route["rules"] = []map[string]any{lanRule}
+		route["rules"] = []map[string]any{hijackDnsRule, lanRule}
 	}
 	// Append a catch-all proxy rule at the END so default traffic that
 	// didn't match LAN exception or user rules goes through the proxy

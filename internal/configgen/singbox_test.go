@@ -252,3 +252,38 @@ func TestBuildSingbox_TunMode_CatchAllProxyBeforeFinal(t *testing.T) {
 	require.Nil(t, last["ip_cidr"])
 	require.Nil(t, last["geosite"])
 }
+
+func TestBuildSingbox_TunMode_HijackDNS(t *testing.T) {
+	in := SingboxInput{
+		Mode:          ModeTun,
+		FakeIP:        true,
+		TunName:       "ITGRay-TUN",
+		TunIPv4:       "198.18.0.1/15",
+		XraySOCKSHost: "127.0.0.1",
+		XraySOCKSPort: 1081,
+		Rules:         rules.Model{DefaultAction: rules.ActionProxy},
+	}
+	b, err := BuildSingbox(&in)
+	require.NoError(t, err)
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(b, &doc))
+
+	route := doc["route"].(map[string]any)
+	rs := route["rules"].([]any)
+	require.GreaterOrEqual(t, len(rs), 3, "expect sniff + hijack-dns + LAN minimum")
+
+	// Index 0 must be sniff (B10.1/B5 carryover invariant)
+	first := rs[0].(map[string]any)
+	require.Equal(t, "sniff", first["action"])
+
+	// Index 1 must be hijack-dns
+	second := rs[1].(map[string]any)
+	require.Equal(t, "dns", second["protocol"])
+	require.Equal(t, "hijack-dns", second["action"])
+
+	// Index 2 must be LAN-direct
+	third := rs[2].(map[string]any)
+	require.Equal(t, "direct", third["outbound"])
+	cidrs := third["ip_cidr"].([]any)
+	require.Contains(t, cidrs, "192.168.0.0/16")
+}
