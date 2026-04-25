@@ -7,9 +7,27 @@ import (
 	"github.com/itg-team/itg-ray/internal/rules"
 )
 
+// Mode selects the sing-box inbound shape.
+type Mode string
+
+const (
+	// ModeSysProxy is the default — sing-box exposes a mixed HTTP+SOCKS5
+	// inbound on a loopback port that user apps target via the Windows
+	// "system proxy" registry knob.
+	ModeSysProxy Mode = ""
+	// ModeTun attaches sing-box to an externally-created WinTUN adapter
+	// by interface name. The Helper has already created the adapter,
+	// configured its IPv4 and routes, and (optionally) overridden DNS.
+	ModeTun Mode = "tun"
+)
+
 // SingboxInput collects everything BuildSingbox needs to emit a sing-box config.
+// TunName and TunIPv4 are only consumed when Mode == ModeTun.
 type SingboxInput struct {
+	Mode             Mode
 	SocksInboundPort int
+	TunName          string
+	TunIPv4          string
 	XraySOCKSHost    string
 	XraySOCKSPort    int
 	Rules            rules.Model
@@ -46,6 +64,31 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 		upstreams = []string{"1.1.1.1", "8.8.8.8"}
 	}
 
+	var inbound map[string]any
+	switch in.Mode {
+	case ModeTun:
+		// Sniffing is configured via the route-rule action prepended above
+		// (sing-box 1.13 removed legacy per-inbound sniff fields).
+		inbound = map[string]any{
+			"type":           "tun",
+			"tag":            "in-tun",
+			"interface_name": in.TunName,
+			"address":        []string{in.TunIPv4},
+			"auto_route":     false,
+			"strict_route":   false,
+		}
+	default:
+		// Note: legacy inbound `sniff` / `sniff_override_destination` fields
+		// were removed in sing-box 1.13; sniffing is now a route-rule action
+		// (see sniffRule prepended above), so we deliberately omit them here.
+		inbound = map[string]any{
+			"type":        "mixed",
+			"tag":         "in-local",
+			"listen":      "127.0.0.1",
+			"listen_port": in.SocksInboundPort,
+		}
+	}
+
 	doc := map[string]any{
 		"log": map[string]any{"level": "info", "timestamp": true},
 		"dns": map[string]any{
@@ -53,14 +96,6 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 				{"tag": "default", "address": upstreams[0]},
 			},
 			"strategy": "prefer_ipv4",
-		},
-		"inbounds": []map[string]any{
-			{
-				"type":        "mixed",
-				"tag":         "in-local",
-				"listen":      "127.0.0.1",
-				"listen_port": in.SocksInboundPort,
-			},
 		},
 		"outbounds": []map[string]any{
 			{
@@ -75,5 +110,6 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 		},
 		"route": route,
 	}
+	doc["inbounds"] = []map[string]any{inbound}
 	return json.MarshalIndent(doc, "", "  ")
 }
