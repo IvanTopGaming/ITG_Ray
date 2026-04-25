@@ -405,18 +405,24 @@ func collectDNSPrior(state *chainState) []dns.Settings {
 // IPv4 longest-prefix routing sends UDP/53 to 198.18.0.1 over the TUN even
 // when the socket is bound to a different adapter (weak host outgoing).
 // tunDNSServer is the synthetic DNS server we point all non-TUN active
-// adapters at. Constraints:
-//   - NOT TUN's own IP (198.18.0.1) — Windows would deliver locally (no
-//     listener), packet never enters TUN inbound flow (B6.7.9 finding).
-//   - NOT a known public DNS IP (1.1.1.1, 8.8.8.8, etc.) — Windows
-//     DnsClient auto-upgrades those to DoH over HTTPS/443, bypassing our
-//     UDP/53 hijack entirely (B6.7.13 finding via Get-DnsClientDohServerAddress).
-//   - MUST be in TUN's /15 prefix or otherwise route via TUN — so the
-//     UDP/53 packet reaches sing-box's TUN inbound.
+// adapters at. Constraints, learned across smoke iterations:
+//   - NOT TUN's own IP (198.18.0.1) — Windows delivers locally (no
+//     listener on it), packet never enters TUN inbound flow (B6.7.9).
+//   - NOT a known public DNS IP (1.1.1.1, 8.8.8.8, 9.9.9.9, etc.) —
+//     Windows DnsClient auto-upgrades those to DNS-over-HTTPS via the
+//     built-in template table, bypassing our UDP/53 hijack (B6.7.13).
+//   - NOT an in-TUN-prefix non-endpoint IP (198.18.0.2/15) — sing-box's
+//     TUN inbound silently drops UDP to in-range non-endpoint addresses
+//     (B6.7.15).
+//   - MUST be an external IP that the catch-all route sends through the
+//     TUN, so sing-box's TUN inbound captures the packet via standard
+//     route-engine path (proven working in B6.7.13 via -Server 1.1.1.1).
 //
-// 198.18.0.2 satisfies all three: in TUN's 198.18.0.0/15, not the TUN
-// endpoint itself, and not in Microsoft's DoH template list.
-const tunDNSServer = "198.18.0.2"
+// 203.0.113.1 (RFC5737 TEST-NET-3 documentation range) satisfies all
+// four: external (not RFC1918, not in LAN exception), not a known DNS
+// resolver, never in any DoH template, and reaches sing-box via the
+// catch-all → TUN inbound path that worked for 1.1.1.1.
+const tunDNSServer = "203.0.113.1"
 
 // overrideAdapterDNS points every active non-TUN adapter's DNS server list
 // at tunDNSServer, snapshotting prior state into state.dnsOverrides for
