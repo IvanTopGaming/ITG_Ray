@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"regexp"
 )
 
 // Action is a rule verdict.
@@ -86,8 +87,26 @@ func (r *Rule) Validate() error {
 		return errors.New("rule.conditions cannot be all-empty")
 	}
 	for i, p := range r.Conditions.Ports {
+		if p.Single != 0 && (p.From != 0 || p.To != 0) {
+			return fmt.Errorf("rule.conditions.ports[%d] cannot set both Single and From/To", i)
+		}
 		if p.Single == 0 && (p.From == 0 || p.To == 0 || p.From > p.To) {
-			return fmt.Errorf("rule.conditions.ports[%d] invalid", i)
+			return fmt.Errorf("rule.conditions.ports[%d] invalid range", i)
+		}
+	}
+	for i, d := range r.Conditions.Domains {
+		switch d.Kind {
+		case "exact", "suffix", "keyword", "regex":
+		default:
+			return fmt.Errorf("rule.conditions.domains[%d].kind %q invalid (must be exact|suffix|keyword|regex)", i, d.Kind)
+		}
+		if d.Value == "" {
+			return fmt.Errorf("rule.conditions.domains[%d].value is empty", i)
+		}
+		if d.Kind == "regex" {
+			if _, err := regexp.Compile(d.Value); err != nil {
+				return fmt.Errorf("rule.conditions.domains[%d].value %q: %w", i, d.Value, err)
+			}
 		}
 	}
 	for i, cidr := range r.Conditions.IPCIDRs {

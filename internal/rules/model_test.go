@@ -42,3 +42,27 @@ func TestPortSpec_Covers(t *testing.T) {
 	require.True(t, PortSpec{From: 10, To: 20}.Covers(15))
 	require.False(t, PortSpec{From: 10, To: 20}.Covers(21))
 }
+
+func TestValidate_DomainKindMustBeKnown(t *testing.T) {
+	r := Rule{ID: "x", Action: ActionProxy, Conditions: Conditions{Domains: []DomainMatcher{{Kind: "sufix", Value: "example.com"}}}}
+	err := r.Validate()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "kind")
+}
+
+func TestValidate_DomainEmptyValue(t *testing.T) {
+	r := Rule{ID: "x", Action: ActionProxy, Conditions: Conditions{Domains: []DomainMatcher{{Kind: "exact", Value: ""}}}}
+	require.Error(t, r.Validate())
+}
+
+func TestValidate_DomainBadRegex(t *testing.T) {
+	r := Rule{ID: "x", Action: ActionProxy, Conditions: Conditions{Domains: []DomainMatcher{{Kind: "regex", Value: "[unclosed"}}}}
+	require.Error(t, r.Validate())
+}
+
+func TestValidate_PortBothSingleAndRange(t *testing.T) {
+	r := Rule{ID: "x", Action: ActionProxy, Conditions: Conditions{Ports: []PortSpec{{Single: 443, From: 100, To: 200}}}}
+	err := r.Validate()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "Single and From/To")
+}
