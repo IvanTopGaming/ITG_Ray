@@ -244,9 +244,14 @@ func NewStartChainHandler() Handler {
 			rollback()
 			return nil, fmt.Errorf("binary path: %w", err)
 		}
+		sbLog := runtime.LogPath("sing-box.log")
+		if err := runtime.RotateLog(sbLog); err != nil {
+			rollback()
+			return nil, fmt.Errorf("rotate sing-box log: %w", err)
+		}
 		state.singbox, err = supervisor.Spawn("sing-box", sbExe,
 			[]string{"run", "-c", sbPath},
-			runtime.LogPath("sing-box.log"))
+			sbLog)
 		if err != nil {
 			rollback()
 			return nil, fmt.Errorf("spawn sing-box: %w", err)
@@ -314,9 +319,14 @@ func NewStartChainHandler() Handler {
 			rollback()
 			return nil, fmt.Errorf("binary path xray: %w", err)
 		}
+		xrLog := runtime.LogPath("xray.log")
+		if err := runtime.RotateLog(xrLog); err != nil {
+			rollback()
+			return nil, fmt.Errorf("rotate xray log: %w", err)
+		}
 		state.xray, err = supervisor.Spawn("xray", xrExe,
 			[]string{"-c", xrPath},
-			runtime.LogPath("xray.log"))
+			xrLog)
 		if err != nil {
 			rollback()
 			return nil, fmt.Errorf("spawn xray: %w", err)
