@@ -404,11 +404,19 @@ func collectDNSPrior(state *chainState) []dns.Settings {
 // the TUN adapter's own IP and falls inside the FakeIP /15 range, so Windows
 // IPv4 longest-prefix routing sends UDP/53 to 198.18.0.1 over the TUN even
 // when the socket is bound to a different adapter (weak host outgoing).
-// Use a real external IP (Cloudflare 1.1.1.1) so packets traverse the TUN
-// catch-all route and reach sing-box's TUN inbound; UDP/53 to TUN's own IP
-// (198.18.0.1) is locally delivered by Windows and never enters the inbound
-// flow. Smoke B6.7.9 confirmed FakeIP works for any external dest.
-const tunDNSServer = "1.1.1.1"
+// tunDNSServer is the synthetic DNS server we point all non-TUN active
+// adapters at. Constraints:
+//   - NOT TUN's own IP (198.18.0.1) — Windows would deliver locally (no
+//     listener), packet never enters TUN inbound flow (B6.7.9 finding).
+//   - NOT a known public DNS IP (1.1.1.1, 8.8.8.8, etc.) — Windows
+//     DnsClient auto-upgrades those to DoH over HTTPS/443, bypassing our
+//     UDP/53 hijack entirely (B6.7.13 finding via Get-DnsClientDohServerAddress).
+//   - MUST be in TUN's /15 prefix or otherwise route via TUN — so the
+//     UDP/53 packet reaches sing-box's TUN inbound.
+//
+// 198.18.0.2 satisfies all three: in TUN's 198.18.0.0/15, not the TUN
+// endpoint itself, and not in Microsoft's DoH template list.
+const tunDNSServer = "198.18.0.2"
 
 // overrideAdapterDNS points every active non-TUN adapter's DNS server list
 // at tunDNSServer, snapshotting prior state into state.dnsOverrides for
