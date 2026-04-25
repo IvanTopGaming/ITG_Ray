@@ -10,6 +10,7 @@ require (
 	github.com/xtls/xray-core v1.260327.0
 	golang.org/x/net v0.53.0
 	golang.org/x/sys v0.43.0
+	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2
 	modernc.org/sqlite v1.49.1
 )
 
@@ -167,7 +168,6 @@ require (
 	golang.org/x/text v0.36.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
 	golang.org/x/tools v0.43.0 // indirect
-	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb // indirect
 	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
