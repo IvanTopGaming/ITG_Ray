@@ -16,7 +16,7 @@ func Parse(body string) (ParseResult, error) {
 		return ParseResult{}, ErrEmptyBody
 	}
 	if strings.HasPrefix(trimmed, "{") {
-		if r, err := ParseSingbox(trimmed); err == nil {
+		if r, err := ParseSingbox(trimmed); err == nil && len(r.Configs)+r.Invalid > 0 {
 			return r, nil
 		}
 	}
