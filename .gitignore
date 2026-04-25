@@ -2,6 +2,7 @@
 
 # Go
 /bin/
+/itgray-cli
 *.exe
 *.test
 *.out
