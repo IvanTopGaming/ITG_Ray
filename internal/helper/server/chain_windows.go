@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"sync"
@@ -174,8 +175,30 @@ func NewStartChainHandler() Handler {
 			rollback()
 			return nil, fmt.Errorf("gateway.Default: %w", err)
 		}
+
+		// Resolve ServerHost to an IPv4 literal — peer-route's CIDR must be parseable
+		// by netip.ParsePrefix. Resolution uses the host's DNS (the same one sing-box
+		// will inherit on spawn) and runs BEFORE the catch-all is installed, so it
+		// goes through the original network path.
+		serverIPs, err := net.LookupIP(a.ServerHost)
+		if err != nil {
+			rollback()
+			return nil, fmt.Errorf("resolve server host %q: %w", a.ServerHost, err)
+		}
+		var serverV4 net.IP
+		for _, ip := range serverIPs {
+			if v4 := ip.To4(); v4 != nil {
+				serverV4 = v4
+				break
+			}
+		}
+		if serverV4 == nil {
+			rollback()
+			return nil, fmt.Errorf("no IPv4 for server host %q", a.ServerHost)
+		}
+
 		state.peerRoute = route.Entry{
-			DestCIDR:      a.ServerHost + "/32",
+			DestCIDR:      serverV4.String() + "/32",
 			NextHop:       gw.NextHop,
 			InterfaceLUID: gw.InterfaceLUID,
 			Metric:        0,
