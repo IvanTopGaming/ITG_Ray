@@ -32,6 +32,45 @@ type SingboxInput struct {
 	XraySOCKSPort    int
 	Rules            rules.Model
 	DNSUpstreams     []string
+	// FakeIP, when true and Mode==ModeTun, enables sing-box's FakeIP DNS
+	// module. A/AAAA queries return synthetic IPs in 198.18.0.0/15 (which
+	// the TunIPv4 prefix covers), so DNS round-trips don't traverse the
+	// proxy. Real DNS happens once per (domain, TTL) via the "remote"
+	// server which is detoured through the proxy outbound — no LAN leak.
+	// In ModeSysProxy this field is ignored (no TUN to attach FakeIP to).
+	FakeIP bool
+}
+
+// buildDNSBlock builds the sing-box dns block. In TUN mode with FakeIP
+// enabled, it emits a remote+fakeip server pair plus the rules that send
+// A/AAAA queries to fakeip and everything else (PTR, MX, etc.) to remote.
+// In any other configuration, it emits a single "default" server with no
+// rules.
+func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
+	if in.Mode == ModeTun && in.FakeIP {
+		return map[string]any{
+			"servers": []map[string]any{
+				{"tag": "remote", "address": upstreams[0], "detour": "proxy"},
+				{"tag": "fakeip", "address": "fakeip"},
+			},
+			"rules": []map[string]any{
+				{"outbound": "any", "server": "remote"},
+				{"query_type": []string{"A", "AAAA"}, "server": "fakeip"},
+			},
+			"fakeip": map[string]any{
+				"enabled":     true,
+				"inet4_range": "198.18.0.0/15",
+			},
+			"independent_cache": true,
+			"strategy":          "prefer_ipv4",
+		}
+	}
+	return map[string]any{
+		"servers": []map[string]any{
+			{"tag": "default", "address": upstreams[0]},
+		},
+		"strategy": "prefer_ipv4",
+	}
 }
 
 // BuildSingbox generates a sing-box config: mixed (HTTP+SOCKS5) inbound for
@@ -91,12 +130,7 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 
 	doc := map[string]any{
 		"log": map[string]any{"level": "info", "timestamp": true},
-		"dns": map[string]any{
-			"servers": []map[string]any{
-				{"tag": "default", "address": upstreams[0]},
-			},
-			"strategy": "prefer_ipv4",
-		},
+		"dns": buildDNSBlock(in, upstreams),
 		"outbounds": []map[string]any{
 			{
 				"type":        "socks",

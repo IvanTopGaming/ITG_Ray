@@ -45,6 +45,7 @@ func newRunCmd() *cobra.Command {
 			if useHelper {
 				sbCfg, err := configgen.BuildSingbox(&configgen.SingboxInput{
 					Mode:          configgen.ModeTun,
+					FakeIP:        true,
 					TunName:       tunName,
 					TunIPv4:       tunIPv4,
 					XraySOCKSHost: "127.0.0.1",
