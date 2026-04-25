@@ -151,12 +151,6 @@ func (d *Driver) jittered(base time.Duration, pct float64) time.Duration {
 	return time.Duration(float64(base) * (1 + delta))
 }
 
-// runSub is implemented in sub_tick.go.
-func (d *Driver) runSub(ctx context.Context, s subscription.Stored) {
-	defer d.wg.Done()
-	<-ctx.Done()
-}
-
 // runProbe is implemented in probe_tick.go.
 func (d *Driver) runProbe(ctx context.Context) {
 	defer d.wg.Done()
