@@ -30,6 +30,17 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 		return nil, err
 	}
 
+	// Prepend sniff action rule (sing-box 1.13+: legacy inbound sniff fields replaced by route rule actions).
+	sniffRule := map[string]any{"action": "sniff"}
+	switch existing := route["rules"].(type) {
+	case []map[string]any:
+		route["rules"] = append([]map[string]any{sniffRule}, existing...)
+	case []any:
+		route["rules"] = append([]any{sniffRule}, existing...)
+	default:
+		route["rules"] = []map[string]any{sniffRule}
+	}
+
 	upstreams := in.DNSUpstreams
 	if len(upstreams) == 0 {
 		upstreams = []string{"1.1.1.1", "8.8.8.8"}
@@ -45,12 +56,10 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 		},
 		"inbounds": []map[string]any{
 			{
-				"type":                       "mixed",
-				"tag":                        "in-local",
-				"listen":                     "127.0.0.1",
-				"listen_port":                in.SocksInboundPort,
-				"sniff":                      true,
-				"sniff_override_destination": true,
+				"type":        "mixed",
+				"tag":         "in-local",
+				"listen":      "127.0.0.1",
+				"listen_port": in.SocksInboundPort,
 			},
 		},
 		"outbounds": []map[string]any{
