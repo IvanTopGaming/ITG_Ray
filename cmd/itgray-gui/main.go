@@ -17,6 +17,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // Version is injected at build time via -ldflags -X main.Version=<git-rev>.
@@ -81,9 +82,24 @@ func main() {
 		Chain: chainCtrl,
 		Hub:   app.Hub(),
 	})
+	settingsStore := bindings.NewConfigStore(filepath.Join(dataDir, "config.json"), Version, BuildDate)
 	settingsSvc := bindings.NewSettingsService(bindings.SettingsDeps{
-		Store: bindings.NewConfigStore(filepath.Join(dataDir, "config.json"), Version, BuildDate),
+		Store: settingsStore,
 		Hub:   app.Hub(),
+	})
+
+	// TrayService records icon + menu state on every vpn:status event.
+	// IconSetter / MenuSetter are nil today: Wails v2.11 has no
+	// first-party SystemTray runtime API, and adding fyne.io/systray
+	// pulls native build deps we are not ready to commit to. The
+	// architectural plumbing (event-driven menu rebuild) lands here so
+	// a v0.2 task can wire a concrete adapter without touching the
+	// event flow. See bindings/tray.go for the full rationale.
+	traySvc := bindings.NewTrayService(bindings.TrayDeps{
+		Hub:    app.Hub(),
+		Chain:  chainCtrl,
+		OnShow: func() { wailsruntime.WindowShow(app.ctx) },
+		OnQuit: func() { wailsruntime.Quit(app.ctx) },
 	})
 
 	err := wails.Run(&options.App{
@@ -97,13 +113,33 @@ func main() {
 		AssetServer:      &assetserver.Options{Assets: assets},
 		OnStartup: func(ctx context.Context) {
 			app.Startup(ctx)
+			traySvc.Init(ctx)
 			// Reconcile after the frontend has subscribed so the
 			// "still-running" status event is delivered to the live UI
 			// rather than dropped into a closed hub.
 			chainCtrl.Reconcile(ctx)
 		},
-		OnShutdown: func(ctx context.Context) { app.Shutdown(ctx) },
-		Bind:       []any{app, appSvc, serversSvc, subsSvc, runSvc, settingsSvc},
+		OnBeforeClose: func(ctx context.Context) (prevent bool) {
+			// Close-to-tray: when General.CloseToTray is true, intercept
+			// the close, hide the window, and keep the process alive so
+			// the tray (or, for now, the headless event loop) continues
+			// driving the chain. Disk read on the close path is fine —
+			// it happens once per click.
+			view, err := settingsStore.View()
+			if err != nil {
+				return false // best-effort: a config read error should not block quit
+			}
+			if !view.General.CloseToTray {
+				return false
+			}
+			wailsruntime.WindowHide(ctx)
+			return true
+		},
+		OnShutdown: func(ctx context.Context) {
+			traySvc.Shutdown()
+			app.Shutdown(ctx)
+		},
+		Bind: []any{app, appSvc, serversSvc, subsSvc, runSvc, settingsSvc},
 		Windows: &windows.Options{
 			WebviewIsTransparent: false,
 			DisableWindowIcon:    false,
