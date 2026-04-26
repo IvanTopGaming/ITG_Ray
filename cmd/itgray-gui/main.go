@@ -81,6 +81,10 @@ func main() {
 		Chain: chainCtrl,
 		Hub:   app.Hub(),
 	})
+	settingsSvc := bindings.NewSettingsService(bindings.SettingsDeps{
+		Store: bindings.NewConfigStore(filepath.Join(dataDir, "config.json"), Version, BuildDate),
+		Hub:   app.Hub(),
+	})
 
 	err := wails.Run(&options.App{
 		Title:            "ITG Ray",
@@ -99,7 +103,7 @@ func main() {
 			chainCtrl.Reconcile(ctx)
 		},
 		OnShutdown: func(ctx context.Context) { app.Shutdown(ctx) },
-		Bind:       []any{app, appSvc, serversSvc, subsSvc, runSvc},
+		Bind:       []any{app, appSvc, serversSvc, subsSvc, runSvc, settingsSvc},
 		Windows: &windows.Options{
 			WebviewIsTransparent: false,
 			DisableWindowIcon:    false,
