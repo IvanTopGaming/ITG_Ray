@@ -14,6 +14,16 @@ GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" -o "$OUT/itgray-helper.ex
 echo ">> building itgray-cli.exe (version=$VERSION)"
 GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" -o "$OUT/itgray-cli.exe" "$ROOT/cmd/itgray-cli"
 
+echo ">> building itgray-gui.exe (ITGRay.exe) (version=$VERSION)"
+# wails build emits to build/bin/<name>; -o is the filename, not a path.
+# We move the artifact to $OUT after the build completes.
+GUI_ARTIFACT="$ROOT/cmd/itgray-gui/build/bin/ITGRay.exe"
+( cd "$ROOT/cmd/itgray-gui" && \
+  wails build -clean -platform windows/amd64 \
+    -ldflags "-X main.Version=$VERSION" -o "ITGRay.exe" )
+[[ -f "$GUI_ARTIFACT" ]] || { echo "wails build did not produce $GUI_ARTIFACT" >&2; exit 1; }
+mv "$GUI_ARTIFACT" "$OUT/ITGRay.exe"
+
 echo ">> copying wintun.dll"
 cp "$ROOT/third_party/wintun/wintun.dll" "$OUT/wintun.dll"
 

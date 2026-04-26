@@ -21,3 +21,10 @@ Thumbs.db
 *.log
 /stats.db
 /tmp/
+
+# Wails GUI build artifacts
+cmd/itgray-gui/build/
+cmd/itgray-gui/frontend/node_modules/
+cmd/itgray-gui/frontend/dist/
+/itgray-gui
+.claude/
