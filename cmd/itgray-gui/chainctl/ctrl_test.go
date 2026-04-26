@@ -178,7 +178,7 @@ func TestController_Reconcile_AfterCrash(t *testing.T) {
 	fh.mu.Lock()
 	fh.running = true
 	fh.mu.Unlock()
-	// Seed a last-session record so Reconcile can rebind the server.
+	// Seed a last-session record so Reconcile can rebind the picker.
 	require.NoError(t, saveSession(c.d.DataDir, sessionRecord{
 		ServerID: "a",
 		Mode:     string(ModeTUN),
@@ -190,22 +190,27 @@ func TestController_Reconcile_AfterCrash(t *testing.T) {
 
 	c.Reconcile(context.Background())
 
-	deadline := time.After(time.Second)
-	for {
-		select {
-		case <-deadline:
-			t.Fatal("no vpn:status connected event after Reconcile")
-		case e, ok := <-rcv:
-			require.True(t, ok, "hub closed before status event")
-			if e.Name == hub.EventVPNStatus && e.Payload["status"] == string(hub.StatusConnected) {
-				st, srv, mode := c.Status()
-				require.Equal(t, hub.StatusConnected, st)
-				require.NotNil(t, srv)
-				require.Equal(t, "a", srv.ID)
-				require.Equal(t, ModeTUN, mode)
-				return
-			}
+	// Reconcile only pre-fills the picker; it does NOT emit a connected
+	// event because helper.OpServiceStatus cannot reliably distinguish
+	// "service alive" from "chain alive". The user must reconnect explicitly.
+	c.mu.Lock()
+	srv := c.current
+	mode := c.mode
+	cancel := c.cancel
+	c.mu.Unlock()
+	require.NotNil(t, srv, "Reconcile should pre-fill current server from session")
+	require.Equal(t, "a", srv.ID)
+	require.Equal(t, ModeTUN, mode)
+	require.Nil(t, cancel, "Reconcile must not claim chain ownership")
+
+	// No status event should fire from Reconcile; drain briefly to confirm.
+	select {
+	case e := <-rcv:
+		if e.Name == hub.EventVPNStatus {
+			t.Fatalf("unexpected vpn:status event from Reconcile: %v", e.Payload)
 		}
+	case <-time.After(100 * time.Millisecond):
+		// quiet — expected
 	}
 }
 
