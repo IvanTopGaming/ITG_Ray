@@ -52,9 +52,11 @@ func (s *ServersService) List(_ context.Context) ([]hub.ServerView, error) {
 
 // ToggleFavorite flips the favorite flag for the given server id and
 // persists the full list back through the store. Read-modify-write is not
-// transactional across concurrent calls — the FileStore-level atomic
-// rename in server.Save protects file integrity, but callers racing on the
-// same id may see lost updates. C.T5 leaves that as accepted scope.
+// transactional. server.Save's atomic rename keeps the file structurally
+// consistent, but two concurrent ToggleFavorite calls on the same id can
+// race on the load → mutate window and lose one update. Today only the
+// main window invokes this binding so collisions are unlikely; once tray
+// favorites land (C.T13) a per-store mutex should be added.
 func (s *ServersService) ToggleFavorite(_ context.Context, id string) error {
 	list, err := s.d.ServerStore.Load()
 	if err != nil {
@@ -107,11 +109,17 @@ func (s *ServersService) TestLatency(ctx context.Context, id string) error {
 
 	results := make([]map[string]any, 0, len(targets))
 	for _, i := range targets {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		r := probeOne(ctx, &list[i])
 		results = append(results, r)
-		if ms, ok := r["latencyMs"].(int); ok && ms > 0 {
-			ms := ms
-			list[i].LatencyMS = &ms
+		if _, hadError := r["error"]; hadError {
+			continue
+		}
+		if ms, ok := r["latencyMs"].(int); ok {
+			latency := ms
+			list[i].LatencyMS = &latency
 		}
 	}
 	// Persist updated latencies. Best-effort: if Save fails the in-memory
@@ -132,6 +140,10 @@ func (s *ServersService) TestLatency(ctx context.Context, id string) error {
 //
 //	{ "id": "...", "latencyMs": 42 }            // success
 //	{ "id": "...", "latencyMs": 0,  "error": "…" } // failure
+//
+// Sub-millisecond RTTs (localhost / LAN) are floored at 1ms so the on-disk
+// LatencyMS sentinel "0 = never probed" stays meaningful and the frontend's
+// LatencyBadge does not render an em-dash for a healthy server.
 func probeOne(ctx context.Context, t *server.Server) map[string]any {
 	addr := net.JoinHostPort(t.Vless.Address, strconv.Itoa(int(t.Vless.Port)))
 	dialer := &net.Dialer{Timeout: probeTimeout}
@@ -141,8 +153,9 @@ func probeOne(ctx context.Context, t *server.Server) map[string]any {
 		return map[string]any{"id": t.ID, "latencyMs": 0, "error": err.Error()}
 	}
 	_ = c.Close()
+	ms := max(int(time.Since(start).Milliseconds()), 1)
 	return map[string]any{
 		"id":        t.ID,
-		"latencyMs": int(time.Since(start).Milliseconds()),
+		"latencyMs": ms,
 	}
 }

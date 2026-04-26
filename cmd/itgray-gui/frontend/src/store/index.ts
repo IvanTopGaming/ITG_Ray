@@ -70,7 +70,12 @@ export const useStore = create<StoreState>((set) => ({
     set((cur) => ({
       servers: cur.servers.map((srv: ServerView) => {
         const r = e.results.find((rr) => rr.id === srv.id);
-        return r ? { ...srv, latencyMs: r.error ? 0 : r.latencyMs } : srv;
+        if (!r) return srv;
+        // Transient probe failure must not wipe the previously-known good RTT
+        // (otherwise the badge flickers to em-dash on every error). Only
+        // overwrite latencyMs on a successful probe.
+        if (r.error) return srv;
+        return { ...srv, latencyMs: r.latencyMs };
       }),
     })),
   applyHelperState: (state) => set({ helperState: state }),

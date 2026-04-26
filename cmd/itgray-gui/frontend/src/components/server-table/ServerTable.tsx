@@ -36,7 +36,11 @@ export function ServerTable({ servers }: { servers: ServerView[] }) {
         >
           Test all
         </button>
-        <button className="px-3 h-8 rounded-md bg-gradient-to-br from-indigo-500 to-pink-500 text-sm">
+        <button
+          className="px-3 h-8 rounded-md bg-gradient-to-br from-indigo-500 to-pink-500 text-sm opacity-50 cursor-not-allowed"
+          disabled
+          title="Manual server entry lands in C.T7"
+        >
           + Manual
         </button>
       </div>
@@ -51,6 +55,13 @@ export function ServerTable({ servers }: { servers: ServerView[] }) {
         {filtered.map((s) => (
           <ServerRow key={s.id} s={s} />
         ))}
+        {filtered.length === 0 && (
+          <div className="px-3 py-8 text-center text-text-muted text-sm">
+            {q
+              ? "No servers match your search."
+              : "No servers yet — import a subscription to populate this list."}
+          </div>
+        )}
       </div>
     </div>
   );
