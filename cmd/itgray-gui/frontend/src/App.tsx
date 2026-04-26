@@ -1,12 +1,7 @@
-import { HashRouter } from "react-router-dom";
-import { AppShell } from "./components/layout/AppShell";
-
-// HashRouter is required because Wails serves static assets without
-// server-side routing; BrowserRouter would 404 on deep links.
 export default function App() {
   return (
-    <HashRouter>
-      <AppShell />
-    </HashRouter>
+    <div className="flex h-screen w-screen items-center justify-center font-sans text-sm text-neutral-500">
+      ITG Ray — UI under reconstruction
+    </div>
   );
 }
