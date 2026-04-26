@@ -1,0 +1,5 @@
+/* Color, glass, radius, typography tokens — populated in C.T4. */
+:root {
+  --surface-base: #0a0d17;
+  --text-primary: #e8ebf3;
+}
