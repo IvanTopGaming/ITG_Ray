@@ -27,10 +27,10 @@ export function SubCard({ s }: { s: SubView }) {
       {s.lastSyncMessage && <div className="text-xs text-rose-400/80">{s.lastSyncMessage}</div>}
       <QuotaBar percent={0} />
       <div className="flex gap-1 mt-auto pt-1 text-xs">
-        <button className="px-2 h-7 rounded bg-white/[0.06] border border-white/10 opacity-50 cursor-not-allowed" disabled>Sync now</button>
-        <button className="px-2 h-7 rounded bg-white/[0.06] border border-white/10 opacity-50 cursor-not-allowed" disabled>Edit</button>
-        <button className="px-2 h-7 rounded bg-white/[0.06] border border-white/10 opacity-50 cursor-not-allowed" disabled>Export</button>
-        <button className="px-2 h-7 rounded text-rose-400 border border-rose-500/30 ml-auto opacity-50 cursor-not-allowed" disabled>Delete</button>
+        <button className="px-2 h-7 rounded bg-white/[0.06] border border-white/10 opacity-50 cursor-not-allowed" disabled title="Sync now lands in C.T7">Sync now</button>
+        <button className="px-2 h-7 rounded bg-white/[0.06] border border-white/10 opacity-50 cursor-not-allowed" disabled title="Edit lands in a future task">Edit</button>
+        <button className="px-2 h-7 rounded bg-white/[0.06] border border-white/10 opacity-50 cursor-not-allowed" disabled title="Export lands in a future task">Export</button>
+        <button className="px-2 h-7 rounded text-rose-400 border border-rose-500/30 ml-auto opacity-50 cursor-not-allowed" disabled title="Delete lands in C.T7">Delete</button>
       </div>
     </div>
   );
