@@ -29,6 +29,28 @@ export default {
           "radial-gradient(130% 90% at 50% 0%, #3a2580 0%, #150a3d 55%, #0a0620 100%)",
         "orb-accent":
           "radial-gradient(circle at 30% 30%, #7ed4ff, #3478e0 60%, #1a3a99 100%)",
+        "orb-warn":
+          "radial-gradient(circle at 30% 30%, #ffd28a, #ffb13c 60%, #a36a00 100%)",
+        "orb-danger":
+          "radial-gradient(circle at 30% 30%, #ff8a8a, #ff5e5e 60%, #7a1f1f 100%)",
+        "btn-accent":
+          "linear-gradient(180deg, #7ed4ff 0%, #3478e0 100%)",
+      },
+      animation: {
+        "orb-pulse": "orb-pulse 2.5s ease-in-out infinite",
+        "orb-shake": "orb-shake 0.4s ease-in-out 2",
+        "spin-slow": "spin 2s linear infinite",
+      },
+      keyframes: {
+        "orb-pulse": {
+          "0%, 100%": { transform: "scale(1)" },
+          "50%": { transform: "scale(1.06)" },
+        },
+        "orb-shake": {
+          "0%, 100%": { transform: "translateX(0)" },
+          "25%": { transform: "translateX(-6px)" },
+          "75%": { transform: "translateX(6px)" },
+        },
       },
       transitionTimingFunction: {
         snap: "cubic-bezier(0.16, 1, 0.3, 1)",
