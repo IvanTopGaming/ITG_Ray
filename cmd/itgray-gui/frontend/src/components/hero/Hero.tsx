@@ -32,6 +32,14 @@ export function Hero() {
     if (cs?.id) setServerId(cs.id);
   }, [cs]);
 
+  // Auto-select the first server once the list is loaded so the user can
+  // hit Connect without first opening the dropdown. If the user manually
+  // picks a different server, this hook does nothing because serverId is
+  // already non-empty.
+  useEffect(() => {
+    if (!serverId && servers.length > 0) setServerId(servers[0].id);
+  }, [servers, serverId]);
+
   const onClick = () => {
     if (status === "connected") {
       void Disconnect();
