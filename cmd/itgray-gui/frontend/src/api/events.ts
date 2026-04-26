@@ -7,8 +7,13 @@ import type { ChainStatus, ServerView } from "./client";
 // by the in-process hub. Called once from AppShell on mount; never detached
 // because the store outlives the React tree.
 export function attachEvents(): void {
-  EventsOn("vpn:status", (status: string) => {
-    useStore.getState().applyVPNStatus(status as ChainStatus);
+  EventsOn("vpn:status", (e: { status: string } | string) => {
+    // Hub payload is map[string]any{"status": "connecting"} on Go side; the
+    // legacy plan-c reducer expected a bare string, so handle both shapes.
+    const s = typeof e === "string" ? e : e?.status;
+    if (typeof s === "string") {
+      useStore.getState().applyVPNStatus(s as ChainStatus);
+    }
   });
   EventsOn("vpn:speed", (e: { upBps: number; downBps: number }) => {
     useStore.getState().applySpeed(e);
