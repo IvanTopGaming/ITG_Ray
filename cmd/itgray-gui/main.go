@@ -32,6 +32,15 @@ var assets embed.FS
 func main() {
 	slog.SetDefault(slog.New(logging.NewHandler(os.Stderr, slog.LevelInfo)))
 
+	// Optional Chromium remote-debugging port for the embedded WebView2.
+	// Activated when ITGRAY_GUI_DEBUG_PORT is set in the environment, so
+	// release builds default to no exposed debug surface. Used by the
+	// dev-loop CDP driver in scripts/cdp-driver.js.
+	if port := os.Getenv("ITGRAY_GUI_DEBUG_PORT"); port != "" {
+		_ = os.Setenv("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+			"--remote-debugging-port="+port+" --remote-allow-origins=*")
+	}
+
 	app := NewApp(Version)
 
 	dataDir := defaultDataDir()
