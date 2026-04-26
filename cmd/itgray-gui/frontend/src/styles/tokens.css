@@ -1,5 +1,9 @@
-/* Color, glass, radius, typography tokens — populated in C.T4. */
-:root {
-  --surface-base: #0a0d17;
-  --text-primary: #e8ebf3;
+/* Color, glass, radius, typography tokens — populated in C.T4.
+ * Wrapped in @layer base so Tailwind's preflight cannot override these
+ * vars regardless of the @import ordering in global.css. */
+@layer base {
+  :root {
+    --surface-base: #0a0d17;
+    --text-primary: #e8ebf3;
+  }
 }
