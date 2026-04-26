@@ -16,12 +16,15 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// ServerStore is the read surface AppService needs from internal/server.
-// The real internal/server package exposes free functions Load/Save rather
-// than an interface; main.go adapts them via a tiny shim. The interface
-// makes AppService unit-testable without touching the on-disk file.
+// ServerStore is the read/write surface the binding services need from
+// internal/server. The real internal/server package exposes free functions
+// Load/Save rather than an interface; main.go adapts them via a tiny shim.
+// The interface makes the bindings unit-testable without touching the
+// on-disk file. Save is required by ServersService.ToggleFavorite (and
+// future mutators); AppService only consumes Load.
 type ServerStore interface {
 	Load() ([]server.Server, error)
+	Save([]server.Server) error
 }
 
 // SubStore is the read surface AppService needs from internal/subscription.

@@ -16,10 +16,13 @@ import (
 )
 
 // fileServerStore is the test-side adapter over the package-level
-// server.Load free function. main.go uses an equivalent shim.
+// server.Load / server.Save free functions. main.go uses an equivalent shim.
 type fileServerStore struct{ path string }
 
 func (s fileServerStore) Load() ([]server.Server, error) { return server.Load(s.path) }
+func (s fileServerStore) Save(list []server.Server) error {
+	return server.Save(s.path, list)
+}
 
 func TestAppService_GetSnapshot_Empty(t *testing.T) {
 	dir := t.TempDir()

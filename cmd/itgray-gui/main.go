@@ -44,6 +44,10 @@ func main() {
 		SubStore:     subStore,
 		HelperProber: probeHelperState,
 	})
+	serversSvc := bindings.NewServersService(bindings.ServersDeps{
+		ServerStore: serverStore,
+		Hub:         app.Hub(),
+	})
 
 	err := wails.Run(&options.App{
 		Title:            "ITG Ray",
@@ -56,7 +60,7 @@ func main() {
 		AssetServer:      &assetserver.Options{Assets: assets},
 		OnStartup:        func(ctx context.Context) { app.Startup(ctx) },
 		OnShutdown:       func(ctx context.Context) { app.Shutdown(ctx) },
-		Bind:             []any{app, appSvc},
+		Bind:             []any{app, appSvc, serversSvc},
 		Windows: &windows.Options{
 			WebviewIsTransparent: false,
 			DisableWindowIcon:    false,
@@ -83,10 +87,15 @@ func defaultDataDir() string {
 // default for the Wails build before the helper is bundled.
 func probeHelperState() string { return "missing" }
 
-// serversFileStore adapts the package-level server.Load function to the
-// bindings.ServerStore interface. internal/server does not (yet) export a
-// FileStore type — the binding layer owns this trivial shim.
+// serversFileStore adapts the package-level server.Load / server.Save
+// free functions to the bindings.ServerStore interface. internal/server
+// does not (yet) export a FileStore type — the binding layer owns this
+// trivial shim.
 type serversFileStore struct{ path string }
 
 // Load reads the configured servers.json path. Missing file → empty slice.
 func (s serversFileStore) Load() ([]server.Server, error) { return server.Load(s.path) }
+
+// Save writes the full server list back to the configured path atomically
+// via tmp + rename (see internal/server.Save).
+func (s serversFileStore) Save(list []server.Server) error { return server.Save(s.path, list) }
