@@ -1,3 +1,4 @@
+import { Zap } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export type OrbStatus =
@@ -12,43 +13,163 @@ interface GlowOrbProps {
   size?: number;
   onClick?: () => void;
   disabled?: boolean;
-  className?: string;
   ariaLabel?: string;
+  className?: string;
 }
+
+interface OrbStyle {
+  outerRing: string;
+  outerGlow?: string;
+  innerBg: string;
+  innerBorder: string;
+  innerInsetShadow: string;
+  iconColor: string;
+  iconFill?: string;
+  scale: number;
+}
+
+const STYLES: Record<OrbStatus, OrbStyle> = {
+  idle: {
+    outerRing: "rgba(255,255,255,0.20)",
+    innerBg: "rgba(255,255,255,0.02)",
+    innerBorder: "rgba(255,255,255,0.10)",
+    innerInsetShadow: "inset 0 0 20px rgba(0,0,0,0.30)",
+    iconColor: "rgba(255,255,255,0.40)",
+    scale: 1,
+  },
+  connecting: {
+    outerRing: "rgba(255,177,60,0.30)",
+    innerBg: "rgba(60,40,0,0.20)",
+    innerBorder: "rgba(255,177,60,0.30)",
+    innerInsetShadow: "inset 0 0 20px rgba(255,177,60,0.18)",
+    iconColor: "#ffd28a",
+    scale: 1.06,
+  },
+  connected: {
+    outerRing: "rgba(0,230,118,0.55)",
+    outerGlow: "0 0 28px rgba(0,230,118,0.40)",
+    innerBg: "rgba(0,40,20,0.30)",
+    innerBorder: "rgba(0,230,118,0.40)",
+    innerInsetShadow: "inset 0 0 24px rgba(0,230,118,0.28)",
+    iconColor: "#3effa0",
+    iconFill: "#00e676",
+    scale: 1.06,
+  },
+  disconnecting: {
+    outerRing: "rgba(0,230,118,0.30)",
+    innerBg: "rgba(0,40,20,0.18)",
+    innerBorder: "rgba(0,230,118,0.20)",
+    innerInsetShadow: "inset 0 0 18px rgba(0,230,118,0.15)",
+    iconColor: "rgba(62,255,160,0.55)",
+    scale: 1,
+  },
+  error: {
+    outerRing: "rgba(255,94,94,0.50)",
+    outerGlow: "0 0 24px rgba(255,94,94,0.35)",
+    innerBg: "rgba(60,0,0,0.30)",
+    innerBorder: "rgba(255,94,94,0.40)",
+    innerInsetShadow: "inset 0 0 20px rgba(255,94,94,0.25)",
+    iconColor: "#ff8a8a",
+    iconFill: "#ff5e5e",
+    scale: 1,
+  },
+};
+
+const TRANSITION = "all 480ms cubic-bezier(0.16, 1, 0.3, 1)";
 
 export function GlowOrb({
   status,
-  size = 96,
+  size = 104,
   onClick,
   disabled = false,
-  className,
   ariaLabel,
+  className,
 }: GlowOrbProps) {
-  const visual = cn(
-    "rounded-full transition-all duration-standard ease-snap",
-    status === "idle" &&
-      "border-2 border-dashed border-white/20 bg-white/[0.03]",
-    status === "connecting" &&
-      "animate-spin-slow border border-white/20 bg-orb-warn shadow-[0_0_24px_rgba(255,177,60,0.5)]",
-    status === "connected" &&
-      "animate-orb-pulse bg-orb-accent shadow-[0_0_36px_rgba(120,200,255,0.65),inset_0_-10px_22px_rgba(0,0,0,0.3)]",
-    status === "disconnecting" &&
-      "bg-orb-accent opacity-50 [filter:blur(0.5px)]",
-    status === "error" &&
-      "animate-orb-shake bg-orb-danger shadow-[0_0_28px_rgba(255,94,94,0.55)]",
+  const s = STYLES[status];
+  const interactive = Boolean(onClick) && !disabled;
+  const innerSize = Math.round(size * 0.62);
+  const iconSize = Math.round(size * 0.34);
+
+  const content = (
+    <>
+      <div
+        className="absolute inset-0 rounded-full"
+        style={{
+          border: `1px solid ${s.outerRing}`,
+          boxShadow: s.outerGlow,
+          transition: TRANSITION,
+        }}
+      />
+
+      {status === "connecting" && (
+        <svg
+          className="absolute inset-0 -rotate-90 animate-spin"
+          style={{ animationDuration: "1.4s" }}
+          viewBox="0 0 100 100"
+          aria-hidden
+        >
+          <circle
+            cx="50"
+            cy="50"
+            r="49"
+            fill="none"
+            stroke="#ffb13c"
+            strokeWidth="2"
+            strokeLinecap="round"
+            pathLength={100}
+            strokeDasharray="30 70"
+          />
+        </svg>
+      )}
+
+      <div
+        className="flex items-center justify-center rounded-full"
+        style={{
+          width: innerSize,
+          height: innerSize,
+          background: s.innerBg,
+          border: `1px solid ${s.innerBorder}`,
+          boxShadow: s.innerInsetShadow,
+          transition: TRANSITION,
+        }}
+      >
+        <Zap
+          width={iconSize}
+          height={iconSize}
+          stroke={s.iconColor}
+          fill={s.iconFill ?? "none"}
+          strokeWidth={2}
+          style={{
+            transition: TRANSITION,
+            filter: s.iconFill
+              ? `drop-shadow(0 0 6px ${s.iconColor})`
+              : undefined,
+          }}
+        />
+      </div>
+    </>
   );
+
+  const sharedClasses = cn(
+    "relative flex shrink-0 items-center justify-center rounded-full p-0",
+    status === "error" && "animate-orb-shake",
+    className,
+  );
+
+  const sharedStyle = {
+    width: size,
+    height: size,
+    transform: `scale(${s.scale})`,
+    transition: TRANSITION,
+  };
 
   if (!onClick) {
     return (
-      <div
-        aria-hidden
-        style={{ width: size, height: size }}
-        className={cn("shrink-0", visual, className)}
-      />
+      <div aria-hidden className={sharedClasses} style={sharedStyle}>
+        {content}
+      </div>
     );
   }
-
-  const interactive = !disabled;
 
   return (
     <button
@@ -56,22 +177,20 @@ export function GlowOrb({
       onClick={onClick}
       disabled={disabled}
       aria-label={ariaLabel ?? "Toggle connection"}
-      style={{ width: size, height: size }}
+      style={sharedStyle}
       className={cn(
-        "shrink-0 p-0 outline-none",
-        visual,
+        sharedClasses,
+        "outline-none",
         interactive
-          ? "cursor-pointer hover:brightness-110 hover:saturate-125 active:brightness-90"
+          ? "cursor-pointer focus-visible:ring-2 focus-visible:ring-accent-start/70 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-1"
           : "cursor-not-allowed",
-        // idle has no glow — brighten the dashed border on hover instead
-        status === "idle" &&
-          interactive &&
-          "hover:border-accent-start/60 hover:bg-white/[0.06]",
-        // focus ring for keyboard
+        // Idle hover: button gets a soft cyan halo to invite the click.
         interactive &&
-          "focus-visible:ring-2 focus-visible:ring-accent-start/70 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-1",
-        className,
+          status === "idle" &&
+          "hover:shadow-[0_0_24px_rgba(120,200,255,0.30)]",
       )}
-    />
+    >
+      {content}
+    </button>
   );
 }

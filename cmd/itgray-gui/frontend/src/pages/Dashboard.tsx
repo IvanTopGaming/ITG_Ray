@@ -139,7 +139,7 @@ function StatusLine({
   const color = {
     idle: "text-white/55",
     connecting: "text-warn",
-    connected: "text-accent-start",
+    connected: "text-success",
     disconnecting: "text-white/55",
     error: "text-[#ff9a9a]",
   }[status];
@@ -191,9 +191,14 @@ function ActiveRoute({ status, mode }: { status: OrbStatus; mode: Mode }) {
 }
 
 function Metrics({ status, speed }: { status: OrbStatus; speed: Speed }) {
-  if (status !== "connected") return null;
+  // Always render so the right column reserves the same vertical space
+  // regardless of state — keeps the orb anchored, no layout jump.
+  const visible = status === "connected";
   return (
-    <div className="grid grid-cols-2 gap-5 pt-1">
+    <div
+      className={cn("grid grid-cols-2 gap-5 pt-1", !visible && "invisible")}
+      aria-hidden={!visible}
+    >
       <Metric label="↓ Down" value={speed.downBps} />
       <Metric label="↑ Up" value={speed.upBps} />
     </div>
