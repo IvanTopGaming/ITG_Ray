@@ -38,6 +38,22 @@ func main() {
 	serverStore := serversFileStore{path: filepath.Join(dataDir, "servers.json")}
 	subStore := subscription.FileStore{Path: filepath.Join(dataDir, "subscriptions.json")}
 
+	helperSvc := bindings.NewHelperService()
+	onboardingSvc := bindings.NewOnboardingService(bindings.OnboardingDeps{DataDir: dataDir})
+
+	// HelperProber wraps HelperService.Status: GetSnapshot needs a
+	// best-effort string ("running"/"stopped"/"missing"). Any svcmgr
+	// error collapses to "missing" so the wizard fires on a fresh box
+	// even when the SCM rejects us — the user's path forward is the
+	// same: install the helper.
+	helperProber := func() string {
+		state, err := helperSvc.Status(context.Background())
+		if err != nil {
+			return "missing"
+		}
+		return state
+	}
+
 	appSvc := bindings.NewAppService(&bindings.AppDeps{
 		DataDir:      dataDir,
 		Hub:          app.Hub(),
@@ -45,7 +61,7 @@ func main() {
 		BuildDate:    BuildDate,
 		ServerStore:  serverStore,
 		SubStore:     subStore,
-		HelperProber: probeHelperState,
+		HelperProber: helperProber,
 	})
 	serversSvc := bindings.NewServersService(bindings.ServersDeps{
 		ServerStore: serverStore,
@@ -139,7 +155,7 @@ func main() {
 			traySvc.Shutdown()
 			app.Shutdown(ctx)
 		},
-		Bind: []any{app, appSvc, serversSvc, subsSvc, runSvc, settingsSvc},
+		Bind: []any{app, appSvc, serversSvc, subsSvc, runSvc, settingsSvc, helperSvc, onboardingSvc},
 		Windows: &windows.Options{
 			WebviewIsTransparent: false,
 			DisableWindowIcon:    false,
@@ -160,11 +176,6 @@ func defaultDataDir() string {
 	}
 	return filepath.Join(d, "ITG Ray")
 }
-
-// probeHelperState is a placeholder until C.T14 wires real helper IPC. The
-// frontend treats "missing" as "onboarding required", which is the safe
-// default for the Wails build before the helper is bundled.
-func probeHelperState() string { return "missing" }
 
 // serversFileStore adapts the package-level server.Load / server.Save
 // free functions to the bindings.ServerStore interface. internal/server

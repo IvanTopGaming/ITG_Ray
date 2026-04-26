@@ -6,12 +6,17 @@ import { DashboardPage } from "@/pages/DashboardPage";
 import { ServersPage } from "@/pages/ServersPage";
 import { SubsPage } from "@/pages/SubsPage";
 import { SettingsPage } from "@/pages/SettingsPage";
+import { Wizard } from "@/components/onboarding/Wizard";
 import { useStore } from "@/store";
 import { api } from "@/api/client";
 import { attachEvents } from "@/api/events";
 
 export function AppShell() {
   const setSnapshot = useStore((s) => s.setSnapshot);
+  // Render the first-run wizard above the shell when the .onboarded
+  // marker is missing. The flag flips back to true via the Wizard's
+  // Skip / Complete handlers, which both write the marker on disk.
+  const onboarded = useStore((s) => s.onboarded);
   useEffect(() => {
     api.getSnapshot().then(setSnapshot).catch((err) => {
       // eslint-disable-next-line no-console
@@ -34,6 +39,7 @@ export function AppShell() {
           </Routes>
         </main>
       </div>
+      {!onboarded && <Wizard />}
     </div>
   );
 }
