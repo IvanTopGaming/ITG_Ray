@@ -27,11 +27,15 @@ type ServerStore interface {
 	Save([]server.Server) error
 }
 
-// SubStore is the read surface AppService needs from internal/subscription.
-// internal/subscription.FileStore already implements Load(); the field-only
-// signature here keeps the binding decoupled from the persistence type.
+// SubStore is the read/write surface the binding services need from
+// internal/subscription. AppService consumes only Load(); SubsService.Add /
+// Remove / SyncOne use Save() (full-list rewrite, atomic) plus UpdateMeta()
+// for post-sync timestamp/status writes. internal/subscription.FileStore
+// implements all three; the interface keeps tests insulated from disk I/O.
 type SubStore interface {
 	Load() ([]subscription.Stored, error)
+	Save([]subscription.Stored) error
+	UpdateMeta(id string, at time.Time, status string) error
 }
 
 // HelperProber returns the current helper-service state.

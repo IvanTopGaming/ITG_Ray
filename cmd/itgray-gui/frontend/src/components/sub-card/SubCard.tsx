@@ -1,9 +1,19 @@
 import type { SubView } from "@/api/client";
 import { QuotaBar } from "./QuotaBar";
+import {
+  Remove as wailsRemove,
+  SyncOne as wailsSyncOne,
+} from "../../../wailsjs/go/bindings/SubsService";
 
-// SubCard renders one subscription as a compact tile. C.T6 ships display
-// only — Sync now / Edit / Export / Delete buttons are styled but disabled;
-// C.T7 wires Sync now and Delete; Edit/Export remain placeholders.
+// Wails generates TS signatures with a leading context.Context arg even
+// though the runtime injects it transparently. Cast to single-arg shapes
+// so call sites stay clean. Mirrors api/client.ts and ServerActions.tsx.
+const Remove = wailsRemove as unknown as (id: string) => Promise<void>;
+const SyncOne = wailsSyncOne as unknown as (id: string) => Promise<void>;
+
+// SubCard renders one subscription as a compact tile. C.T7 wires Sync now
+// (calls SubsService.SyncOne) and Delete (calls SubsService.Remove); Edit
+// and Export remain disabled placeholders pending future tasks.
 export function SubCard({ s }: { s: SubView }) {
   const sinceSync = humanSince(s.lastSyncAt);
   const tone =
@@ -27,10 +37,32 @@ export function SubCard({ s }: { s: SubView }) {
       {s.lastSyncMessage && <div className="text-xs text-rose-400/80">{s.lastSyncMessage}</div>}
       <QuotaBar percent={0} />
       <div className="flex gap-1 mt-auto pt-1 text-xs">
-        <button className="px-2 h-7 rounded bg-white/[0.06] border border-white/10 opacity-50 cursor-not-allowed" disabled title="Sync now lands in C.T7">Sync now</button>
-        <button className="px-2 h-7 rounded bg-white/[0.06] border border-white/10 opacity-50 cursor-not-allowed" disabled title="Edit lands in a future task">Edit</button>
-        <button className="px-2 h-7 rounded bg-white/[0.06] border border-white/10 opacity-50 cursor-not-allowed" disabled title="Export lands in a future task">Export</button>
-        <button className="px-2 h-7 rounded text-rose-400 border border-rose-500/30 ml-auto opacity-50 cursor-not-allowed" disabled title="Delete lands in C.T7">Delete</button>
+        <button
+          className="px-2 h-7 rounded bg-white/[0.06] border border-white/10"
+          onClick={() => void SyncOne(s.id)}
+        >
+          Sync now
+        </button>
+        <button
+          className="px-2 h-7 rounded bg-white/[0.06] border border-white/10 opacity-50 cursor-not-allowed"
+          disabled
+          title="Edit lands in a future task"
+        >
+          Edit
+        </button>
+        <button
+          className="px-2 h-7 rounded bg-white/[0.06] border border-white/10 opacity-50 cursor-not-allowed"
+          disabled
+          title="Export lands in a future task"
+        >
+          Export
+        </button>
+        <button
+          className="px-2 h-7 rounded text-rose-400 border border-rose-500/30 ml-auto"
+          onClick={() => void Remove(s.id)}
+        >
+          Delete
+        </button>
       </div>
     </div>
   );
