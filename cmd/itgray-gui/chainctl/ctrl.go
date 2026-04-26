@@ -316,9 +316,13 @@ func (c *Controller) tearDown(ctx context.Context, mode Mode) {
 }
 
 // Reconcile is called at app boot — if the helper says the chain is
-// running, mark status connected and load last-session.json so the
-// server display has something to show. Spawns the 1-Hz poller so the
-// crash-detection path activates without an explicit Start call.
+// running AND last-session.json names a server, mark status connected
+// and load the session so the server display has something to show.
+// Without a session record we treat the chain as "not ours" and let
+// the user click Connect fresh — the helper-side OpServiceStatus only
+// reports whether the SERVICE is alive (not the chain inside it), so
+// the session marker is the only honest signal that GUI ever brought
+// up a chain that needs reconciling.
 func (c *Controller) Reconcile(ctx context.Context) {
 	state, err := c.d.Helper.ServiceStatus(ctx)
 	if err != nil {
@@ -327,14 +331,20 @@ func (c *Controller) Reconcile(ctx context.Context) {
 	if !state.Running {
 		return
 	}
-	rec, _ := loadSession(c.d.DataDir)
-	c.mu.Lock()
-	if rec.ServerID != "" {
-		if srv, err := c.d.ServerStore.Get(rec.ServerID); err == nil && srv != nil {
-			c.current = srv
-		}
-		c.mode = Mode(rec.Mode)
+	rec, err := loadSession(c.d.DataDir)
+	if err != nil || rec.ServerID == "" {
+		return
 	}
+	srv, err := c.d.ServerStore.Get(rec.ServerID)
+	if err != nil || srv == nil {
+		// Session points at a server that no longer exists — treat as stale,
+		// clear the marker and stay idle.
+		_ = clearSession(c.d.DataDir)
+		return
+	}
+	c.mu.Lock()
+	c.current = srv
+	c.mode = Mode(rec.Mode)
 	pollCtx, cancel := context.WithCancel(context.Background())
 	c.cancel = cancel
 	c.prevAt = time.Now()

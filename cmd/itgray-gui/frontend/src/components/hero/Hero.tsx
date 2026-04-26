@@ -42,11 +42,21 @@ export function Hero() {
 
   const onClick = () => {
     if (status === "connected") {
-      void Disconnect();
+      Disconnect().catch((e) => alert("Disconnect failed: " + String(e?.message ?? e)));
       return;
     }
-    if (!serverId) return;
-    void Connect(serverId, mode);
+    if (!serverId) {
+      alert("Pick a server first");
+      return;
+    }
+    // eslint-disable-next-line no-console
+    console.log("[Hero] Connect", { serverId, mode });
+    Connect(serverId, mode).catch((e) => {
+      const msg = String(e?.message ?? e);
+      // eslint-disable-next-line no-console
+      console.error("[Hero] Connect failed:", msg);
+      alert("Connect failed: " + msg);
+    });
   };
 
   return (
