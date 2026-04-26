@@ -1,5 +1,6 @@
 import type { ChainStatus } from "@/api/client";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 
 // ConnectButton renders the big circular Connect/Disconnect affordance at
 // the centre of the Hero card. The label and disabled state are derived
@@ -12,14 +13,15 @@ export function ConnectButton({
   status: ChainStatus;
   onClick: () => void;
 }) {
+  const { t } = useTranslation();
   const label =
     status === "connected"
-      ? "DISCONNECT"
+      ? t("hero.disconnect")
       : status === "connecting"
-      ? "CONNECTING…"
+      ? t("hero.connecting")
       : status === "disconnecting"
-      ? "DISCONNECTING…"
-      : "CONNECT";
+      ? t("hero.disconnecting")
+      : t("hero.connect");
   const disabled = status === "connecting" || status === "disconnecting";
   return (
     <motion.button

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Status as wailsStatus,
   Install as wailsInstall,
@@ -17,6 +18,7 @@ const Start = wailsStart as unknown as () => Promise<void>;
 // running helper. The Continue handler is owned by the Wizard so this
 // component stays purely about Helper state.
 export function StepWelcome({ onNext }: { onNext: () => void }) {
+  const { t } = useTranslation();
   const [helper, setHelper] = useState<string>("...");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -53,11 +55,8 @@ export function StepWelcome({ onNext }: { onNext: () => void }) {
   const ok = helper === "running";
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Welcome to ITG Ray</h2>
-      <p className="text-text-secondary text-sm">
-        Privacy-respecting VLESS VPN client. Two-step setup: confirm the
-        helper service is running, then add your first subscription.
-      </p>
+      <h2 className="text-xl font-semibold">{t("onboarding.welcome")}</h2>
+      <p className="text-text-secondary text-sm">{t("onboarding.tagline")}</p>
       <div
         className={`rounded-lg p-3 border text-sm ${
           ok
@@ -65,14 +64,14 @@ export function StepWelcome({ onNext }: { onNext: () => void }) {
             : "bg-amber-500/10 border-amber-500/30"
         }`}
       >
-        Helper service: <strong>{helper}</strong>
+        {t("onboarding.helperLabel")} <strong>{helper}</strong>
         {!ok && (
           <button
             disabled={busy}
             className="ml-3 px-2 h-7 rounded bg-gradient-to-br from-indigo-500 to-pink-500 text-xs disabled:opacity-50"
             onClick={fix}
           >
-            {busy ? "Working..." : "Fix it"}
+            {busy ? t("onboarding.working") : t("onboarding.fixIt")}
           </button>
         )}
         {err && <div className="mt-2 text-xs text-rose-300">{err}</div>}
@@ -83,7 +82,7 @@ export function StepWelcome({ onNext }: { onNext: () => void }) {
           className="px-4 h-9 rounded bg-gradient-to-br from-indigo-500 to-pink-500 disabled:opacity-50 text-sm font-medium"
           onClick={onNext}
         >
-          Continue
+          {t("onboarding.continue")}
         </button>
       </div>
     </div>

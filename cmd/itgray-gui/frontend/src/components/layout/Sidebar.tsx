@@ -1,14 +1,15 @@
 import { NavLink } from "react-router-dom";
 import { Home, Globe, Link2, Settings } from "lucide-react";
-
-const items = [
-  { to: "/dashboard", icon: Home, label: "Dashboard" },
-  { to: "/servers", icon: Globe, label: "Servers" },
-  { to: "/subs", icon: Link2, label: "Subscriptions" },
-  { to: "/settings", icon: Settings, label: "Settings" },
-];
+import { useTranslation } from "react-i18next";
 
 export function Sidebar() {
+  const { t } = useTranslation();
+  const items = [
+    { to: "/dashboard", icon: Home, label: t("sidebar.dashboard") },
+    { to: "/servers", icon: Globe, label: t("sidebar.servers") },
+    { to: "/subs", icon: Link2, label: t("sidebar.subs") },
+    { to: "/settings", icon: Settings, label: t("sidebar.settings") },
+  ];
   return (
     <nav className="w-[220px] shrink-0 border-r border-white/10 p-3 flex flex-col gap-1 bg-white/[0.025]">
       {items.map((it) => (

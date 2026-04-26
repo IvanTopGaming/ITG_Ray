@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Add as wailsAdd } from "../../../wailsjs/go/bindings/SubsService";
 import type { SubView } from "@/api/client";
 
@@ -17,6 +18,7 @@ export function StepFirstSub({
   onDone: () => void;
   onSkip: () => void;
 }) {
+  const { t } = useTranslation();
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -37,21 +39,18 @@ export function StepFirstSub({
 
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Add your first subscription</h2>
-      <p className="text-text-secondary text-sm">
-        Paste a VLESS subscription URL from your provider. We will fetch
-        the server list and you can connect right away.
-      </p>
+      <h2 className="text-xl font-semibold">{t("onboarding.addSubTitle")}</h2>
+      <p className="text-text-secondary text-sm">{t("onboarding.addSubTagline")}</p>
       <input
         className="w-full h-9 bg-white/5 border border-white/10 rounded px-3 text-sm"
-        placeholder="https://provider.example/sub/..."
+        placeholder={t("onboarding.subUrlPlaceholder")}
         value={url}
         onChange={(e) => setUrl(e.target.value)}
         autoFocus
       />
       <input
         className="w-full h-9 bg-white/5 border border-white/10 rounded px-3 text-sm"
-        placeholder="Friendly name (optional)"
+        placeholder={t("onboarding.friendlyNamePlaceholder")}
         value={name}
         onChange={(e) => setName(e.target.value)}
       />
@@ -62,14 +61,14 @@ export function StepFirstSub({
           className="px-4 h-9 rounded bg-white/5 border border-white/10 text-sm disabled:opacity-50"
           onClick={onSkip}
         >
-          Skip
+          {t("onboarding.skip")}
         </button>
         <button
           disabled={!url.trim() || busy}
           className="px-4 h-9 rounded bg-gradient-to-br from-indigo-500 to-pink-500 text-sm font-medium disabled:opacity-50"
           onClick={submit}
         >
-          {busy ? "Importing..." : "Import"}
+          {busy ? t("onboarding.importing") : t("onboarding.import")}
         </button>
       </div>
     </div>

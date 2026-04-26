@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { SectionGeneral } from "@/components/settings/SectionGeneral";
 import { SectionNetwork } from "@/components/settings/SectionNetwork";
 import { SectionSubs } from "@/components/settings/SectionSubs";
@@ -9,18 +10,20 @@ import { SectionSecurity } from "@/components/settings/SectionSecurity";
 
 // Section nav anchors; order matches the visible section ordering and the
 // id attribute on each SectionShell. Keeping the source of truth in one
-// place avoids drift between the nav and the content.
+// place avoids drift between the nav and the content. Labels are sourced
+// from i18n via the `labelKey`, resolved inside the component.
 const sections = [
-  { id: "general", label: "General" },
-  { id: "network", label: "Network" },
-  { id: "subs", label: "Subscriptions" },
-  { id: "notifications", label: "Notifications" },
-  { id: "debug", label: "Debug" },
-  { id: "about", label: "About" },
-  { id: "security", label: "Security" },
+  { id: "general", labelKey: "settings.general" },
+  { id: "network", labelKey: "settings.network" },
+  { id: "subs", labelKey: "settings.subscriptions" },
+  { id: "notifications", labelKey: "settings.notifications" },
+  { id: "debug", labelKey: "settings.debug" },
+  { id: "about", labelKey: "settings.about" },
+  { id: "security", labelKey: "settings.security" },
 ] as const;
 
 export function SettingsPage() {
+  const { t } = useTranslation();
   const [active, setActive] = useState<string>(sections[0].id);
 
   // Sync the active nav item to scroll position via IntersectionObserver.
@@ -59,14 +62,14 @@ export function SettingsPage() {
                 }`}
                 onClick={() => setActive(s.id)}
               >
-                {s.label}
+                {t(s.labelKey)}
               </a>
             </li>
           ))}
         </ul>
       </nav>
       <div className="flex-1 min-w-0 space-y-4">
-        <h1 className="text-2xl font-semibold">Settings</h1>
+        <h1 className="text-2xl font-semibold">{t("settings.title")}</h1>
         <SectionGeneral />
         <SectionNetwork />
         <SectionSubs />

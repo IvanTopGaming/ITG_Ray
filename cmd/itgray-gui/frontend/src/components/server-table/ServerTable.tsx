@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { ServerView } from "@/api/client";
 import { ServerRow } from "./ServerRow";
 import { TestLatency as wailsTestLatency } from "../../../wailsjs/go/bindings/ServersService";
@@ -11,6 +12,7 @@ const TestAll = wailsTestLatency as unknown as (id: string) => Promise<void>;
 // ServerTable renders the searchable, scrollable server list with a sticky
 // 5-column header. Sorting is deferred to a later task.
 export function ServerTable({ servers }: { servers: ServerView[] }) {
+  const { t } = useTranslation();
   const [q, setQ] = useState("");
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -24,7 +26,7 @@ export function ServerTable({ servers }: { servers: ServerView[] }) {
       <div className="flex gap-2">
         <input
           className="flex-1 h-8 bg-white/[0.04] border border-white/10 rounded-md px-3 text-sm"
-          placeholder="Search servers, tags, country…"
+          placeholder={t("servers.search")}
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
@@ -34,22 +36,22 @@ export function ServerTable({ servers }: { servers: ServerView[] }) {
             void TestAll("");
           }}
         >
-          Test all
+          {t("servers.testAll")}
         </button>
         <button
           className="px-3 h-8 rounded-md bg-gradient-to-br from-indigo-500 to-pink-500 text-sm opacity-50 cursor-not-allowed"
           disabled
           title="Manual server entry lands in C.T7"
         >
-          + Manual
+          {t("servers.addManual")}
         </button>
       </div>
       <div className="flex-1 min-h-0 bg-white/[0.02] border border-white/[0.06] rounded-lg overflow-auto">
         <div className="grid grid-cols-[1.2fr_1fr_0.7fr_0.6fr_0.6fr] gap-3 px-3 py-2 text-[10px] uppercase tracking-wider text-text-muted border-b border-white/[0.06]">
-          <div>Name</div>
-          <div>Transport · Sec</div>
-          <div>Latency</div>
-          <div>Origin</div>
+          <div>{t("servers.colName")}</div>
+          <div>{t("servers.colTransport")}</div>
+          <div>{t("servers.colLatency")}</div>
+          <div>{t("servers.colOrigin")}</div>
           <div></div>
         </div>
         {filtered.map((s) => (
@@ -57,9 +59,7 @@ export function ServerTable({ servers }: { servers: ServerView[] }) {
         ))}
         {filtered.length === 0 && (
           <div className="px-3 py-8 text-center text-text-muted text-sm">
-            {q
-              ? "No servers match your search."
-              : "No servers yet — import a subscription to populate this list."}
+            {q ? t("servers.emptySearch") : t("servers.emptyAll")}
           </div>
         )}
       </div>

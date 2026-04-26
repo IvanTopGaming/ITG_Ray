@@ -1,3 +1,4 @@
+import i18n from "@/i18n";
 import { useStore } from "@/store";
 import { Update } from "../../../wailsjs/go/bindings/SettingsService";
 import { NumberInput as _NumberInput, Row, SectionShell, Select, Toggle } from "./primitives";
@@ -30,7 +31,21 @@ export function SectionGeneral() {
       <Row label="Language">
         <Select
           value={g.language || "auto"}
-          onChange={(v) => save({ language: v })}
+          onChange={(v) => {
+            // Persist the user's choice via the SettingsService binding so it
+            // survives restart, and live-switch the running UI: "auto" resets
+            // to the language detector's pick, otherwise force the explicit
+            // locale. The detector's localStorage cache stays in sync because
+            // changeLanguage updates it.
+            save({ language: v });
+            if (v === "auto") {
+              const detected =
+                (typeof navigator !== "undefined" && navigator.language?.slice(0, 2)) || "en";
+              void i18n.changeLanguage(detected);
+            } else {
+              void i18n.changeLanguage(v);
+            }
+          }}
           options={[
             { value: "auto", label: "Auto" },
             { value: "en", label: "English" },

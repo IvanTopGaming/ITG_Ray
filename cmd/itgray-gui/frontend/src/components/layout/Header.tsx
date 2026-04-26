@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { useTranslation } from "react-i18next";
 import { useStore } from "@/store";
 import { WindowControls } from "./WindowControls";
 
@@ -8,10 +9,18 @@ import { WindowControls } from "./WindowControls";
 type DragCSSProperties = CSSProperties & { WebkitAppRegion?: "drag" | "no-drag" };
 
 export function Header() {
+  const { t } = useTranslation();
   const status = useStore((s) => s.status);
   const cs = useStore((s) => s.currentServer);
   const speeds = useStore((s) => s.speeds);
   const dragStyle: DragCSSProperties = { WebkitAppRegion: "drag" };
+  const labels: Record<string, string> = {
+    idle: t("header.disconnected"),
+    connecting: t("header.connecting"),
+    connected: t("header.connected"),
+    disconnecting: t("header.disconnecting"),
+    error: t("header.error"),
+  };
   return (
     <header
       style={dragStyle}
@@ -19,7 +28,7 @@ export function Header() {
     >
       <div className="font-semibold tracking-tight">ITG Ray</div>
       <span className={`w-2 h-2 rounded-full ${dotColor(status)}`} />
-      <span className="text-sm text-text-secondary">{statusLabel(status)}</span>
+      <span className="text-sm text-text-secondary">{labels[status] ?? status}</span>
       {cs && <span className="text-sm text-text-secondary">· {cs.name}</span>}
       <span className="ml-auto text-xs text-text-muted">
         ↑ {fmt(speeds.upBps)}/s  ↓ {fmt(speeds.downBps)}/s
@@ -27,18 +36,6 @@ export function Header() {
       <WindowControls />
     </header>
   );
-}
-
-function statusLabel(s: string): string {
-  return (
-    {
-      idle: "Disconnected",
-      connecting: "Connecting",
-      connected: "Connected",
-      disconnecting: "Disconnecting",
-      error: "Error",
-    } as Record<string, string>
-  )[s] ?? s;
 }
 
 function dotColor(s: string): string {
