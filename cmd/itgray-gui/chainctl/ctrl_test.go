@@ -220,3 +220,97 @@ func TestController_Stop_IsIdempotent(t *testing.T) {
 	require.Nil(t, srv)
 	require.Equal(t, Mode(""), mode)
 }
+
+func TestController_Start_Stop_SysProxy_HappyPath(t *testing.T) {
+	dir := t.TempDir()
+	store := newMemStore(fixtureServer())
+	h := hub.New()
+	t.Cleanup(h.Close)
+	fh := newFake()
+	fsp := &fakeSysproxy{}
+	c := New(&Deps{
+		DataDir:     dir,
+		ServerStore: store,
+		Helper:      fh,
+		Sysproxy:    fsp,
+		Hub:         h,
+	})
+	rcv := h.Subscribe(64)
+	defer h.Unsubscribe(rcv)
+
+	require.NoError(t, c.Start(context.Background(), "a", ModeSysProxy))
+
+	// Wait for the connected status — bringUp emits it after sysproxy.Set.
+	e := waitForEvent(t, rcv, hub.EventVPNStatus, time.Second)
+	for e.Payload["status"] != string(hub.StatusConnected) {
+		e = waitForEvent(t, rcv, hub.EventVPNStatus, time.Second)
+	}
+
+	// Sysproxy bringup invariants: Set called at least once, helper started.
+	require.GreaterOrEqual(t, fsp.SetCalls(), 1, "sysproxy.Set must be called during bringUp")
+	fh.mu.Lock()
+	calls := append([]string(nil), fh.calls...)
+	fh.mu.Unlock()
+	require.Contains(t, calls, "StartChain", "helper.StartChain must run in sysproxy mode")
+	// Sysproxy mode must NOT touch TUN/route ops.
+	require.NotContains(t, calls, "RouteSnapshot")
+	require.NotContains(t, calls, "TunCreate")
+	require.NotContains(t, calls, "RouteAdd")
+	require.NotContains(t, calls, "DnsSet")
+
+	// Stop must clear the sysproxy and stop the chain.
+	require.NoError(t, c.Stop(context.Background()))
+	waitFor(t, time.Second, func() bool {
+		fh.mu.Lock()
+		defer fh.mu.Unlock()
+		return !fh.running
+	})
+	require.GreaterOrEqual(t, fsp.ClearCalls(), 1, "sysproxy.Clear must be called during tearDown")
+}
+
+// fakeSysproxy records Set/Clear/IsSet invocations so tests can assert
+// the bringUp/tearDown sequence drove the sysproxy.Manager. It is
+// safe for concurrent use because the Controller's bringUp runs on a
+// worker goroutine while the test asserts from the main goroutine.
+type fakeSysproxy struct {
+	mu         sync.Mutex
+	setCalls   int
+	clearCalls int
+	isSetCalls int
+	on         bool
+}
+
+func (f *fakeSysproxy) Set(_ string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.setCalls++
+	f.on = true
+	return nil
+}
+
+func (f *fakeSysproxy) Clear() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.clearCalls++
+	f.on = false
+	return nil
+}
+
+func (f *fakeSysproxy) IsSet() (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.isSetCalls++
+	return f.on, nil
+}
+
+func (f *fakeSysproxy) SetCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.setCalls
+}
+
+func (f *fakeSysproxy) ClearCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.clearCalls
+}

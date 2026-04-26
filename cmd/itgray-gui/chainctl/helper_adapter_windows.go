@@ -32,31 +32,71 @@ import (
 // HelperClient, or split OpStartChain into its components on the helper
 // side. For now: StartChain + StopChain + ServiceStatus do real work;
 // everything else is a no-op.
+//
+// Server endpoint: OpStartChain requires ServerHost/ServerPort in its
+// args (the helper resolves the host and adds a /32 peer-route via the
+// current default gateway BEFORE sing-box spawns). The adapter extracts
+// those from the xray-core config we hand to StartChain — the VLESS
+// vnext outbound carries the real server address/port. This keeps the
+// adapter a stable, server-agnostic singleton: each Connect call
+// supplies its own xray config, and the adapter never needs to be
+// rebuilt when the user switches servers.
 type HelperAdapter struct {
-	c          *client.Client
-	serverHost string // captured for the StartChain payload
-	serverPort int
-	tunName    string
-	sessionID  string // populated on first successful StartChain
+	c         *client.Client
+	tunName   string
+	sessionID string // populated on first successful StartChain
 }
 
 // NewHelperAdapter builds an adapter around an already-dialed helper
-// client. The caller passes in the server host/port and TUN name so the
-// adapter can stuff them into the OpStartChain payload at the moment
-// StartChain is invoked.
-func NewHelperAdapter(c *client.Client, serverHost string, serverPort int, tunName string) *HelperAdapter {
-	return &HelperAdapter{c: c, serverHost: serverHost, serverPort: serverPort, tunName: tunName}
+// client. Only the TUN adapter name is captured at construction (fixed
+// per process); the per-Connect server endpoint travels through the
+// xrayJSON passed to StartChain.
+func NewHelperAdapter(c *client.Client, tunName string) *HelperAdapter {
+	return &HelperAdapter{c: c, tunName: tunName}
+}
+
+// xrayServerEndpoint pulls the (address, port) tuple out of the VLESS
+// vnext outbound emitted by configgen.BuildXray. The shape is
+// outbounds[0].settings.vnext[0].{address, port}; we only need the
+// minimum for json.Unmarshal so a missing optional field doesn't
+// fail the decode.
+func xrayServerEndpoint(xrayJSON []byte) (string, int, error) {
+	var doc struct {
+		Outbounds []struct {
+			Settings struct {
+				Vnext []struct {
+					Address string `json:"address"`
+					Port    int    `json:"port"`
+				} `json:"vnext"`
+			} `json:"settings"`
+		} `json:"outbounds"`
+	}
+	if err := json.Unmarshal(xrayJSON, &doc); err != nil {
+		return "", 0, fmt.Errorf("decode xray config: %w", err)
+	}
+	if len(doc.Outbounds) == 0 || len(doc.Outbounds[0].Settings.Vnext) == 0 {
+		return "", 0, fmt.Errorf("xray config: vnext outbound missing")
+	}
+	v := doc.Outbounds[0].Settings.Vnext[0]
+	if v.Address == "" || v.Port == 0 {
+		return "", 0, fmt.Errorf("xray config: vnext address/port empty")
+	}
+	return v.Address, v.Port, nil
 }
 
 // StartChain bundles the configs into OpStartChain. The session id
 // returned by the helper is captured so StopChain can address the same
 // session.
 func (a *HelperAdapter) StartChain(ctx context.Context, singboxJSON, xrayJSON []byte) error {
+	host, port, err := xrayServerEndpoint(xrayJSON)
+	if err != nil {
+		return err
+	}
 	args, err := json.Marshal(helperserver.StartChainArgs{
 		SingboxConfig: singboxJSON,
 		XrayConfig:    xrayJSON,
-		ServerHost:    a.serverHost,
-		ServerPort:    a.serverPort,
+		ServerHost:    host,
+		ServerPort:    port,
 		TunName:       a.tunName,
 	})
 	if err != nil {
