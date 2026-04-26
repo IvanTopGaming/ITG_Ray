@@ -32,6 +32,13 @@ type ServerStore interface {
 // Remove / SyncOne use Save() (full-list rewrite, atomic) plus UpdateMeta()
 // for post-sync timestamp/status writes. internal/subscription.FileStore
 // implements all three; the interface keeps tests insulated from disk I/O.
+//
+// Concurrency note: FileStore.UpdateMeta acquires a per-path mutex around its
+// load-mutate-save cycle, but FileStore.Save does NOT — it relies on the
+// atomic tmp+rename only. Today the JS event loop serialises Add / Remove /
+// SyncOne calls so the asymmetry is latent. Once tray writes (C.T13) land,
+// FileStore.Save should take the same per-path lock or the binding-level
+// mutators must hold their own.
 type SubStore interface {
 	Load() ([]subscription.Stored, error)
 	Save([]subscription.Stored) error

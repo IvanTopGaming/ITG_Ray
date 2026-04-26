@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Add as wailsAdd, SyncAll as wailsSyncAll } from "../../../wailsjs/go/bindings/SubsService";
+import { useStore } from "@/store";
+import type { SubView } from "@/api/client";
 
 // Wails generates TS signatures with a leading context.Context arg even
 // though the runtime injects it transparently. Cast to clean shapes so
 // call sites stay readable. Mirrors api/client.ts and ServerActions.tsx.
-const Add = wailsAdd as unknown as (url: string, name: string) => Promise<unknown>;
+const Add = wailsAdd as unknown as (url: string, name: string) => Promise<SubView>;
 const SyncAll = wailsSyncAll as unknown as () => Promise<void>;
 
 // AddSubDialog renders a centered modal with URL + name inputs and an
@@ -17,12 +19,30 @@ export function AddSubDialog({ open, onClose }: { open: boolean; onClose: () => 
   const [name, setName] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Esc closes the dialog. Escape is keyboard table-stakes for modals; tab
+  // trapping and focus-restore are deferred until the a11y polish pass.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !busy) onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, busy, onClose]);
+
   if (!open) return null;
   const submit = async () => {
     setErr(null);
     setBusy(true);
     try {
-      await Add(url, name);
+      const view = await Add(url, name);
+      // Optimistic insert: the kicked-off SyncOne goroutine will emit a
+      // sub:synced event later, but applySubSync only mutates rows that are
+      // already in the store. Push the new SubView directly so the user
+      // sees the card immediately, then setSnapshot's same-id replacement
+      // semantics let the eventual sync update it in place.
+      useStore.setState((cur) => ({ subs: [...cur.subs, view] }));
       setUrl(""); setName(""); onClose();
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : String(e));

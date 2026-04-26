@@ -2,6 +2,8 @@ package bindings
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/url"
@@ -84,7 +86,7 @@ func (s *SubsService) Add(_ context.Context, rawURL, name string) (hub.SubView, 
 		return hub.SubView{}, err
 	}
 	stored := subscription.Stored{
-		ID:             fmt.Sprintf("s%d", time.Now().Unix()),
+		ID:             generateSubID(),
 		Name:           strings.TrimSpace(name),
 		URL:            rawURL,
 		UpdateInterval: subscription.Duration(defaultUpdateInterval),
@@ -247,6 +249,22 @@ func validateSubURL(s string) error {
 		return errInvalidURL
 	}
 	return nil
+}
+
+// generateSubID returns a fresh subscription ID of the shape s<unix-millis>-<hex4>.
+// Millisecond resolution + a 16-bit random suffix prevents collisions when the
+// user clicks "+ Add subscription" twice within the same wall-clock second
+// (the prior unix-second IDs from cmd/itgray-cli/subs.go could clobber each
+// other under rapid Add/Remove). Existing on-disk IDs from the CLI keep the
+// `s<digits>` shape and remain valid.
+func generateSubID() string {
+	var b [2]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// crypto/rand failure is essentially impossible on supported platforms;
+		// degrade to a millisecond-only ID rather than panicking the binding.
+		return fmt.Sprintf("s%d", time.Now().UnixMilli())
+	}
+	return fmt.Sprintf("s%d-%s", time.Now().UnixMilli(), hex.EncodeToString(b[:]))
 }
 
 // truncate clips s so the result is at most n bytes, appending "…" if cut.
