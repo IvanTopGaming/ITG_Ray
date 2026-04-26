@@ -12,7 +12,7 @@ const fallback = {
 export function SectionNotifications() {
   const n = useStore((s) => s.settings?.notifications) ?? fallback;
   const save = (patch: Record<string, unknown>) => {
-    void Update(undefined as never, "notifications", patch);
+    void Update("notifications", patch);
   };
   return (
     <SectionShell id="notifications" title="Notifications">

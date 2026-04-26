@@ -7,7 +7,7 @@ const fallback = { logLevel: "info" };
 export function SectionDebug() {
   const d = useStore((s) => s.settings?.debug) ?? fallback;
   const save = (patch: Record<string, unknown>) => {
-    void Update(undefined as never, "debug", patch);
+    void Update("debug", patch);
   };
   return (
     <SectionShell id="debug" title="Debug">

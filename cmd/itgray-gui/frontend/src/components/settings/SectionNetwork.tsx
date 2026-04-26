@@ -13,7 +13,7 @@ const fallback = {
 export function SectionNetwork() {
   const n = useStore((s) => s.settings?.network) ?? fallback;
   const save = (patch: Record<string, unknown>) => {
-    void Update(undefined as never, "network", patch);
+    void Update("network", patch);
   };
   return (
     <SectionShell id="network" title="Network">

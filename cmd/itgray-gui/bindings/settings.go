@@ -1,8 +1,6 @@
 package bindings
 
 import (
-	"context"
-
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
 )
 
@@ -34,7 +32,7 @@ func NewSettingsService(d SettingsDeps) *SettingsService {
 // Get returns the current SettingsView. Errors come from the on-disk
 // config loader (file unreadable / corrupt JSON). A missing config.json
 // is *not* an error — internal/config.Load returns defaults.
-func (s *SettingsService) Get(_ context.Context) (hub.SettingsView, error) {
+func (s *SettingsService) Get() (hub.SettingsView, error) {
 	return s.d.Store.View()
 }
 
@@ -43,7 +41,7 @@ func (s *SettingsService) Get(_ context.Context) (hub.SettingsView, error) {
 // the tray) can refresh without a full snapshot reload. Returns the
 // post-merge SettingsView so the caller can update its local state
 // without a follow-up Get.
-func (s *SettingsService) Update(_ context.Context, section string, patch map[string]any) (hub.SettingsView, error) {
+func (s *SettingsService) Update(section string, patch map[string]any) (hub.SettingsView, error) {
 	view, err := s.d.Store.UpdateSection(section, patch)
 	if err != nil {
 		return hub.SettingsView{}, err

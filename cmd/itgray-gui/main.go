@@ -47,7 +47,7 @@ func main() {
 	// even when the SCM rejects us — the user's path forward is the
 	// same: install the helper.
 	helperProber := func() string {
-		state, err := helperSvc.Status(context.Background())
+		state, err := helperSvc.Status()
 		if err != nil {
 			return "missing"
 		}
@@ -62,6 +62,11 @@ func main() {
 		ServerStore:  serverStore,
 		SubStore:     subStore,
 		HelperProber: helperProber,
+		// AppCtx returns the Wails app context as set by App.Startup. The
+		// closure indirects so AppService captures the *future* ctx (still
+		// nil at this point) — Quit dereferences only when invoked, by
+		// which time Startup has populated app.ctx.
+		AppCtx: func() context.Context { return app.ctx },
 	})
 	serversSvc := bindings.NewServersService(bindings.ServersDeps{
 		ServerStore: serverStore,

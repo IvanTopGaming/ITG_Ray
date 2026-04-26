@@ -1,7 +1,6 @@
 package bindings
 
 import (
-	"context"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -26,7 +25,7 @@ func newSettingsServiceForTest(t *testing.T, dir string) *SettingsService {
 func TestSettingsService_Get_DefaultsWhenMissing(t *testing.T) {
 	svc := newSettingsServiceForTest(t, t.TempDir())
 
-	view, err := svc.Get(context.Background())
+	view, err := svc.Get()
 	require.NoError(t, err)
 	require.Equal(t, "en", view.General.Language)
 	require.Equal(t, "dark", view.General.Theme)
@@ -44,11 +43,11 @@ func TestSettingsService_Get_DefaultsWhenMissing(t *testing.T) {
 func TestSettingsService_Update_PersistsAcrossGet(t *testing.T) {
 	svc := newSettingsServiceForTest(t, t.TempDir())
 
-	view, err := svc.Update(context.Background(), "general", map[string]any{"language": "ru"})
+	view, err := svc.Update("general", map[string]any{"language": "ru"})
 	require.NoError(t, err)
 	require.Equal(t, "ru", view.General.Language)
 
-	view2, err := svc.Get(context.Background())
+	view2, err := svc.Get()
 	require.NoError(t, err)
 	require.Equal(t, "ru", view2.General.Language)
 }
@@ -59,7 +58,7 @@ func TestSettingsService_Update_PersistsAcrossGet(t *testing.T) {
 func TestSettingsService_Update_UnknownSectionErrors(t *testing.T) {
 	svc := newSettingsServiceForTest(t, t.TempDir())
 
-	_, err := svc.Update(context.Background(), "made-up-section", map[string]any{"x": 1})
+	_, err := svc.Update("made-up-section", map[string]any{"x": 1})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unknown section")
 }
@@ -82,13 +81,13 @@ func TestSettingsService_Update_ConcurrentSafe(t *testing.T) {
 		lang := langs[i%len(langs)]
 		go func(l string) {
 			defer wg.Done()
-			_, err := svc.Update(context.Background(), "general", map[string]any{"language": l})
+			_, err := svc.Update("general", map[string]any{"language": l})
 			require.NoError(t, err)
 		}(lang)
 	}
 	wg.Wait()
 
-	view, err := svc.Get(context.Background())
+	view, err := svc.Get()
 	require.NoError(t, err)
 	require.Contains(t, langs, view.General.Language)
 }

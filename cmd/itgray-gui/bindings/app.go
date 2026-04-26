@@ -16,6 +16,12 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
+// AppCtxFunc returns the Wails app context captured by App.Startup. The
+// constructor takes a closure rather than the ctx itself because the
+// context only becomes available after Wails calls Startup, while the
+// service is constructed earlier in main.go.
+type AppCtxFunc func() context.Context
+
 // ServerStore is the read/write surface the binding services need from
 // internal/server. The real internal/server package exposes free functions
 // Load/Save rather than an interface; main.go adapts them via a tiny shim.
@@ -57,6 +63,11 @@ type AppDeps struct {
 	ServerStore  ServerStore
 	SubStore     SubStore
 	HelperProber HelperProber // closure that returns helper state ("running"|"stopped"|"missing")
+	// AppCtx returns the Wails app context (App.ctx, set in Startup). Used
+	// by Quit, which must call runtime.Quit with the app's ctx — passing
+	// context.Background() makes the runtime no-op. Nil is tolerated and
+	// causes Quit to fall back to context.Background() (test code path).
+	AppCtx AppCtxFunc
 }
 
 // AppService implements the App.* bindings (GetSnapshot, GetVersion, Quit).
@@ -74,7 +85,19 @@ func (a *AppService) GetVersion() string { return a.d.Version }
 
 // Quit asks the Wails runtime to terminate the app. Idempotent at the
 // runtime layer — calling on an already-stopping app is a no-op.
-func (a *AppService) Quit(ctx context.Context) {
+//
+// Wails v2.11 does not auto-inject a ctx into bound service methods (only
+// the main App struct), so Quit takes no JS-visible args. The Wails app
+// ctx is sourced from AppDeps.AppCtx (a closure into App.ctx, set during
+// Startup); when nil (unit tests), runtime.Quit is invoked with
+// context.Background() and is a no-op.
+func (a *AppService) Quit() {
+	ctx := context.Background()
+	if a.d.AppCtx != nil {
+		if c := a.d.AppCtx(); c != nil {
+			ctx = c
+		}
+	}
 	if ctx.Err() != nil {
 		return
 	}
@@ -82,7 +105,7 @@ func (a *AppService) Quit(ctx context.Context) {
 }
 
 // GetSnapshot collects the current app state into a Snapshot DTO.
-func (a *AppService) GetSnapshot(_ context.Context) (hub.Snapshot, error) {
+func (a *AppService) GetSnapshot() (hub.Snapshot, error) {
 	servers, err := a.d.ServerStore.Load()
 	if err != nil {
 		return hub.Snapshot{}, fmt.Errorf("server.Load: %w", err)

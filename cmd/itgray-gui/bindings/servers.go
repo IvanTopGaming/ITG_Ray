@@ -42,7 +42,7 @@ func NewServersService(d ServersDeps) *ServersService { return &ServersService{d
 // client-side. Subscriptions list is not loaded here — the Origin column
 // shows raw SourceID; AppService.GetSnapshot is the canonical place where
 // origins get resolved to display names.
-func (s *ServersService) List(_ context.Context) ([]hub.ServerView, error) {
+func (s *ServersService) List() ([]hub.ServerView, error) {
 	servers, err := s.d.ServerStore.Load()
 	if err != nil {
 		return nil, fmt.Errorf("server.Load: %w", err)
@@ -57,7 +57,7 @@ func (s *ServersService) List(_ context.Context) ([]hub.ServerView, error) {
 // race on the load → mutate window and lose one update. Today only the
 // main window invokes this binding so collisions are unlikely; once tray
 // favorites land (C.T13) a per-store mutex should be added.
-func (s *ServersService) ToggleFavorite(_ context.Context, id string) error {
+func (s *ServersService) ToggleFavorite(id string) error {
 	list, err := s.d.ServerStore.Load()
 	if err != nil {
 		return fmt.Errorf("server.Load: %w", err)
@@ -85,7 +85,13 @@ func (s *ServersService) ToggleFavorite(_ context.Context, id string) error {
 // on the hub as hub.EventProbeResult. Sequential probing is a deliberate
 // simplification for C.T5 — concurrent fan-out can be added later if it
 // becomes a UX problem.
-func (s *ServersService) TestLatency(ctx context.Context, id string) error {
+//
+// The Wails binding signature drops ctx (Wails v2.11 does not auto-inject
+// it for service methods); a fresh context.Background() is used internally
+// for the dialer. The probe loop therefore cannot be cancelled mid-flight
+// — accepted tradeoff: each probe is bounded by probeTimeout (1.5s).
+func (s *ServersService) TestLatency(id string) error {
+	ctx := context.Background()
 	list, err := s.d.ServerStore.Load()
 	if err != nil {
 		return fmt.Errorf("server.Load: %w", err)
@@ -109,9 +115,6 @@ func (s *ServersService) TestLatency(ctx context.Context, id string) error {
 
 	results := make([]map[string]any, 0, len(targets))
 	for _, i := range targets {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
 		r := probeOne(ctx, &list[i])
 		results = append(results, r)
 		if _, hadError := r["error"]; hadError {

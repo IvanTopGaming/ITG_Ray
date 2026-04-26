@@ -1,7 +1,6 @@
 package bindings
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,7 +13,7 @@ import (
 func TestOnboardingService_InitialState_False(t *testing.T) {
 	dir := t.TempDir()
 	svc := NewOnboardingService(OnboardingDeps{DataDir: dir})
-	got, err := svc.GetState(context.Background())
+	got, err := svc.GetState()
 	require.NoError(t, err)
 	require.Equal(t, map[string]any{"onboarded": false}, got)
 }
@@ -25,13 +24,13 @@ func TestOnboardingService_InitialState_False(t *testing.T) {
 func TestOnboardingService_Complete_WritesMarker(t *testing.T) {
 	dir := t.TempDir()
 	svc := NewOnboardingService(OnboardingDeps{DataDir: dir})
-	require.NoError(t, svc.Complete(context.Background()))
+	require.NoError(t, svc.Complete())
 
 	info, err := os.Stat(filepath.Join(dir, ".onboarded"))
 	require.NoError(t, err)
 	require.Equal(t, int64(0), info.Size(), "marker file must be zero bytes")
 
-	got, err := svc.GetState(context.Background())
+	got, err := svc.GetState()
 	require.NoError(t, err)
 	require.Equal(t, map[string]any{"onboarded": true}, got)
 }
@@ -41,9 +40,9 @@ func TestOnboardingService_Complete_WritesMarker(t *testing.T) {
 func TestOnboardingService_Skip_WritesSameMarker(t *testing.T) {
 	dir := t.TempDir()
 	svc := NewOnboardingService(OnboardingDeps{DataDir: dir})
-	require.NoError(t, svc.Skip(context.Background()))
+	require.NoError(t, svc.Skip())
 
-	got, err := svc.GetState(context.Background())
+	got, err := svc.GetState()
 	require.NoError(t, err)
 	require.Equal(t, map[string]any{"onboarded": true}, got)
 }

@@ -1,7 +1,6 @@
 package bindings
 
 import (
-	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -55,7 +54,7 @@ func TestServersService_List(t *testing.T) {
 		ServerStore: fileServerStore{path: path},
 		Hub:         hub.New(),
 	})
-	got, err := svc.List(context.Background())
+	got, err := svc.List()
 	require.NoError(t, err)
 	require.Len(t, got, 2)
 }
@@ -83,7 +82,7 @@ func TestServersService_TestLatency_OneServer(t *testing.T) {
 		ServerStore: fileServerStore{path: path},
 		Hub:         h,
 	})
-	require.NoError(t, svc.TestLatency(context.Background(), "a"))
+	require.NoError(t, svc.TestLatency("a"))
 
 	select {
 	case e := <-rcv:
@@ -114,13 +113,13 @@ func TestServersService_ToggleFavorite(t *testing.T) {
 	store := fileServerStore{path: path}
 	svc := NewServersService(ServersDeps{ServerStore: store, Hub: hub.New()})
 
-	require.NoError(t, svc.ToggleFavorite(context.Background(), "a"))
+	require.NoError(t, svc.ToggleFavorite("a"))
 	loaded, err := store.Load()
 	require.NoError(t, err)
 	require.Len(t, loaded, 1)
 	require.True(t, loaded[0].Favorite)
 
-	require.NoError(t, svc.ToggleFavorite(context.Background(), "a")) // toggle twice → off
+	require.NoError(t, svc.ToggleFavorite("a")) // toggle twice → off
 	loaded, err = store.Load()
 	require.NoError(t, err)
 	require.Len(t, loaded, 1)

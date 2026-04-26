@@ -1,7 +1,6 @@
 package bindings
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,7 +35,7 @@ func NewOnboardingService(d OnboardingDeps) *OnboardingService {
 // stat error other than os.IsNotExist would indicate a permissions or
 // disk problem; we surface those so the wizard does not silently treat
 // a broken DataDir as "first run".
-func (o *OnboardingService) GetState(_ context.Context) (map[string]any, error) {
+func (o *OnboardingService) GetState() (map[string]any, error) {
 	_, err := os.Stat(o.markerPath())
 	if err == nil {
 		return map[string]any{"onboarded": true}, nil
@@ -48,13 +47,13 @@ func (o *OnboardingService) GetState(_ context.Context) (map[string]any, error) 
 }
 
 // Complete writes the marker file. Idempotent — calling twice is safe.
-func (o *OnboardingService) Complete(_ context.Context) error { return o.mark() }
+func (o *OnboardingService) Complete() error { return o.mark() }
 
 // Skip writes the same marker as Complete so users who dismiss the
 // wizard are not nagged on the next launch. The frontend records the
 // difference (Skip vs Complete) only in telemetry; the on-disk state
 // is identical.
-func (o *OnboardingService) Skip(_ context.Context) error { return o.mark() }
+func (o *OnboardingService) Skip() error { return o.mark() }
 
 func (o *OnboardingService) markerPath() string {
 	return filepath.Join(o.d.DataDir, onboardedMarker)

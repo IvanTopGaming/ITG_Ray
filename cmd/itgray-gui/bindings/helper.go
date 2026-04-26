@@ -1,7 +1,6 @@
 package bindings
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,7 +71,7 @@ func newHelperServiceWithOps(ops svcOps) *HelperService { return &HelperService{
 
 // Status returns "running", "stopped", or "missing". Any other svcmgr error
 // surfaces back to the caller so the wizard can show a real failure.
-func (h *HelperService) Status(_ context.Context) (string, error) {
+func (h *HelperService) Status() (string, error) {
 	st, err := h.ops.Status(helperServiceName)
 	if err != nil {
 		if isNotInstalled(err) {
@@ -89,7 +88,7 @@ func (h *HelperService) Status(_ context.Context) (string, error) {
 // Install registers the helper service. exePath may be empty — in that case
 // we resolve to <gui-exe-dir>/itgray-helper.exe so a fresh user does not
 // need to type a Windows path.
-func (h *HelperService) Install(_ context.Context, exePath string) error {
+func (h *HelperService) Install(exePath string) error {
 	if strings.TrimSpace(exePath) == "" {
 		exePath = defaultHelperExePath()
 	}
@@ -97,10 +96,10 @@ func (h *HelperService) Install(_ context.Context, exePath string) error {
 }
 
 // Start asks SCM to start the helper.
-func (h *HelperService) Start(_ context.Context) error { return h.ops.Start(helperServiceName) }
+func (h *HelperService) Start() error { return h.ops.Start(helperServiceName) }
 
 // Stop asks SCM to stop the helper.
-func (h *HelperService) Stop(_ context.Context) error { return h.ops.Stop(helperServiceName) }
+func (h *HelperService) Stop() error { return h.ops.Stop(helperServiceName) }
 
 // isNotInstalled inspects the wrapped svcmgr error for the Windows
 // "service does not exist" condition. svcmgr does not expose a typed

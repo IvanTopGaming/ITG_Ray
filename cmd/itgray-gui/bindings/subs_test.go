@@ -1,7 +1,6 @@
 package bindings
 
 import (
-	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -66,7 +65,7 @@ func TestSubsService_List(t *testing.T) {
 		Hub:         hub.New(),
 	})
 
-	got, err := svc.List(context.Background())
+	got, err := svc.List()
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	require.Equal(t, "s1", got[0].ID)
@@ -85,7 +84,7 @@ func TestSubsService_List(t *testing.T) {
 func TestSubsService_Add_GeneratesIDAndPersists(t *testing.T) {
 	svc, store := newSubsServiceForTest(t, t.TempDir())
 
-	view, err := svc.Add(context.Background(), "https://example.com/sub", "test")
+	view, err := svc.Add("https://example.com/sub", "test")
 	require.NoError(t, err)
 	require.NotEmpty(t, view.ID)
 	require.Equal(t, "test", view.Name)
@@ -105,7 +104,7 @@ func TestSubsService_Add_GeneratesIDAndPersists(t *testing.T) {
 func TestSubsService_Add_RejectsInvalidURL(t *testing.T) {
 	svc, store := newSubsServiceForTest(t, t.TempDir())
 
-	_, err := svc.Add(context.Background(), "not-a-url", "")
+	_, err := svc.Add("not-a-url", "")
 	require.Error(t, err)
 
 	all, err := store.Load()
@@ -122,7 +121,7 @@ func TestSubsService_Remove(t *testing.T) {
 		{ID: "s2", URL: "https://e/sub2"},
 	}))
 
-	require.NoError(t, svc.Remove(context.Background(), "s1"))
+	require.NoError(t, svc.Remove("s1"))
 	all, err := store.Load()
 	require.NoError(t, err)
 	require.Len(t, all, 1)

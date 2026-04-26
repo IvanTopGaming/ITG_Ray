@@ -24,7 +24,7 @@ const fallback = {
 export function SectionGeneral() {
   const g = useStore((s) => s.settings?.general) ?? fallback;
   const save = (patch: Record<string, unknown>) => {
-    void Update(undefined as never, "general", patch);
+    void Update("general", patch);
   };
   return (
     <SectionShell id="general" title="General">

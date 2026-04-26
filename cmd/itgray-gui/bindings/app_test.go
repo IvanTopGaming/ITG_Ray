@@ -1,7 +1,6 @@
 package bindings
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -37,7 +36,7 @@ func TestAppService_GetSnapshot_Empty(t *testing.T) {
 		HelperProber: func() string { return "missing" },
 	})
 
-	snap, err := app.GetSnapshot(context.Background())
+	snap, err := app.GetSnapshot()
 	require.NoError(t, err)
 	require.Equal(t, hub.StatusIdle, snap.Status)
 	require.Equal(t, "missing", snap.HelperState)
@@ -87,7 +86,7 @@ func TestAppService_GetSnapshot_WithSeededData(t *testing.T) {
 		HelperProber: func() string { return "running" },
 	})
 
-	snap, err := app.GetSnapshot(context.Background())
+	snap, err := app.GetSnapshot()
 	require.NoError(t, err)
 	require.Equal(t, "running", snap.HelperState)
 	require.Len(t, snap.Servers, 1)
@@ -114,7 +113,7 @@ func TestAppService_GetSnapshot_OnboardedMarker(t *testing.T) {
 		SubStore:     subscription.FileStore{Path: filepath.Join(dir, "subscriptions.json")},
 		HelperProber: func() string { return "missing" },
 	})
-	snap, err := app.GetSnapshot(context.Background())
+	snap, err := app.GetSnapshot()
 	require.NoError(t, err)
 	require.True(t, snap.Onboarded)
 }

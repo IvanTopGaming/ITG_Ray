@@ -105,7 +105,7 @@ func TestRun_ConnectStart(t *testing.T) {
 	rcv := h.Subscribe(64)
 	defer h.Unsubscribe(rcv)
 
-	require.NoError(t, rs.Connect(context.Background(), "a", "sysproxy"))
+	require.NoError(t, rs.Connect("a", "sysproxy"))
 
 	// Wait for the connected status — emitted after bringUp completes.
 	deadline := time.After(time.Second)
@@ -126,9 +126,9 @@ func TestRun_ConnectStart(t *testing.T) {
 // is a no-op (no panic, no error, no transitions).
 func TestRun_DisconnectIdempotent(t *testing.T) {
 	rs, _, _ := setupRun(t)
-	require.NoError(t, rs.Disconnect(context.Background()))
-	require.NoError(t, rs.Disconnect(context.Background()))
-	st := rs.GetStatus(context.Background())
+	require.NoError(t, rs.Disconnect())
+	require.NoError(t, rs.Disconnect())
+	st := rs.GetStatus()
 	require.Equal(t, string(hub.StatusIdle), st["status"])
 }
 
@@ -136,7 +136,7 @@ func TestRun_DisconnectIdempotent(t *testing.T) {
 // "idle" with empty mode and no server fields.
 func TestRun_GetStatusIdle(t *testing.T) {
 	rs, _, _ := setupRun(t)
-	st := rs.GetStatus(context.Background())
+	st := rs.GetStatus()
 	require.Equal(t, string(hub.StatusIdle), st["status"])
 	require.Equal(t, "", st["mode"])
 	_, hasID := st["serverId"]

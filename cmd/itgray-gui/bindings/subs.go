@@ -59,7 +59,7 @@ func NewSubsService(d SubsDeps) *SubsService { return &SubsService{d: d} }
 // computed from the matching servers.json entries (grouped by SourceID).
 // The ServerView origin-resolution map is owned by AppService.GetSnapshot;
 // here we only need the raw count.
-func (s *SubsService) List(_ context.Context) ([]hub.SubView, error) {
+func (s *SubsService) List() ([]hub.SubView, error) {
 	subs, err := s.d.SubStore.Load()
 	if err != nil {
 		return nil, fmt.Errorf("sub.Load: %w", err)
@@ -75,12 +75,11 @@ func (s *SubsService) List(_ context.Context) ([]hub.SubView, error) {
 // appends the entry to the on-disk file, and kicks off a one-shot SyncOne
 // in the background so the new subscription's servers materialize without
 // the user having to click "Sync now" first. The SyncOne goroutine uses a
-// fresh context.Background() — the binding ctx is canceled as soon as the
-// JS promise resolves, which would otherwise abort the fetch mid-flight.
+// fresh context.Background() so the fetch survives the JS promise unwinding.
 //
 // Returns the SubView so the frontend can optimistically insert the new
 // row before the next snapshot refresh arrives.
-func (s *SubsService) Add(_ context.Context, rawURL, name string) (hub.SubView, error) {
+func (s *SubsService) Add(rawURL, name string) (hub.SubView, error) {
 	rawURL = strings.TrimSpace(rawURL)
 	if err := validateSubURL(rawURL); err != nil {
 		return hub.SubView{}, err
@@ -101,8 +100,7 @@ func (s *SubsService) Add(_ context.Context, rawURL, name string) (hub.SubView, 
 	}
 	view := toSubViews([]subscription.Stored{stored}, nil)[0]
 	go func(id string) {
-		// Fresh context: the binding's ctx is canceled once Add returns.
-		_ = s.SyncOne(context.Background(), id)
+		_ = s.SyncOne(id)
 	}(stored.ID)
 	return view, nil
 }
@@ -112,7 +110,7 @@ func (s *SubsService) Add(_ context.Context, rawURL, name string) (hub.SubView, 
 // cascaded — they keep showing in the table with origin "manual" until
 // the user prunes them. Mirrors the CLI's `sub remove` semantics so the
 // two surfaces remain interchangeable.
-func (s *SubsService) Remove(_ context.Context, id string) error {
+func (s *SubsService) Remove(id string) error {
 	subs, err := s.d.SubStore.Load()
 	if err != nil {
 		return fmt.Errorf("sub.Load: %w", err)
@@ -137,7 +135,13 @@ func (s *SubsService) Remove(_ context.Context, id string) error {
 // The hub event always fires — both on success and on failure — because
 // the frontend's applySubSync reducer treats an ERROR status as a UI
 // signal (red badge) just as much as OK is (green badge with new count).
-func (s *SubsService) SyncOne(ctx context.Context, id string) error {
+//
+// The Wails binding signature drops ctx (Wails v2.11 does not auto-inject
+// it for service methods); subscription.Sync receives a fresh
+// context.Background() bounded by syncTimeout (30s). Accepted tradeoff:
+// no per-call cancellation from the frontend.
+func (s *SubsService) SyncOne(id string) error {
+	ctx := context.Background()
 	subs, err := s.d.SubStore.Load()
 	if err != nil {
 		return fmt.Errorf("sub.Load: %w", err)
@@ -216,13 +220,13 @@ func (s *SubsService) SyncOne(ctx context.Context, id string) error {
 // event already carries the per-entry status, so the frontend can react
 // independently. The aggregate return is nil unless the initial Load
 // itself failed.
-func (s *SubsService) SyncAll(ctx context.Context) error {
+func (s *SubsService) SyncAll() error {
 	subs, err := s.d.SubStore.Load()
 	if err != nil {
 		return fmt.Errorf("sub.Load: %w", err)
 	}
 	for _, sub := range subs {
-		_ = s.SyncOne(ctx, sub.ID)
+		_ = s.SyncOne(sub.ID)
 	}
 	return nil
 }

@@ -10,7 +10,7 @@ const fallback = {
 export function SectionSubs() {
   const s = useStore((st) => st.settings?.subscriptions) ?? fallback;
   const save = (patch: Record<string, unknown>) => {
-    void Update(undefined as never, "subscriptions", patch);
+    void Update("subscriptions", patch);
   };
   return (
     <SectionShell id="subs" title="Subscriptions">

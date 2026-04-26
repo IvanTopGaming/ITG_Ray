@@ -1,7 +1,6 @@
 package bindings
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -53,7 +52,7 @@ func TestHelperService_Status_Mapping(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ops := &fakeSvcOps{state: tc.state, statusErr: tc.err}
 			h := newHelperServiceWithOps(ops)
-			got, err := h.Status(context.Background())
+			got, err := h.Status()
 			if tc.wantErr {
 				require.Error(t, err)
 				return
@@ -71,7 +70,7 @@ func TestHelperService_Status_Mapping(t *testing.T) {
 func TestHelperService_Install_DefaultPath(t *testing.T) {
 	ops := &fakeSvcOps{}
 	h := newHelperServiceWithOps(ops)
-	require.NoError(t, h.Install(context.Background(), ""))
+	require.NoError(t, h.Install(""))
 	require.Equal(t, helperServiceName, ops.installArgs[0])
 	require.Contains(t, ops.installArgs[1], "itgray-helper.exe")
 	require.Equal(t, "ITG Ray helper service", ops.installArgs[2])
@@ -82,8 +81,8 @@ func TestHelperService_Install_DefaultPath(t *testing.T) {
 func TestHelperService_StartStop(t *testing.T) {
 	ops := &fakeSvcOps{}
 	h := newHelperServiceWithOps(ops)
-	require.NoError(t, h.Start(context.Background()))
+	require.NoError(t, h.Start())
 	require.Equal(t, helperServiceName, ops.startName)
-	require.NoError(t, h.Stop(context.Background()))
+	require.NoError(t, h.Stop())
 	require.Equal(t, helperServiceName, ops.stopName)
 }
