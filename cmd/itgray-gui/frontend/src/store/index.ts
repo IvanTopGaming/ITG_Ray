@@ -8,17 +8,25 @@ import type {
   SpeedSample,
 } from "../api/client";
 
+export interface ChainErrorEvent {
+  kind: string;
+  message: string;
+}
+
 export type StoreState = Snapshot & {
+  // Last chain:error event payload — null until the first error arrives.
+  // Cleared when status returns to idle/connecting via setSnapshot or applyVPNStatus.
+  lastError: ChainErrorEvent | null;
   setSnapshot: (s: Snapshot) => void;
   applyVPNStatus: (status: ChainStatus) => void;
   applySpeed: (s: Partial<SpeedSample>) => void;
   applySubSync: (e: { id: string; status: string; at: string; importedCount: number; message?: string }) => void;
   applyProbeResult: (e: { results: Array<{ id: string; latencyMs: number; error?: string }> }) => void;
   applyHelperState: (state: string) => void;
-  applyChainError: (e: { kind: string; message: string }) => void;
+  applyChainError: (e: ChainErrorEvent) => void;
 };
 
-const initial: Snapshot = {
+const initial: Snapshot & { lastError: ChainErrorEvent | null } = {
   status: "idle",
   currentServer: null,
   mode: "auto",
@@ -29,12 +37,17 @@ const initial: Snapshot = {
   settings: {} as SettingsView,
   onboarded: false,
   version: "",
+  lastError: null,
 };
 
 export const useStore = create<StoreState>((set) => ({
   ...initial,
-  setSnapshot: (s) => set(() => ({ ...s })),
-  applyVPNStatus: (status) => set({ status }),
+  setSnapshot: (s) => set(() => ({ ...s, lastError: null })),
+  applyVPNStatus: (status) =>
+    set((cur) => ({
+      status,
+      lastError: status === "error" ? cur.lastError : null,
+    })),
   applySpeed: (s) =>
     set((cur) => ({
       speeds: { ...cur.speeds, ...s, at: new Date().toISOString() },
@@ -61,5 +74,6 @@ export const useStore = create<StoreState>((set) => ({
       }),
     })),
   applyHelperState: (state) => set({ helperState: state }),
-  applyChainError: () => set({ status: "error" }),
+  applyChainError: (e) =>
+    set({ status: "error", lastError: { kind: e.kind, message: e.message } }),
 }));

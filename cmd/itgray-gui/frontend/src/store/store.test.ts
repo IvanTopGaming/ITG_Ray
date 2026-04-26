@@ -82,6 +82,18 @@ describe("store", () => {
     expect(servers[0].latencyMs).toBe(42);
     expect(servers[1].latencyMs).toBe(0);
   });
+
+  it("applyChainError parks payload in lastError and flips status", () => {
+    useStore.getState().setSnapshot(emptySnapshot());
+    useStore.getState().applyChainError({ kind: "chain_crashed", message: "sing-box exited" });
+    const s = useStore.getState();
+    expect(s.status).toBe("error");
+    expect(s.lastError).toEqual({ kind: "chain_crashed", message: "sing-box exited" });
+
+    // Returning to a non-error status clears lastError.
+    useStore.getState().applyVPNStatus("idle");
+    expect(useStore.getState().lastError).toBeNull();
+  });
 });
 
 function emptySnapshot(): Snapshot {
