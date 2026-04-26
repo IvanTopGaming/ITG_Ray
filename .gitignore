@@ -1,1 +1,23 @@
 .superpowers/
+
+# Go
+/bin/
+/dist/
+/itgray-cli
+*.exe
+*.test
+*.out
+coverage.*
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime
+*.log
+/stats.db
+/tmp/

@@ -1,0 +1,34 @@
+run:
+  timeout: 3m
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gofmt
+    - goimports
+    - gosec
+    - misspell
+    - unconvert
+    - gocritic
+    - revive
+    - bodyclose
+    - noctx
+    - errorlint
+
+linters-settings:
+  gocritic:
+    enabled-tags: [diagnostic, style, performance]
+  revive:
+    rules:
+      - name: exported
+        arguments: [checkPrivateReceivers, disableStutteringCheck]
+
+issues:
+  exclude-use-default: false
+  max-same-issues: 0
