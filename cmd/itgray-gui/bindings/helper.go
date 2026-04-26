@@ -26,21 +26,34 @@ type svcOps interface {
 	Stop(name string) error
 }
 
-// realSvcOps is the production implementation that delegates to svcmgr.
-// Kept private — only HelperService talks to it.
+// realSvcOps is the production implementation. Status is a read-only SCM
+// query that runs as the GUI's standard-user token. Install / Start / Stop
+// require admin elevation — they shell out through `itgray-cli.exe` via
+// PowerShell `Start-Process -Verb RunAs`, so the GUI itself stays
+// unprivileged and a single UAC prompt covers each mutation.
+//
+// The binPath / desc args on Install are accepted (and ignored) for
+// interface parity with the test fake — the elevated CLI call resolves the
+// helper binary by its own canonical sibling-path lookup.
 type realSvcOps struct{}
 
-// Status delegates to svcmgr.Status.
+// Status delegates to svcmgr.Status — no elevation needed.
 func (realSvcOps) Status(n string) (svcmgr.State, error) { return svcmgr.Status(n) }
 
-// Install delegates to svcmgr.Install.
-func (realSvcOps) Install(n, p, d string) error { return svcmgr.Install(n, p, d) }
+// Install registers the service via the elevated CLI (UAC prompt).
+func (realSvcOps) Install(_, _, _ string) error {
+	return elevateCLI("helper", "install")
+}
 
-// Start delegates to svcmgr.Start.
-func (realSvcOps) Start(n string) error { return svcmgr.Start(n) }
+// Start asks SCM to start the helper via the elevated CLI (UAC prompt).
+func (realSvcOps) Start(_ string) error {
+	return elevateCLI("helper", "start")
+}
 
-// Stop delegates to svcmgr.Stop.
-func (realSvcOps) Stop(n string) error { return svcmgr.Stop(n) }
+// Stop asks SCM to stop the helper via the elevated CLI (UAC prompt).
+func (realSvcOps) Stop(_ string) error {
+	return elevateCLI("helper", "stop")
+}
 
 // HelperService implements the Helper.* Wails bindings (Status / Install /
 // Start / Stop) the onboarding wizard uses. The methods translate svcmgr
