@@ -11,65 +11,61 @@ export type OrbStatus =
 interface GlowOrbProps {
   status: OrbStatus;
   size?: number;
-  onClick?: () => void;
+  onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   disabled?: boolean;
   ariaLabel?: string;
   className?: string;
 }
 
 interface OrbStyle {
-  outerRing: string;
-  outerGlow?: string;
-  innerBg: string;
-  innerBorder: string;
-  innerInsetShadow: string;
+  border: string;
+  background: string;
+  boxShadow: string;
   iconColor: string;
-  iconFill?: string;
+  iconFill: string;
   scale: number;
 }
 
 const STYLES: Record<OrbStatus, OrbStyle> = {
   idle: {
-    outerRing: "rgba(255,255,255,0.20)",
-    innerBg: "rgba(255,255,255,0.02)",
-    innerBorder: "rgba(255,255,255,0.10)",
-    innerInsetShadow: "inset 0 0 20px rgba(0,0,0,0.30)",
-    iconColor: "rgba(255,255,255,0.40)",
+    border: "rgba(180,210,235,0.32)",
+    background: "rgba(140,180,220,0.06)",
+    boxShadow: "inset 0 0 26px rgba(0,0,0,0.45)",
+    iconColor: "rgba(195,220,245,0.65)",
+    iconFill: "none",
     scale: 1,
   },
   connecting: {
-    outerRing: "rgba(255,177,60,0.30)",
-    innerBg: "rgba(60,40,0,0.20)",
-    innerBorder: "rgba(255,177,60,0.30)",
-    innerInsetShadow: "inset 0 0 20px rgba(255,177,60,0.18)",
-    iconColor: "#ffd28a",
+    border: "rgba(255,188,90,0.65)",
+    background: "rgba(55,32,5,0.30)",
+    boxShadow: "inset 0 0 30px rgba(255,188,90,0.28)",
+    iconColor: "#ffe097",
+    iconFill: "none",
     scale: 1.06,
   },
   connected: {
-    outerRing: "rgba(0,230,118,0.55)",
-    outerGlow: "0 0 28px rgba(0,230,118,0.40)",
-    innerBg: "rgba(0,40,20,0.30)",
-    innerBorder: "rgba(0,230,118,0.40)",
-    innerInsetShadow: "inset 0 0 24px rgba(0,230,118,0.28)",
-    iconColor: "#3effa0",
-    iconFill: "#00e676",
+    border: "rgba(40,240,170,0.78)",
+    background: "rgba(0,52,38,0.42)",
+    boxShadow:
+      "0 0 38px rgba(40,240,170,0.55), inset 0 0 32px rgba(40,240,170,0.32)",
+    iconColor: "#6affd0",
+    iconFill: "#00f099",
     scale: 1.06,
   },
   disconnecting: {
-    outerRing: "rgba(0,230,118,0.30)",
-    innerBg: "rgba(0,40,20,0.18)",
-    innerBorder: "rgba(0,230,118,0.20)",
-    innerInsetShadow: "inset 0 0 18px rgba(0,230,118,0.15)",
-    iconColor: "rgba(62,255,160,0.55)",
+    border: "rgba(40,240,170,0.36)",
+    background: "rgba(0,52,38,0.20)",
+    boxShadow: "inset 0 0 24px rgba(40,240,170,0.16)",
+    iconColor: "rgba(106,255,208,0.62)",
+    iconFill: "none",
     scale: 1,
   },
   error: {
-    outerRing: "rgba(255,94,94,0.50)",
-    outerGlow: "0 0 24px rgba(255,94,94,0.35)",
-    innerBg: "rgba(60,0,0,0.30)",
-    innerBorder: "rgba(255,94,94,0.40)",
-    innerInsetShadow: "inset 0 0 20px rgba(255,94,94,0.25)",
-    iconColor: "#ff8a8a",
+    border: "rgba(255,110,110,0.72)",
+    background: "rgba(50,0,0,0.40)",
+    boxShadow:
+      "0 0 32px rgba(255,110,110,0.48), inset 0 0 26px rgba(255,110,110,0.28)",
+    iconColor: "#ff9a9a",
     iconFill: "#ff5e5e",
     scale: 1,
   },
@@ -87,71 +83,10 @@ export function GlowOrb({
 }: GlowOrbProps) {
   const s = STYLES[status];
   const interactive = Boolean(onClick) && !disabled;
-  const innerSize = Math.round(size * 0.62);
   const iconSize = Math.round(size * 0.34);
 
-  const content = (
-    <>
-      <div
-        className="absolute inset-0 rounded-full"
-        style={{
-          border: `1px solid ${s.outerRing}`,
-          boxShadow: s.outerGlow,
-          transition: TRANSITION,
-        }}
-      />
-
-      {status === "connecting" && (
-        <svg
-          className="absolute inset-0 -rotate-90 animate-spin"
-          style={{ animationDuration: "1.4s" }}
-          viewBox="0 0 100 100"
-          aria-hidden
-        >
-          <circle
-            cx="50"
-            cy="50"
-            r="49"
-            fill="none"
-            stroke="#ffb13c"
-            strokeWidth="2"
-            strokeLinecap="round"
-            pathLength={100}
-            strokeDasharray="30 70"
-          />
-        </svg>
-      )}
-
-      <div
-        className="flex items-center justify-center rounded-full"
-        style={{
-          width: innerSize,
-          height: innerSize,
-          background: s.innerBg,
-          border: `1px solid ${s.innerBorder}`,
-          boxShadow: s.innerInsetShadow,
-          transition: TRANSITION,
-        }}
-      >
-        <Zap
-          width={iconSize}
-          height={iconSize}
-          stroke={s.iconColor}
-          fill={s.iconFill ?? "none"}
-          strokeWidth={2}
-          style={{
-            transition: TRANSITION,
-            filter: s.iconFill
-              ? `drop-shadow(0 0 6px ${s.iconColor})`
-              : undefined,
-          }}
-        />
-      </div>
-    </>
-  );
-
   const sharedClasses = cn(
-    "relative flex shrink-0 items-center justify-center rounded-full p-0",
+    "relative shrink-0 flex items-center justify-center rounded-full p-0",
     status === "error" && "animate-orb-shake",
     className,
   );
@@ -159,9 +94,51 @@ export function GlowOrb({
   const sharedStyle = {
     width: size,
     height: size,
+    background: s.background,
+    border: `1px solid ${s.border}`,
+    boxShadow: s.boxShadow,
     transform: `scale(${s.scale})`,
     transition: TRANSITION,
   };
+
+  const content = (
+    <>
+      {status === "connecting" && (
+        <svg
+          aria-hidden
+          className="absolute inset-0 -rotate-90 animate-spin"
+          style={{ animationDuration: "1s" }}
+          viewBox="0 0 100 100"
+        >
+          <circle
+            className="animate-sweep-pulse"
+            cx="50"
+            cy="50"
+            r="49"
+            fill="none"
+            stroke="#ffc266"
+            strokeWidth="2"
+            strokeLinecap="round"
+            pathLength={100}
+          />
+        </svg>
+      )}
+      <Zap
+        width={iconSize}
+        height={iconSize}
+        stroke={s.iconColor}
+        fill={s.iconFill}
+        strokeWidth={2}
+        style={{
+          transition: "stroke 200ms cubic-bezier(0.16, 1, 0.3, 1)",
+          filter:
+            s.iconFill !== "none"
+              ? `drop-shadow(0 0 6px ${s.iconColor})`
+              : undefined,
+        }}
+      />
+    </>
+  );
 
   if (!onClick) {
     return (
@@ -184,10 +161,6 @@ export function GlowOrb({
         interactive
           ? "cursor-pointer focus-visible:ring-2 focus-visible:ring-accent-start/70 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-1"
           : "cursor-not-allowed",
-        // Idle hover: button gets a soft cyan halo to invite the click.
-        interactive &&
-          status === "idle" &&
-          "hover:shadow-[0_0_24px_rgba(120,200,255,0.30)]",
       )}
     >
       {content}

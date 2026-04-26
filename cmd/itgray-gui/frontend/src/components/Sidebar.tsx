@@ -8,6 +8,7 @@ import {
   ScrollText,
   ShieldOff,
 } from "lucide-react";
+import { motion } from "framer-motion";
 import clsx from "clsx";
 
 interface NavItem {
@@ -104,15 +105,26 @@ function Item({ to, label, icon: Icon, disabled }: NavItem) {
       end={to === "/"}
       className={({ isActive }) =>
         clsx(
-          "flex items-center gap-2.5 rounded-lg px-3 py-2 text-[12px] transition-colors duration-instant ease-snap",
+          "relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-[12px] transition-colors duration-standard ease-snap",
           isActive
-            ? "border border-white/10 bg-white/[0.12] font-medium text-white"
-            : "border border-transparent text-white/65 hover:bg-white/[0.06] hover:text-white",
+            ? "font-medium text-white"
+            : "text-white/65 hover:bg-white/[0.06] hover:text-white",
         )
       }
     >
-      <Icon className="h-3.5 w-3.5" />
-      {label}
+      {({ isActive }) => (
+        <>
+          {isActive && (
+            <motion.div
+              layoutId="sidebar-active-pill"
+              className="absolute inset-0 rounded-lg border border-white/10 bg-white/[0.12]"
+              transition={{ type: "spring", stiffness: 400, damping: 32 }}
+            />
+          )}
+          <Icon className="relative z-10 h-3.5 w-3.5" />
+          <span className="relative z-10">{label}</span>
+        </>
+      )}
     </NavLink>
   );
 }
