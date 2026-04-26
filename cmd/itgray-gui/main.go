@@ -48,6 +48,11 @@ func main() {
 		ServerStore: serverStore,
 		Hub:         app.Hub(),
 	})
+	subsSvc := bindings.NewSubsService(bindings.SubsDeps{
+		SubStore:    subStore,
+		ServerStore: serverStore,
+		Hub:         app.Hub(),
+	})
 
 	err := wails.Run(&options.App{
 		Title:            "ITG Ray",
@@ -60,7 +65,7 @@ func main() {
 		AssetServer:      &assetserver.Options{Assets: assets},
 		OnStartup:        func(ctx context.Context) { app.Startup(ctx) },
 		OnShutdown:       func(ctx context.Context) { app.Shutdown(ctx) },
-		Bind:             []any{app, appSvc, serversSvc},
+		Bind:             []any{app, appSvc, serversSvc, subsSvc},
 		Windows: &windows.Options{
 			WebviewIsTransparent: false,
 			DisableWindowIcon:    false,
