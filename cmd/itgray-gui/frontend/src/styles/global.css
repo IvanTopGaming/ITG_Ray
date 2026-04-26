@@ -1,13 +1,10 @@
-@import "./tokens.css";
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root { height: 100%; margin: 0; }
-body {
-  background: var(--surface-base);
-  color: var(--text-primary);
-  font-family: ui-sans-serif, system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
 }
