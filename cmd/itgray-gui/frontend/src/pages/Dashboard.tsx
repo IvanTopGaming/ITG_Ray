@@ -67,60 +67,35 @@ export function Dashboard() {
     ? Math.floor((now - connectedAt) / 1000)
     : 0;
 
+  const orbDisabled = status === "connecting" || status === "disconnecting";
+
+  function handleOrbClick() {
+    if (status === "idle" || status === "error") setStatus("connecting");
+    else if (status === "connected") setStatus("disconnecting");
+  }
+
   return (
     <section className="flex flex-col gap-5">
       <div className="flex items-center justify-between">
         <h1 className="text-[22px] font-semibold tracking-tight">Dashboard</h1>
-        <ModeToggle value={mode} onChange={setMode} disabled={status !== "idle"} />
+        <ModeToggle
+          value={mode}
+          onChange={setMode}
+          disabled={status !== "idle"}
+        />
       </div>
 
-      <div className="glass-regular rounded-2xl p-7">
+      <div className="glass-regular rounded-2xl p-7 min-h-[200px]">
         <div className="flex items-center gap-7">
-          <div className="flex flex-col items-center gap-3.5">
-            <GlowOrb status={status} size={104} />
-            {status === "idle" && (
-              <button
-                onClick={() => setStatus("connecting")}
-                className="rounded-lg bg-btn-accent px-7 py-2.5 text-[13px] font-semibold text-white shadow-[0_0_18px_rgba(120,200,255,0.45)] transition-all duration-instant ease-snap hover:brightness-110 active:scale-[0.97]"
-              >
-                Connect
-              </button>
-            )}
-            {status === "connecting" && (
-              <button
-                disabled
-                className="cursor-not-allowed rounded-lg border border-white/15 bg-white/5 px-6 py-2.5 text-[13px] text-white/65"
-              >
-                Connecting…
-              </button>
-            )}
-            {status === "connected" && (
-              <button
-                onClick={() => setStatus("disconnecting")}
-                className="rounded-lg border border-white/20 bg-white/5 px-6 py-2.5 text-[13px] text-white/85 transition-colors duration-instant ease-snap hover:bg-white/10 hover:text-white active:scale-[0.97]"
-              >
-                Disconnect
-              </button>
-            )}
-            {status === "disconnecting" && (
-              <button
-                disabled
-                className="cursor-not-allowed rounded-lg border border-white/15 bg-white/5 px-6 py-2.5 text-[13px] text-white/65"
-              >
-                Disconnecting…
-              </button>
-            )}
-            {status === "error" && (
-              <button
-                onClick={() => setStatus("connecting")}
-                className="rounded-lg border border-danger/40 bg-danger/15 px-6 py-2.5 text-[13px] font-medium text-[#ff9a9a] transition-colors duration-instant ease-snap hover:bg-danger/25"
-              >
-                Try again
-              </button>
-            )}
-          </div>
+          <GlowOrb
+            status={status}
+            size={104}
+            onClick={handleOrbClick}
+            disabled={orbDisabled}
+            ariaLabel={ariaLabelFor(status)}
+          />
 
-          <div className="flex flex-1 flex-col gap-4 min-w-0">
+          <div className="flex min-w-0 flex-1 flex-col gap-4">
             <StatusLine status={status} sessionSeconds={sessionSeconds} />
             <ActiveRoute status={status} mode={mode} />
             <Metrics status={status} speed={speed} />
@@ -129,6 +104,21 @@ export function Dashboard() {
       </div>
     </section>
   );
+}
+
+function ariaLabelFor(status: OrbStatus): string {
+  switch (status) {
+    case "idle":
+      return "Connect";
+    case "connected":
+      return "Disconnect";
+    case "error":
+      return "Try connecting again";
+    case "connecting":
+      return "Connecting";
+    case "disconnecting":
+      return "Disconnecting";
+  }
 }
 
 function StatusLine({
@@ -182,8 +172,8 @@ function ActiveRoute({ status, mode }: { status: OrbStatus; mode: Mode }) {
         </div>
         <div className="mt-1 text-[13px] text-white/55">
           {status === "error"
-            ? "Tap Try again to retry."
-            : "Press Connect to start."}
+            ? "Click the orb to retry."
+            : "Click the orb to connect."}
         </div>
       </div>
     );
