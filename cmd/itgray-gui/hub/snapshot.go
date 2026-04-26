@@ -90,10 +90,11 @@ type NotificationSettings struct {
 	OnSubSynced    bool `json:"onSubSynced"`
 }
 
-// DebugSettings holds developer-facing toggles.
+// DebugSettings holds developer-facing toggles. The "open logs folder" UI
+// affordance is exposed in C.T12 as an action method on SettingsService, not
+// as a flag on this DTO.
 type DebugSettings struct {
 	LogLevel string `json:"logLevel"` // "debug" | "info" | "warn" | "error"
-	OpenLogs bool   `json:"-"`        // not persisted; UI-only action
 }
 
 // AboutSettings is build-info metadata for the About panel.

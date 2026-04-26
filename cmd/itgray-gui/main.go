@@ -35,7 +35,7 @@ func main() {
 	serverStore := serversFileStore{path: filepath.Join(dataDir, "servers.json")}
 	subStore := subscription.FileStore{Path: filepath.Join(dataDir, "subscriptions.json")}
 
-	appSvc := bindings.NewAppService(bindings.AppDeps{
+	appSvc := bindings.NewAppService(&bindings.AppDeps{
 		DataDir:      dataDir,
 		Hub:          app.Hub(),
 		Version:      Version,

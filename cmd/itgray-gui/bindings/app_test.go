@@ -25,7 +25,7 @@ func TestAppService_GetSnapshot_Empty(t *testing.T) {
 	dir := t.TempDir()
 	srv := fileServerStore{path: filepath.Join(dir, "servers.json")}
 	sub := subscription.FileStore{Path: filepath.Join(dir, "subscriptions.json")}
-	app := NewAppService(AppDeps{
+	app := NewAppService(&AppDeps{
 		DataDir:      dir,
 		Hub:          hub.New(),
 		Version:      "test",
@@ -75,7 +75,7 @@ func TestAppService_GetSnapshot_WithSeededData(t *testing.T) {
 		LatencyMS: &latency,
 	}}))
 
-	app := NewAppService(AppDeps{
+	app := NewAppService(&AppDeps{
 		DataDir:      dir,
 		Hub:          hub.New(),
 		Version:      "test",
@@ -103,7 +103,7 @@ func TestAppService_GetSnapshot_WithSeededData(t *testing.T) {
 func TestAppService_GetSnapshot_OnboardedMarker(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, writeFile(filepath.Join(dir, ".onboarded"), nil))
-	app := NewAppService(AppDeps{
+	app := NewAppService(&AppDeps{
 		DataDir:      dir,
 		Hub:          hub.New(),
 		Version:      "test",

@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/subscription"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // ServerStore is the read surface AppService needs from internal/server.
@@ -44,24 +46,25 @@ type AppDeps struct {
 }
 
 // AppService implements the App.* bindings (GetSnapshot, GetVersion, Quit).
-type AppService struct{ d AppDeps }
+type AppService struct{ d *AppDeps }
 
-// NewAppService constructs a new AppService.
-func NewAppService(d AppDeps) *AppService { //nolint:gocritic // AppDeps is built once at startup; copy cost is irrelevant and value-receiver keeps callers simple
+// NewAppService constructs a new AppService. AppDeps is taken by pointer so
+// later tasks can grow it without re-introducing gocritic hugeParam
+// suppressions on every binding constructor in cmd/itgray-gui/bindings/.
+func NewAppService(d *AppDeps) *AppService {
 	return &AppService{d: d}
 }
 
 // GetVersion returns the build version string.
 func (a *AppService) GetVersion() string { return a.d.Version }
 
-// Quit asks the runtime to terminate.
+// Quit asks the Wails runtime to terminate the app. Idempotent at the
+// runtime layer — calling on an already-stopping app is a no-op.
 func (a *AppService) Quit(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
 	}
-	// runtime.Quit lives in wails/v2/pkg/runtime; importing that here would
-	// cycle with hub.wails_emitter. The frontend invokes Quit via the
-	// Wails-runtime JS API directly. This binding is reserved for parity.
+	runtime.Quit(ctx)
 }
 
 // GetSnapshot collects the current app state into a Snapshot DTO.
@@ -116,7 +119,7 @@ func toServerViews(in []server.Server, originByID map[string]string) []hub.Serve
 		out = append(out, hub.ServerView{
 			ID:        s.ID,
 			Name:      s.Name,
-			Country:   "", // not modelled by internal/server; populated when geo-IP lands
+			Country:   "", // TODO(plan-c-geoip): populate from server.Server once geo-IP enrichment lands
 			Address:   hostPort(s.Vless.Address, s.Vless.Port),
 			Transport: s.Vless.Transport.String(),
 			Security:  s.Vless.Security.String(),
@@ -148,11 +151,16 @@ func toSubViews(in []subscription.Stored, serverCount map[string]int) []hub.SubV
 }
 
 // subOriginByID maps a subscription's ID to its display name (for ServerView.Origin).
-// The empty-key entry is reserved for manual servers, which carry no SourceID.
+// The empty-key entry is reserved for manual servers, which carry no SourceID;
+// stored entries with empty IDs (corrupt files) are skipped so they cannot
+// shadow the sentinel.
 func subOriginByID(subs []subscription.Stored) map[string]string {
 	m := make(map[string]string, len(subs)+1)
 	for i := range subs {
 		s := subs[i]
+		if s.ID == "" {
+			continue
+		}
 		name := s.Name
 		if name == "" {
 			name = s.ID
@@ -173,14 +181,15 @@ func serverCountBySource(servers []server.Server) map[string]int {
 }
 
 // hostPort formats address:port, bracketing IPv6 addresses per RFC 3986.
+//
+// TODO: drop in favour of an exported server.Server.Address() once internal/server
+// promotes its private hostPort helper.
 func hostPort(addr string, port uint16) string {
 	if addr == "" && port == 0 {
 		return ""
 	}
-	for _, c := range addr {
-		if c == ':' {
-			return fmt.Sprintf("[%s]:%d", addr, port)
-		}
+	if strings.Contains(addr, ":") {
+		return fmt.Sprintf("[%s]:%d", addr, port)
 	}
 	return fmt.Sprintf("%s:%d", addr, port)
 }
