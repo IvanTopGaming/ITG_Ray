@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { DEFAULTS, STORAGE_KEY, loadSettings, saveSettings, flushSettings, useSettings } from './settings';
+import { DEFAULTS, STORAGE_KEY, loadSettings, saveSettings, flushSettings, useSettings, __resetForTests } from './settings';
 
 describe('DEFAULTS', () => {
   it('contains all expected keys with correct types', () => {
@@ -19,7 +19,10 @@ describe('DEFAULTS', () => {
 });
 
 describe('loadSettings', () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    __resetForTests();
+    localStorage.clear();
+  });
 
   it('returns DEFAULTS when localStorage is empty', () => {
     expect(loadSettings()).toEqual(DEFAULTS);
@@ -49,6 +52,7 @@ describe('loadSettings', () => {
 
 describe('saveSettings', () => {
   beforeEach(() => {
+    __resetForTests();
     localStorage.clear();
     vi.useFakeTimers();
   });
@@ -73,6 +77,7 @@ describe('saveSettings', () => {
 
 describe('flushSettings', () => {
   beforeEach(() => {
+    __resetForTests();
     localStorage.clear();
     vi.useFakeTimers();
   });
@@ -101,6 +106,7 @@ describe('flushSettings', () => {
 
 describe('useSettings', () => {
   beforeEach(() => {
+    __resetForTests();
     localStorage.clear();
     vi.useFakeTimers();
   });
@@ -143,5 +149,12 @@ describe('useSettings', () => {
       window.dispatchEvent(new StorageEvent('storage', { key: STORAGE_KEY, newValue: localStorage.getItem(STORAGE_KEY) }));
     });
     expect(result.current[0].language).toBe('ru');
+  });
+
+  it('returns a stable update reference across renders', () => {
+    const { result, rerender } = renderHook(() => useSettings());
+    const first = result.current[1];
+    rerender();
+    expect(result.current[1]).toBe(first);
   });
 });

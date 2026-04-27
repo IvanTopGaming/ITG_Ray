@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore, useCallback } from 'react';
 
 export type Language = 'en' | 'ru';
 export type NetworkMode = 'tun' | 'system-proxy' | 'off';
@@ -116,9 +116,6 @@ function subscribe(cb: () => void): () => void {
   return (): void => {
     listeners.delete(cb);
     if (listeners.size === 0) {
-      // Reset cached state so the next subscriber gets a fresh read from
-      // localStorage. This also means tests get a clean slate after unmount.
-      currentState = null;
       if (typeof window !== 'undefined') {
         window.removeEventListener('storage', handleStorage);
         window.removeEventListener('beforeunload', handleBeforeUnload);
@@ -127,12 +124,26 @@ function subscribe(cb: () => void): () => void {
   };
 }
 
+/**
+ * Reset all module-level state. Test-only — do not call from production code.
+ * The double-underscore prefix is the convention for "internal API, not for app use".
+ */
+export function __resetForTests(): void {
+  currentState = null;
+  listeners.clear();
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  pendingValue = null;
+}
+
 export function useSettings(): [Settings, (patch: Partial<Settings>) => void] {
   const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  const update = (patch: Partial<Settings>): void => {
+  const update = useCallback((patch: Partial<Settings>): void => {
     currentState = { ...getSnapshot(), ...patch };
     saveSettings(currentState);
     notifyListeners();
-  };
+  }, []);
   return [state, update];
 }
