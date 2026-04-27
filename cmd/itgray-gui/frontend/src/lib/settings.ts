@@ -33,6 +33,9 @@ export const DEFAULTS = {
 
 export const STORAGE_KEY = 'itgray.settings.v1';
 
+// Returned objects are always fresh shallow copies so callers can mutate freely
+// without corrupting the singleton DEFAULTS reference (TS marks it readonly,
+// but the runtime object is shared otherwise).
 export function loadSettings(): Settings {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return { ...DEFAULTS };
@@ -58,4 +61,17 @@ export function saveSettings(s: Settings): void {
     saveTimer = null;
     pendingValue = null;
   }, 200);
+}
+
+// Force any pending debounced write to flush immediately. Wire this to
+// `beforeunload` once a consumer (e.g. useSettings in T3) is available so the
+// last edit before tab-close isn't lost in the 200ms window.
+export function flushSettings(): void {
+  if (!saveTimer) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  if (pendingValue) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(pendingValue));
+    pendingValue = null;
+  }
 }

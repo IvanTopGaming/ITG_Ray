@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { DEFAULTS, STORAGE_KEY, loadSettings, saveSettings } from './settings';
+import { DEFAULTS, STORAGE_KEY, loadSettings, saveSettings, flushSettings } from './settings';
 
 describe('DEFAULTS', () => {
   it('contains all expected keys with correct types', () => {
@@ -67,5 +67,33 @@ describe('saveSettings', () => {
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
     expect(stored.language).toBe('en');
     expect(stored.allowLan).toBe(false);
+  });
+});
+
+describe('flushSettings', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.useFakeTimers();
+  });
+
+  it('writes pending value immediately without waiting for debounce', () => {
+    saveSettings({ ...DEFAULTS, language: 'ru' });
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    flushSettings();
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
+    expect(stored.language).toBe('ru');
+  });
+
+  it('is a no-op when nothing is pending', () => {
+    expect(() => flushSettings()).not.toThrow();
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it('cancels the scheduled timer so no second write fires', () => {
+    saveSettings({ ...DEFAULTS, language: 'ru' });
+    flushSettings();
+    localStorage.clear();
+    vi.advanceTimersByTime(250);
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 });
