@@ -19,7 +19,7 @@ export function Toggle({ value, onChange, disabled, className }: ToggleProps) {
       className={cn(
         'relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors',
         'border border-white/[0.12]',
-        value ? 'bg-gradient-to-b from-accent-start to-accent-mid' : 'bg-white/15',
+        value ? 'bg-gradient-to-b from-accent-start to-accent-mid' : 'bg-white/[0.15]',
         disabled && 'opacity-40 cursor-not-allowed',
         className,
       )}

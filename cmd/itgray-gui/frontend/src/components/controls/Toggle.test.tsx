@@ -23,4 +23,15 @@ describe('Toggle', () => {
     await userEvent.click(screen.getByRole('switch'));
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it('activates via Space and Enter keys', async () => {
+    const onChange = vi.fn();
+    render(<Toggle value={false} onChange={onChange} />);
+    const sw = screen.getByRole('switch');
+    sw.focus();
+    await userEvent.keyboard(' ');
+    expect(onChange).toHaveBeenLastCalledWith(true);
+    await userEvent.keyboard('{Enter}');
+    expect(onChange).toHaveBeenCalledTimes(2);
+  });
 });
