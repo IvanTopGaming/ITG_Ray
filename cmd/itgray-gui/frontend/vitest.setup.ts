@@ -4,8 +4,9 @@ import "@testing-library/jest-dom/vitest";
 // shadows jsdom's fully-functional implementation.  Explicitly re-bind it so
 // tests can call .clear(), .setItem(), etc. as expected.
 // See: https://github.com/vitest-dev/vitest/issues/4288
-if (typeof globalThis.jsdom !== "undefined") {
-  const jsdomWindow = (globalThis as any).jsdom.window;
+const jsdom = (globalThis as { jsdom?: { window: Window } }).jsdom;
+if (jsdom) {
+  const jsdomWindow = jsdom.window;
   Object.defineProperty(globalThis, "localStorage", {
     value: jsdomWindow.localStorage,
     writable: true,
