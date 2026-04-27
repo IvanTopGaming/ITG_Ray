@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { motion, type Variants } from 'framer-motion';
 import { useSettings } from '@/lib/settings';
 import { cn } from '@/lib/cn';
@@ -6,6 +7,9 @@ import { Segmented } from '@/components/controls/Segmented';
 import { Dropdown } from '@/components/controls/Dropdown';
 import { Reveal } from '@/components/controls/Reveal';
 import { SettingRow, SectionHeader } from '@/components/controls/SettingRow';
+import { ConfirmButton } from '@/components/controls/ConfirmButton';
+import { ConfirmDialog } from '@/components/controls/ConfirmDialog';
+import { StatusPill, type StatusPillStatus } from '@/components/controls/StatusPill';
 
 const pageVariants: Variants = {
   hidden: { opacity: 0 },
@@ -33,6 +37,20 @@ function isDnsValid(value: string): boolean {
 
 export function Settings() {
   const [s, update] = useSettings();
+  const [helperStatus, setHelperStatus] = useState<StatusPillStatus>('running');
+  const [reinstallOpen, setReinstallOpen] = useState(false);
+
+  const restartHelper = async () => {
+    setHelperStatus('pending');
+    await new Promise((r) => setTimeout(r, 800));
+    setHelperStatus('running');
+  };
+
+  const reinstallHelper = async () => {
+    setHelperStatus('stopped');
+    await new Promise((r) => setTimeout(r, 2000));
+    setHelperStatus('running');
+  };
 
   return (
     <motion.section
@@ -101,6 +119,59 @@ export function Settings() {
           <Toggle value={s.allowLan} onChange={(v) => update({ allowLan: v })} />
         </SettingRow>
       </motion.div>
+
+      {/* Notifications */}
+      <motion.div variants={sectionVariants} className="glass-regular rounded-2xl p-5">
+        <SectionHeader title="Notifications" />
+        <SettingRow label="Connection toasts" hint="Show OS notifications on connect, disconnect, and errors.">
+          <Toggle value={s.notifyConnection} onChange={(v) => update({ notifyConnection: v })} />
+        </SettingRow>
+        <SettingRow label="Sound" hint="Play a soft chime on state changes.">
+          <Toggle value={s.notifySound} onChange={(v) => update({ notifySound: v })} />
+        </SettingRow>
+        <SettingRow label="Subscription failures" hint="Notify when a subscription sync fails.">
+          <Toggle value={s.notifySubFailure} onChange={(v) => update({ notifySubFailure: v })} />
+        </SettingRow>
+      </motion.div>
+
+      {/* Helper */}
+      <motion.div variants={sectionVariants} className="glass-regular rounded-2xl p-5">
+        <SectionHeader title="Helper service" right={<StatusPill status={helperStatus} />} />
+        <SettingRow
+          label="Status"
+          hint="Privileged background service that manages TUN and routing. v1.4.2"
+        >
+          <div className="flex gap-1.5">
+            <ConfirmButton onConfirm={restartHelper} variant="ghost">Restart</ConfirmButton>
+            <button
+              type="button"
+              onClick={() => console.log('[mock] view helper log')}
+              className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] border border-white/[0.10] text-white/[0.92] hover:bg-white/[0.05]"
+            >
+              View log
+            </button>
+          </div>
+        </SettingRow>
+        <SettingRow label="Reinstall" hint="If something goes wrong with privileges or service registration.">
+          <button
+            type="button"
+            onClick={() => setReinstallOpen(true)}
+            className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] bg-white/[0.08] border border-white/[0.14] text-white/[0.92] hover:bg-white/[0.12]"
+          >
+            Reinstall helper
+          </button>
+        </SettingRow>
+      </motion.div>
+
+      <ConfirmDialog
+        open={reinstallOpen}
+        onClose={() => setReinstallOpen(false)}
+        title="Reinstall helper service?"
+        description="This will request elevated privileges and restart the service. Active connection will drop briefly."
+        confirmLabel="Reinstall"
+        confirmVariant="primary"
+        onConfirm={reinstallHelper}
+      />
     </motion.section>
   );
 }
