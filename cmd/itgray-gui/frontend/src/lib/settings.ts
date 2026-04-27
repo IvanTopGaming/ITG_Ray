@@ -17,7 +17,7 @@ export type Settings = {
   logLevel: LogLevel;
 };
 
-export const DEFAULTS: Settings = {
+export const DEFAULTS = {
   language: 'en',
   launchOnStartup: false,
   startMinimized: false,
@@ -29,6 +29,6 @@ export const DEFAULTS: Settings = {
   notifySound: false,
   notifySubFailure: true,
   logLevel: 'info',
-};
+} as const satisfies Settings;
 
 export const STORAGE_KEY = 'itgray.settings.v1';
