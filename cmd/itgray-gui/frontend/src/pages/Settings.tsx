@@ -5,6 +5,7 @@ import { Toggle } from '@/components/controls/Toggle';
 import { Segmented } from '@/components/controls/Segmented';
 import { Dropdown } from '@/components/controls/Dropdown';
 import { Reveal } from '@/components/controls/Reveal';
+import { SettingRow, SectionHeader } from '@/components/controls/SettingRow';
 
 const pageVariants: Variants = {
   hidden: { opacity: 0 },
@@ -45,18 +46,18 @@ export function Settings() {
       {/* General */}
       <motion.div variants={sectionVariants} className="glass-regular rounded-2xl p-5">
         <SectionHeader title="General" />
-        <Row label="Launch on system startup" hint="Start ITG Ray automatically when you log in.">
+        <SettingRow label="Launch on system startup" hint="Start ITG Ray automatically when you log in.">
           <Toggle value={s.launchOnStartup} onChange={(v) => update({ launchOnStartup: v })} />
-        </Row>
-        <Row label="Start minimized to tray" hint="Open in background, no main window on launch.">
+        </SettingRow>
+        <SettingRow label="Start minimized to tray" hint="Open in background, no main window on launch.">
           <Toggle value={s.startMinimized} onChange={(v) => update({ startMinimized: v })} />
-        </Row>
+        </SettingRow>
       </motion.div>
 
       {/* Connection */}
       <motion.div variants={sectionVariants} className="glass-regular rounded-2xl p-5">
         <SectionHeader title="Connection" />
-        <Row
+        <SettingRow
           label="Network mode"
           hint="TUN intercepts all traffic at OS level. System proxy uses Windows proxy settings only."
         >
@@ -69,8 +70,8 @@ export function Settings() {
               { value: 'off', label: 'Off' },
             ] as const}
           />
-        </Row>
-        <Row label="DNS" hint="Override DNS while connected. Uses remote VPN DNS by default.">
+        </SettingRow>
+        <SettingRow label="DNS" hint="Override DNS while connected. Uses remote VPN DNS by default.">
           <Dropdown
             value={s.dnsMode}
             onChange={(v) => update({ dnsMode: v })}
@@ -79,9 +80,9 @@ export function Settings() {
               { value: 'custom', label: 'Custom' },
             ] as const}
           />
-        </Row>
+        </SettingRow>
         <Reveal show={s.dnsMode === 'custom'}>
-          <Row label="Custom DNS" hint="Comma-separated list of resolvers (e.g. 1.1.1.1, 8.8.8.8)." stacked>
+          <SettingRow label="Custom DNS" hint="Comma-separated list of resolvers (e.g. 1.1.1.1, 8.8.8.8)." stacked>
             <input
               type="text"
               value={s.dnsCustom}
@@ -94,48 +95,12 @@ export function Settings() {
                   : 'border-danger/50',
               )}
             />
-          </Row>
+          </SettingRow>
         </Reveal>
-        <Row label="Allow LAN access" hint="Reach local network devices (printers, NAS) while VPN is on.">
+        <SettingRow label="Allow LAN access" hint="Reach local network devices (printers, NAS) while VPN is on.">
           <Toggle value={s.allowLan} onChange={(v) => update({ allowLan: v })} />
-        </Row>
+        </SettingRow>
       </motion.div>
     </motion.section>
-  );
-}
-
-// Temporary inline scaffolding — will be replaced by <SettingRow> in T8.
-function SectionHeader({ title }: { title: string }) {
-  return (
-    <div className="flex items-baseline justify-between pb-3 mb-1 border-b border-white/[0.08]">
-      <span className="text-[14px] font-semibold tracking-wide text-white/[0.92]">{title}</span>
-    </div>
-  );
-}
-
-function Row({
-  label,
-  hint,
-  stacked,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  stacked?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      className={cn(
-        'flex gap-4 py-3 border-b border-white/[0.06] last:border-b-0',
-        stacked ? 'flex-col items-stretch' : 'flex-row items-center justify-between',
-      )}
-    >
-      <div className={cn('flex flex-col gap-0.5', stacked ? '' : 'max-w-[60%]')}>
-        <span className="text-[13px] text-white/[0.92]">{label}</span>
-        {hint && <span className="text-[11.5px] leading-snug text-white/[0.45]">{hint}</span>}
-      </div>
-      <div className={cn(stacked && 'mt-2')}>{children}</div>
-    </div>
   );
 }
