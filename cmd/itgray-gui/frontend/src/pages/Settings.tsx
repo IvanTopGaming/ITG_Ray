@@ -11,6 +11,8 @@ import { ConfirmButton } from '@/components/controls/ConfirmButton';
 import { ConfirmDialog } from '@/components/controls/ConfirmDialog';
 import { StatusPill, type StatusPillStatus } from '@/components/controls/StatusPill';
 import { ScrollSpy, useScrollSpy, scrollToSection } from '@/components/controls/ScrollSpy';
+import { Get as GetSettings } from '../../wailsjs/go/bindings/SettingsService';
+import type { hub } from '../../wailsjs/go/models';
 
 const pageVariants: Variants = {
   hidden: { opacity: 0 },
@@ -58,6 +60,24 @@ export function Settings() {
   const [logFolderSize, setLogFolderSize] = useState(47); // MB
   const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'uptodate'>('idle');
   const [stuck, setStuck] = useState(false);
+  const [about, setAbout] = useState<hub.AboutSettings | null>(null);
+
+  useEffect(() => {
+    GetSettings()
+      .then((view) => setAbout(view.about))
+      .catch((err) => console.warn('SettingsService.Get failed', err));
+  }, []);
+
+  const versionLabel = about?.version || '—';
+  const buildLabel = (() => {
+    if (!about) return '—';
+    const rev = about.gitRev?.trim() ?? '';
+    const date = about.buildDate?.trim() ?? '';
+    if (rev && date) return `${rev} · ${date}`;
+    if (rev) return rev;
+    if (date) return date;
+    return '—';
+  })();
 
   useEffect(() => {
     const main = document.querySelector('main');
@@ -306,8 +326,8 @@ export function Settings() {
       <motion.div id="about" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
         <SectionHeader title="About" />
         <dl className="grid grid-cols-[110px_1fr] gap-y-2 gap-x-4 text-[13px] py-1">
-          <dt className="text-white/[0.45]">Version</dt><dd className="text-white/[0.92] tabular-nums">0.4.0-rc1</dd>
-          <dt className="text-white/[0.45]">Build</dt><dd className="text-white/[0.92] tabular-nums">2ba7e54 · 2026-04-27</dd>
+          <dt className="text-white/[0.45]">Version</dt><dd className="text-white/[0.92] tabular-nums">{versionLabel}</dd>
+          <dt className="text-white/[0.45]">Build</dt><dd className="text-white/[0.92] tabular-nums">{buildLabel}</dd>
           <dt className="text-white/[0.45]">Backend</dt><dd className="text-white/[0.92] tabular-nums">xray-core 25.3.6</dd>
           <dt className="text-white/[0.45]">Helper</dt><dd className="text-white/[0.92] tabular-nums">1.4.2</dd>
           <dt className="text-white/[0.45]">License</dt><dd className="text-white/[0.92]">MIT</dd>
