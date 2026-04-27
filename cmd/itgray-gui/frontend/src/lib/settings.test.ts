@@ -11,6 +11,9 @@ describe('DEFAULTS', () => {
     expect(DEFAULTS.dnsMode).toBe('auto');
     expect(DEFAULTS.dnsCustom).toBe('');
     expect(DEFAULTS.allowLan).toBe(true);
+    expect(DEFAULTS.socksPort).toBe(10808);
+    expect(DEFAULTS.httpPort).toBe(10809);
+    expect(DEFAULTS.ipv6Mode).toBe('prefer-v4');
     expect(DEFAULTS.notifyConnection).toBe(true);
     expect(DEFAULTS.notifySound).toBe(false);
     expect(DEFAULTS.notifySubFailure).toBe(true);

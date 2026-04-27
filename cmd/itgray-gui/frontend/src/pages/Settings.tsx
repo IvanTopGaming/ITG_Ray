@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, type Variants } from 'framer-motion';
 import { useSettings } from '@/lib/settings';
 import { cn } from '@/lib/cn';
@@ -46,6 +46,10 @@ function isDnsValid(value: string): boolean {
   return tokens.every((t) => v4.test(t) || (v6.test(t) && t.includes(':')));
 }
 
+function isPortValid(value: number): boolean {
+  return Number.isInteger(value) && value >= 1 && value <= 65535;
+}
+
 export function Settings() {
   const [s, update] = useSettings();
   const active = useScrollSpy(SECTION_IDS);
@@ -53,6 +57,16 @@ export function Settings() {
   const [reinstallOpen, setReinstallOpen] = useState(false);
   const [logFolderSize, setLogFolderSize] = useState(47); // MB
   const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'uptodate'>('idle');
+  const [stuck, setStuck] = useState(false);
+
+  useEffect(() => {
+    const main = document.querySelector('main');
+    if (!main) return;
+    const onScroll = () => setStuck(main.scrollTop > 24);
+    onScroll();
+    main.addEventListener('scroll', onScroll, { passive: true });
+    return () => main.removeEventListener('scroll', onScroll);
+  }, []);
 
   const restartHelper = async () => {
     setHelperStatus('pending');
@@ -81,14 +95,22 @@ export function Settings() {
       animate="show"
       variants={pageVariants}
     >
-      <h1 className="text-[22px] font-semibold tracking-tight">Settings</h1>
-
       <div
         className={cn(
-          'sticky top-0 z-20 -mx-8 -my-1 px-8 py-2.5',
-          'bg-bg-1/[0.65] backdrop-blur-xl border-b border-white/[0.06]',
+          'sticky -top-8 z-20 -mx-8 px-8 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
+          stuck
+            ? 'pt-10 pb-2 bg-bg-1/[0.92] backdrop-blur-2xl border-b border-white/[0.10] shadow-[0_8px_32px_-12px_rgba(0,0,0,0.55)]'
+            : 'pt-0 pb-3 bg-transparent border-b border-transparent shadow-none',
         )}
       >
+        <h1
+          className={cn(
+            'font-semibold tracking-tight text-white/[0.92] transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
+            stuck ? 'text-[15px] mb-2' : 'text-[22px] mb-3',
+          )}
+        >
+          Settings
+        </h1>
         <ScrollSpy sections={SECTIONS} active={active} onSelect={scrollToSection} />
       </div>
 
@@ -148,6 +170,50 @@ export function Settings() {
         </Reveal>
         <SettingRow label="Allow LAN access" hint="Reach local network devices (printers, NAS) while VPN is on.">
           <Toggle value={s.allowLan} onChange={(v) => update({ allowLan: v })} />
+        </SettingRow>
+        <SettingRow label="SOCKS port" hint="Local SOCKS5 proxy port. Default 10808.">
+          <input
+            type="number"
+            min={1}
+            max={65535}
+            value={s.socksPort}
+            onChange={(e) => update({ socksPort: Number(e.target.value) || 0 })}
+            className={cn(
+              'w-24 px-3 py-1.5 bg-white/[0.06] border rounded-[10px] text-[13px] text-white text-center outline-none transition-colors tabular-nums',
+              isPortValid(s.socksPort)
+                ? 'border-white/[0.12] focus:border-white/[0.30]'
+                : 'border-danger/50',
+            )}
+          />
+        </SettingRow>
+        <SettingRow label="HTTP port" hint="Local HTTP proxy port. Default 10809.">
+          <input
+            type="number"
+            min={1}
+            max={65535}
+            value={s.httpPort}
+            onChange={(e) => update({ httpPort: Number(e.target.value) || 0 })}
+            className={cn(
+              'w-24 px-3 py-1.5 bg-white/[0.06] border rounded-[10px] text-[13px] text-white text-center outline-none transition-colors tabular-nums',
+              isPortValid(s.httpPort)
+                ? 'border-white/[0.12] focus:border-white/[0.30]'
+                : 'border-danger/50',
+            )}
+          />
+        </SettingRow>
+        <SettingRow
+          label="IPv6 routing"
+          hint="Disable IPv6 if your provider's IPv6 is broken and routing fails."
+        >
+          <Segmented
+            value={s.ipv6Mode}
+            onChange={(v) => update({ ipv6Mode: v })}
+            options={[
+              { value: 'prefer-v4', label: 'Prefer v4' },
+              { value: 'prefer-v6', label: 'Prefer v6' },
+              { value: 'disabled', label: 'Disable' },
+            ] as const}
+          />
         </SettingRow>
       </motion.div>
 

@@ -4,6 +4,7 @@ export type Language = 'en' | 'ru';
 export type NetworkMode = 'tun' | 'system-proxy' | 'off';
 export type DnsMode = 'auto' | 'custom';
 export type LogLevel = 'error' | 'info' | 'debug' | 'trace';
+export type Ipv6Mode = 'prefer-v4' | 'prefer-v6' | 'disabled';
 
 export type Settings = {
   language: Language;
@@ -13,6 +14,9 @@ export type Settings = {
   dnsMode: DnsMode;
   dnsCustom: string;
   allowLan: boolean;
+  socksPort: number;
+  httpPort: number;
+  ipv6Mode: Ipv6Mode;
   notifyConnection: boolean;
   notifySound: boolean;
   notifySubFailure: boolean;
@@ -27,6 +31,9 @@ export const DEFAULTS = {
   dnsMode: 'auto',
   dnsCustom: '',
   allowLan: true,
+  socksPort: 10808,
+  httpPort: 10809,
+  ipv6Mode: 'prefer-v4',
   notifyConnection: true,
   notifySound: false,
   notifySubFailure: true,

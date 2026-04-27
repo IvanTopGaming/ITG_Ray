@@ -39,7 +39,7 @@ export function ScrollSpy({ sections, active, onSelect, className }: ScrollSpyPr
   );
 }
 
-export function useScrollSpy(ids: readonly string[], rootMargin = '-30% 0px -60% 0px'): string {
+export function useScrollSpy(ids: readonly string[], rootMargin = '-50% 0px -50% 0px'): string {
   const [active, setActive] = useState(ids[0] ?? '');
   useEffect(() => {
     if (ids.length === 0) return;
@@ -64,5 +64,5 @@ export function useScrollSpy(ids: readonly string[], rootMargin = '-30% 0px -60%
 
 export function scrollToSection(id: string): void {
   const el = document.getElementById(id);
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
