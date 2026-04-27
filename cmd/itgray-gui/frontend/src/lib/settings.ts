@@ -1,3 +1,5 @@
+import { useSyncExternalStore } from 'react';
+
 export type Language = 'en' | 'ru';
 export type NetworkMode = 'tun' | 'system-proxy' | 'off';
 export type DnsMode = 'auto' | 'custom';
@@ -74,4 +76,63 @@ export function flushSettings(): void {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(pendingValue));
     pendingValue = null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// External store for useSyncExternalStore — shared singleton state so all
+// hook consumers re-render together on any patch or cross-tab storage event.
+// ---------------------------------------------------------------------------
+
+let currentState: Settings | null = null;
+const listeners = new Set<() => void>();
+
+function getSnapshot(): Settings {
+  if (currentState === null) currentState = loadSettings();
+  return currentState;
+}
+
+function handleStorage(event: StorageEvent): void {
+  if (event.key === STORAGE_KEY) {
+    currentState = loadSettings();
+    notifyListeners();
+  }
+}
+
+function handleBeforeUnload(): void {
+  flushSettings();
+}
+
+function notifyListeners(): void {
+  for (const cb of listeners) cb();
+}
+
+function subscribe(cb: () => void): () => void {
+  const isFirst = listeners.size === 0;
+  listeners.add(cb);
+  if (isFirst && typeof window !== 'undefined') {
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+  }
+  return (): void => {
+    listeners.delete(cb);
+    if (listeners.size === 0) {
+      // Reset cached state so the next subscriber gets a fresh read from
+      // localStorage. This also means tests get a clean slate after unmount.
+      currentState = null;
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('storage', handleStorage);
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+      }
+    }
+  };
+}
+
+export function useSettings(): [Settings, (patch: Partial<Settings>) => void] {
+  const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const update = (patch: Partial<Settings>): void => {
+    currentState = { ...getSnapshot(), ...patch };
+    saveSettings(currentState);
+    notifyListeners();
+  };
+  return [state, update];
 }

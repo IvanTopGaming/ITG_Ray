@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { DEFAULTS, STORAGE_KEY, loadSettings, saveSettings, flushSettings } from './settings';
+import { renderHook, act } from '@testing-library/react';
+import { DEFAULTS, STORAGE_KEY, loadSettings, saveSettings, flushSettings, useSettings } from './settings';
 
 describe('DEFAULTS', () => {
   it('contains all expected keys with correct types', () => {
@@ -95,5 +96,52 @@ describe('flushSettings', () => {
     localStorage.clear();
     vi.advanceTimersByTime(250);
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+});
+
+describe('useSettings', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.useFakeTimers();
+  });
+
+  it('returns DEFAULTS initially', () => {
+    const { result } = renderHook(() => useSettings());
+    expect(result.current[0]).toEqual(DEFAULTS);
+  });
+
+  it('updates state and persists when patch is applied', () => {
+    const { result } = renderHook(() => useSettings());
+    act(() => result.current[1]({ language: 'ru' }));
+    expect(result.current[0].language).toBe('ru');
+    expect(result.current[0].allowLan).toBe(true); // unchanged
+    vi.advanceTimersByTime(250);
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
+    expect(stored.language).toBe('ru');
+  });
+
+  it('shares state across multiple hook subscribers', () => {
+    const { result: a } = renderHook(() => useSettings());
+    const { result: b } = renderHook(() => useSettings());
+    act(() => a.current[1]({ allowLan: false }));
+    expect(b.current[0].allowLan).toBe(false);
+  });
+
+  it('persists pending changes immediately on flushSettings()', () => {
+    const { result } = renderHook(() => useSettings());
+    act(() => result.current[1]({ language: 'ru' }));
+    // Don't advance timers; flush manually.
+    flushSettings();
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
+    expect(stored.language).toBe('ru');
+  });
+
+  it('reloads state when another tab writes to localStorage', () => {
+    const { result } = renderHook(() => useSettings());
+    act(() => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...DEFAULTS, language: 'ru' }));
+      window.dispatchEvent(new StorageEvent('storage', { key: STORAGE_KEY, newValue: localStorage.getItem(STORAGE_KEY) }));
+    });
+    expect(result.current[0].language).toBe('ru');
   });
 });
