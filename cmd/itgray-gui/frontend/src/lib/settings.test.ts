@@ -1,6 +1,12 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+
+vi.mock('../../wailsjs/go/bindings/SettingsService', () => ({
+  Get: vi.fn(),
+}));
+
 import { DEFAULTS, STORAGE_KEY, loadSettings, saveSettings, flushSettings, useSettings, __resetForTests } from './settings';
+import { Get as GetSettings } from '../../wailsjs/go/bindings/SettingsService';
 
 describe('DEFAULTS', () => {
   it('contains all expected keys with correct types', () => {
@@ -159,5 +165,52 @@ describe('useSettings', () => {
     const first = result.current[1];
     rerender();
     expect(result.current[1]).toBe(first);
+  });
+});
+
+describe('useSettings backend load', () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+    __resetForTests();
+    localStorage.clear();
+    vi.mocked(GetSettings).mockReset();
+    (window as any).go = {};
+  });
+  afterEach(() => {
+    delete (window as any).go;
+  });
+
+  it('merges backend mapped fields over localStorage on first subscribe', async () => {
+    vi.mocked(GetSettings).mockResolvedValue({
+      general: { language: 'ru', theme: 'dark', autostart: true, closeToTray: false, startMinimized: false },
+      network: { defaultMode: 'tun', tunCidr: '', tunName: '', socksPort: 12345, xrayPort: 0 },
+      subscriptions: { defaultUpdateInterval: 0, userAgent: '' },
+      notifications: { onConnected: false, onDisconnected: false, onError: false, onSubSynced: false },
+      debug: { logLevel: 'debug' },
+      about: { version: '', gitRev: '', buildDate: '' },
+      security: { method: '', available: false },
+    } as any);
+
+    const { result } = renderHook(() => useSettings());
+    await act(async () => { await Promise.resolve(); });
+
+    expect(result.current[0].language).toBe('ru');
+    expect(result.current[0].launchOnStartup).toBe(true);
+    expect(result.current[0].socksPort).toBe(12345);
+    expect(result.current[0].logLevel).toBe('debug');
+    expect(result.current[0].httpPort).toBe(10809);
+    expect(result.current[0].dnsMode).toBe('auto');
+  });
+
+  it('leaves state unchanged when backend rejects', async () => {
+    vi.mocked(GetSettings).mockRejectedValue(new Error('binding failed'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const { result } = renderHook(() => useSettings());
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    expect(result.current[0]).toEqual(DEFAULTS);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

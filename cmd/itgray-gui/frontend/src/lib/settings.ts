@@ -1,4 +1,6 @@
 import { useSyncExternalStore, useCallback } from 'react';
+import { Get as GetSettings } from '../../wailsjs/go/bindings/SettingsService';
+import { backendToFrontend } from './settingsAdapter';
 
 export type Language = 'en' | 'ru';
 export type NetworkMode = 'tun' | 'system-proxy' | 'off';
@@ -92,6 +94,28 @@ export function flushSettings(): void {
 
 let currentState: Settings | null = null;
 const listeners = new Set<() => void>();
+let backendFetchStarted = false;
+
+function loadFromBackend(): void {
+  if (backendFetchStarted) return;
+  backendFetchStarted = true;
+  // Bail when running outside a Wails-injected window (jsdom tests, SSR).
+  if (typeof window === 'undefined' || !(window as any).go) return;
+  let p;
+  try {
+    p = GetSettings();
+  } catch (err) {
+    console.warn('SettingsService.Get unavailable', err);
+    return;
+  }
+  p.then((view) => {
+    const patch = backendToFrontend(view);
+    currentState = { ...getSnapshot(), ...patch };
+    notifyListeners();
+  }).catch((err) => {
+    console.warn('SettingsService.Get failed', err);
+  });
+}
 
 function getSnapshot(): Settings {
   if (currentState === null) currentState = loadSettings();
@@ -119,6 +143,7 @@ function subscribe(cb: () => void): () => void {
   if (isFirst && typeof window !== 'undefined') {
     window.addEventListener('storage', handleStorage);
     window.addEventListener('beforeunload', handleBeforeUnload);
+    loadFromBackend();
   }
   return (): void => {
     listeners.delete(cb);
@@ -143,6 +168,7 @@ export function __resetForTests(): void {
     saveTimer = null;
   }
   pendingValue = null;
+  backendFetchStarted = false;
 }
 
 export function useSettings(): [Settings, (patch: Partial<Settings>) => void] {

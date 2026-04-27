@@ -137,6 +137,16 @@ export function Settings() {
       {/* General */}
       <motion.div id="general" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
         <SectionHeader title="General" />
+        <SettingRow label="Language" hint="Interface display language.">
+          <Segmented
+            value={s.language}
+            onChange={(v) => update({ language: v })}
+            options={[
+              { value: 'en', label: 'English' },
+              { value: 'ru', label: 'Русский' },
+            ] as const}
+          />
+        </SettingRow>
         <SettingRow label="Launch on system startup" hint="Start ITG Ray automatically when you log in.">
           <Toggle value={s.launchOnStartup} onChange={(v) => update({ launchOnStartup: v })} />
         </SettingRow>
