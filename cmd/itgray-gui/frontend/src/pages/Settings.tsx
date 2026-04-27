@@ -10,6 +10,7 @@ import { SettingRow, SectionHeader } from '@/components/controls/SettingRow';
 import { ConfirmButton } from '@/components/controls/ConfirmButton';
 import { ConfirmDialog } from '@/components/controls/ConfirmDialog';
 import { StatusPill, type StatusPillStatus } from '@/components/controls/StatusPill';
+import { ScrollSpy, useScrollSpy, scrollToSection } from '@/components/controls/ScrollSpy';
 
 const pageVariants: Variants = {
   hidden: { opacity: 0 },
@@ -24,6 +25,16 @@ const sectionVariants: Variants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.24, ease: [0.16, 1, 0.3, 1] } },
 };
 
+const SECTIONS = [
+  { id: 'general', label: 'General' },
+  { id: 'connection', label: 'Connection' },
+  { id: 'notifications', label: 'Notifications' },
+  { id: 'helper', label: 'Helper' },
+  { id: 'logs', label: 'Logs' },
+  { id: 'about', label: 'About' },
+];
+const SECTION_IDS = SECTIONS.map((s) => s.id);
+
 // Empty string is valid (= no override). Otherwise, comma-separated tokens
 // must each parse as IPv4 or IPv6. Visual-only — backend re-validates.
 function isDnsValid(value: string): boolean {
@@ -37,8 +48,11 @@ function isDnsValid(value: string): boolean {
 
 export function Settings() {
   const [s, update] = useSettings();
+  const active = useScrollSpy(SECTION_IDS);
   const [helperStatus, setHelperStatus] = useState<StatusPillStatus>('running');
   const [reinstallOpen, setReinstallOpen] = useState(false);
+  const [logFolderSize, setLogFolderSize] = useState(47); // MB
+  const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'uptodate'>('idle');
 
   const restartHelper = async () => {
     setHelperStatus('pending');
@@ -52,6 +66,14 @@ export function Settings() {
     setHelperStatus('running');
   };
 
+  const clearLogs = () => setLogFolderSize(0);
+
+  const checkUpdates = async () => {
+    setUpdateState('checking');
+    await new Promise((r) => setTimeout(r, 1500));
+    setUpdateState('uptodate');
+  };
+
   return (
     <motion.section
       className="flex flex-col gap-3"
@@ -61,8 +83,17 @@ export function Settings() {
     >
       <h1 className="text-[22px] font-semibold tracking-tight">Settings</h1>
 
+      <div
+        className={cn(
+          'sticky top-0 z-20 -mx-8 -my-1 px-8 py-2.5',
+          'bg-bg-1/[0.65] backdrop-blur-xl border-b border-white/[0.06]',
+        )}
+      >
+        <ScrollSpy sections={SECTIONS} active={active} onSelect={scrollToSection} />
+      </div>
+
       {/* General */}
-      <motion.div variants={sectionVariants} className="glass-regular rounded-2xl p-5">
+      <motion.div id="general" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
         <SectionHeader title="General" />
         <SettingRow label="Launch on system startup" hint="Start ITG Ray automatically when you log in.">
           <Toggle value={s.launchOnStartup} onChange={(v) => update({ launchOnStartup: v })} />
@@ -73,7 +104,7 @@ export function Settings() {
       </motion.div>
 
       {/* Connection */}
-      <motion.div variants={sectionVariants} className="glass-regular rounded-2xl p-5">
+      <motion.div id="connection" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
         <SectionHeader title="Connection" />
         <SettingRow
           label="Network mode"
@@ -121,7 +152,7 @@ export function Settings() {
       </motion.div>
 
       {/* Notifications */}
-      <motion.div variants={sectionVariants} className="glass-regular rounded-2xl p-5">
+      <motion.div id="notifications" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
         <SectionHeader title="Notifications" />
         <SettingRow label="Connection toasts" hint="Show OS notifications on connect, disconnect, and errors.">
           <Toggle value={s.notifyConnection} onChange={(v) => update({ notifyConnection: v })} />
@@ -135,7 +166,7 @@ export function Settings() {
       </motion.div>
 
       {/* Helper */}
-      <motion.div variants={sectionVariants} className="glass-regular rounded-2xl p-5">
+      <motion.div id="helper" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
         <SectionHeader title="Helper service" right={<StatusPill status={helperStatus} />} />
         <SettingRow
           label="Status"
@@ -172,6 +203,69 @@ export function Settings() {
         confirmVariant="primary"
         onConfirm={reinstallHelper}
       />
+
+      {/* Logs */}
+      <motion.div id="logs" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
+        <SectionHeader title="Logs" />
+        <SettingRow
+          label="Log level"
+          hint="More detail helps when debugging connection issues, but fills disk faster."
+        >
+          <Segmented
+            value={s.logLevel}
+            onChange={(v) => update({ logLevel: v })}
+            options={[
+              { value: 'error', label: 'Error' },
+              { value: 'info', label: 'Info' },
+              { value: 'debug', label: 'Debug' },
+              { value: 'trace', label: 'Trace' },
+            ] as const}
+          />
+        </SettingRow>
+        <SettingRow label="Open log folder" hint={`%LOCALAPPDATA%\\ITG Ray\\logs (${logFolderSize} MB)`}>
+          <button
+            type="button"
+            onClick={() => console.log('[mock] open log folder')}
+            className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] border border-white/[0.10] text-white/[0.92] hover:bg-white/[0.05]"
+          >
+            Open folder
+          </button>
+        </SettingRow>
+        <SettingRow label="Clear old logs" hint="Delete log files older than 7 days.">
+          <ConfirmButton onConfirm={clearLogs} variant="danger">Clear</ConfirmButton>
+        </SettingRow>
+      </motion.div>
+
+      {/* About */}
+      <motion.div id="about" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
+        <SectionHeader title="About" />
+        <dl className="grid grid-cols-[110px_1fr] gap-y-2 gap-x-4 text-[13px] py-1">
+          <dt className="text-white/[0.45]">Version</dt><dd className="text-white/[0.92] tabular-nums">0.4.0-rc1</dd>
+          <dt className="text-white/[0.45]">Build</dt><dd className="text-white/[0.92] tabular-nums">2ba7e54 · 2026-04-27</dd>
+          <dt className="text-white/[0.45]">Backend</dt><dd className="text-white/[0.92] tabular-nums">xray-core 25.3.6</dd>
+          <dt className="text-white/[0.45]">Helper</dt><dd className="text-white/[0.92] tabular-nums">1.4.2</dd>
+          <dt className="text-white/[0.45]">License</dt><dd className="text-white/[0.92]">MIT</dd>
+        </dl>
+        <SettingRow
+          label="Check for updates"
+          hint={
+            updateState === 'uptodate'
+              ? "You're up to date."
+              : updateState === 'checking'
+              ? 'Checking…'
+              : 'Last checked 12 minutes ago.'
+          }
+        >
+          <button
+            type="button"
+            onClick={checkUpdates}
+            disabled={updateState === 'checking'}
+            className="px-3.5 py-1.5 text-xs font-semibold rounded-[10px] bg-gradient-to-b from-accent-start to-accent-mid text-white disabled:opacity-60"
+          >
+            {updateState === 'checking' ? 'Checking…' : 'Check now'}
+          </button>
+        </SettingRow>
+      </motion.div>
     </motion.section>
   );
 }
