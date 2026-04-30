@@ -150,18 +150,9 @@ func main() {
 			chainCtrl.Reconcile(ctx)
 		},
 		OnBeforeClose: func(ctx context.Context) (prevent bool) {
-			// Close-to-tray: when General.CloseToTray is true, intercept
-			// the close, hide the window, and keep the process alive so
-			// the tray (or, for now, the headless event loop) continues
-			// driving the chain. Disk read on the close path is fine —
-			// it happens once per click.
-			view, err := settingsStore.View()
-			if err != nil {
-				return false // best-effort: a config read error should not block quit
-			}
-			if !view.General.CloseToTray {
-				return false
-			}
+			// Always hide-to-tray on close; "quit" is only available via
+			// the tray menu. Keeps the process alive so the tray (or, for
+			// now, the headless event loop) continues driving the chain.
 			wailsruntime.WindowHide(ctx)
 			return true
 		},

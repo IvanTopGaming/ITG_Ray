@@ -10,9 +10,7 @@ import (
 // General holds UI and behaviour preferences.
 type General struct {
 	Language       string `json:"language"`
-	Theme          string `json:"theme"`
 	Autostart      bool   `json:"autostart"`
-	CloseToTray    bool   `json:"close_to_tray"`
 	StartMinimized bool   `json:"start_minimized"`
 }
 
@@ -50,12 +48,6 @@ type KillSwitch struct {
 	AlwaysOn bool `json:"always_on"`
 }
 
-// Updates configures the auto-update check policy.
-type Updates struct {
-	AutoCheck bool   `json:"auto_check"`
-	Channel   string `json:"channel"`
-}
-
 // Notifications enables/disables event-driven OS toasts.
 type Notifications struct {
 	Connected    bool `json:"connected"`
@@ -76,7 +68,6 @@ type Config struct {
 	General       General       `json:"general"`
 	Network       Network       `json:"network"`
 	KillSwitch    KillSwitch    `json:"killswitch"`
-	Updates       Updates       `json:"updates"`
 	Notifications Notifications `json:"notifications"`
 	Debug         Debug         `json:"debug"`
 }
@@ -84,7 +75,7 @@ type Config struct {
 func defaults() Config {
 	return Config{
 		Version: 1,
-		General: General{Language: "en", Theme: "dark", CloseToTray: true},
+		General: General{Language: "en"},
 		Network: Network{
 			Mode:     "tun",
 			TUN:      TUN{IPv4CIDR: "198.18.0.1/15", MTU: 1500},
@@ -94,7 +85,6 @@ func defaults() Config {
 			DNS:      DNS{Mode: "auto", Servers: nil},
 		},
 		KillSwitch:    KillSwitch{Enabled: true},
-		Updates:       Updates{AutoCheck: true, Channel: "stable"},
 		Notifications: Notifications{Connected: true, Disconnected: true, QuotaLow: true, SubUpdated: true, Sound: true},
 		Debug:         Debug{LogLevel: "info"},
 	}

@@ -36,7 +36,7 @@ func TestLoad_OldConfigGetsDefaultsForMissingFields(t *testing.T) {
 	// Simulate a pre-Tier-2a config — only general+network.mode present.
 	old := []byte(`{
 	  "version": 1,
-	  "general": {"language": "ru", "theme": "dark"},
+	  "general": {"language": "ru"},
 	  "network": {"mode": "sysproxy"}
 	}`)
 	require.NoError(t, os.WriteFile(path, old, 0o600))

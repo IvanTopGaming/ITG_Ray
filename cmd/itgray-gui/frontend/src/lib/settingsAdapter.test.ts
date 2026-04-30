@@ -11,9 +11,7 @@ function makeView(overrides: Partial<{
   return {
     general: {
       language: 'en',
-      theme: 'dark',
       autostart: false,
-      closeToTray: false,
       startMinimized: false,
       ...overrides.general,
     },

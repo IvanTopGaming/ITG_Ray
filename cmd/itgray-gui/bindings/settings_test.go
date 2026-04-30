@@ -29,8 +29,6 @@ func TestSettingsService_Get_DefaultsWhenMissing(t *testing.T) {
 	view, err := svc.Get()
 	require.NoError(t, err)
 	require.Equal(t, "en", view.General.Language)
-	require.Equal(t, "dark", view.General.Theme)
-	require.True(t, view.General.CloseToTray)
 	require.Equal(t, "tun", view.Network.DefaultMode)
 	require.Equal(t, "198.18.0.1/15", view.Network.TunCIDR)
 	require.Equal(t, "test", view.About.Version)

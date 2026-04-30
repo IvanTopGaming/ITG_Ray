@@ -66,9 +66,7 @@ type SettingsView struct {
 // GeneralSettings holds top-level UX preferences.
 type GeneralSettings struct {
 	Language       string `json:"language"` // "en" | "ru" | "auto"
-	Theme          string `json:"theme"`    // "dark" (only)
 	Autostart      bool   `json:"autostart"`
-	CloseToTray    bool   `json:"closeToTray"`
 	StartMinimized bool   `json:"startMinimized"`
 }
 

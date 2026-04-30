@@ -80,9 +80,7 @@ func (s *ConfigStore) toView(c *config.Config) hub.SettingsView {
 	return hub.SettingsView{
 		General: hub.GeneralSettings{
 			Language:       c.General.Language,
-			Theme:          c.General.Theme,
 			Autostart:      c.General.Autostart,
-			CloseToTray:    c.General.CloseToTray,
 			StartMinimized: c.General.StartMinimized,
 		},
 		Network: hub.NetworkSettings{
@@ -157,14 +155,8 @@ func applyGeneral(g *config.General, p map[string]any) {
 	if v, ok := p["language"].(string); ok {
 		g.Language = v
 	}
-	if v, ok := p["theme"].(string); ok {
-		g.Theme = v
-	}
 	if v, ok := p["autostart"].(bool); ok {
 		g.Autostart = v
-	}
-	if v, ok := p["closeToTray"].(bool); ok {
-		g.CloseToTray = v
 	}
 	if v, ok := p["startMinimized"].(bool); ok {
 		g.StartMinimized = v

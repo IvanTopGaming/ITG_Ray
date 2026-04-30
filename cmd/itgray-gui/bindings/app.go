@@ -238,7 +238,7 @@ func hostPort(addr string, port uint16) string {
 // Settings collection is stubbed in C.T3 — values are filled by C.T12.
 func (a *AppService) collectSettings() hub.SettingsView {
 	return hub.SettingsView{
-		General:       hub.GeneralSettings{Language: "auto", Theme: "dark", CloseToTray: true},
+		General:       hub.GeneralSettings{Language: "auto"},
 		Network:       hub.NetworkSettings{DefaultMode: "tun", TunCIDR: "198.18.0.1/15", TunName: "ITGRay-TUN", SocksPort: 1080, HttpPort: 1081},
 		Subscriptions: hub.SubscriptionSettings{DefaultUpdateInterval: 3600, UserAgent: "ITG-Ray/0.1"},
 		Notifications: hub.NotificationSettings{OnConnected: true, OnDisconnected: true, QuotaLow: true},
