@@ -196,7 +196,7 @@ func (s *SubsService) SyncOne(id string) error {
 	// bytes; mirror that so the on-disk status field stays manageable.
 	var storedStatus string
 	if status == "OK" {
-		storedStatus = "OK " + meta.Summary
+		storedStatus = "OK " + meta.Message
 	} else {
 		storedStatus = "ERROR: " + truncate(msg, 120)
 	}

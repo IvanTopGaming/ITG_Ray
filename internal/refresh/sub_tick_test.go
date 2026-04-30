@@ -68,7 +68,7 @@ func TestSyncOne_Success_WritesServersAndOKMeta(t *testing.T) {
 
 	merged := []server.Server{{ID: "srv1", Name: "X", Vless: vless.Config{Address: "a.test", Port: 443, UUID: "u"}}}
 	syncFn := func(_ context.Context, _ subscription.Subscription, _ []server.Server, _ time.Duration) ([]server.Server, subscription.SyncMeta, error) {
-		return merged, subscription.SyncMeta{Status: "OK", Summary: "imported=1 invalid=0 skipped=0"}, nil
+		return merged, subscription.SyncMeta{Status: "OK", Message: "imported=1 invalid=0 skipped=0"}, nil
 	}
 	d := mkDriver(t, st, serversPath, syncFn)
 
@@ -161,7 +161,7 @@ func TestRunSub_FirstTickWithinJitterWindow(t *testing.T) {
 	syncCh := make(chan time.Time, 4)
 	syncFn := func(_ context.Context, _ subscription.Subscription, existing []server.Server, _ time.Duration) ([]server.Server, subscription.SyncMeta, error) {
 		syncCh <- time.Now()
-		return existing, subscription.SyncMeta{Status: "OK", Summary: "imported=0"}, nil
+		return existing, subscription.SyncMeta{Status: "OK", Message: "imported=0"}, nil
 	}
 	const testJitterMax = 50 * time.Millisecond
 	d := NewDriver(Config{
@@ -202,7 +202,7 @@ func TestRunSub_ZeroIntervalUsesDriverDefault(t *testing.T) {
 	syncCh := make(chan struct{}, 8)
 	syncFn := func(_ context.Context, _ subscription.Subscription, existing []server.Server, _ time.Duration) ([]server.Server, subscription.SyncMeta, error) {
 		syncCh <- struct{}{}
-		return existing, subscription.SyncMeta{Status: "OK", Summary: "imported=0"}, nil
+		return existing, subscription.SyncMeta{Status: "OK", Message: "imported=0"}, nil
 	}
 	d := NewDriver(Config{
 		Subs:               st,

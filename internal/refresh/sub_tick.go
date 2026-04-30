@@ -46,7 +46,7 @@ func (d *Driver) syncOne(ctx context.Context, sub subscription.Stored) {
 	if syncErr != nil {
 		status = "ERROR: " + truncate(syncErr.Error(), lastStatusMaxLen)
 	} else {
-		status = "OK " + meta.Summary
+		status = "OK " + meta.Message
 	}
 	if err := d.subs.UpdateMeta(sub.ID, d.now(), status, "", nil); err != nil {
 		d.log.Error("refresh.sync.updateMeta", "id", sub.ID, "err", err)

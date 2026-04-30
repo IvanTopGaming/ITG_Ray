@@ -117,8 +117,8 @@ func newSubCmd() *cobra.Command {
 					continue
 				}
 				existing = merged
-				fmt.Printf("%s\t%s\t%s\n", s.ID, meta.Status, meta.Summary)
-				_ = st.UpdateMeta(s.ID, time.Now(), "OK "+meta.Summary, "", nil)
+				fmt.Printf("%s\t%s\t%s\n", s.ID, meta.Status, meta.Message)
+				_ = st.UpdateMeta(s.ID, time.Now(), "OK "+meta.Message, "", nil)
 			}
 			return server.Save(serversPath(), existing)
 		},

@@ -31,7 +31,7 @@ func (f *fakeStore) UpdateMeta(_ string, _ time.Time, _, _ string, _ *subscripti
 // noopSync / noopProbe are placeholders for the skeleton tests; later tasks
 // add tests that drive these through fake versions with side-effects.
 func noopSync(_ context.Context, _ subscription.Subscription, existing []server.Server, _ time.Duration) ([]server.Server, subscription.SyncMeta, error) {
-	return existing, subscription.SyncMeta{Status: "OK", Summary: "imported=0"}, nil
+	return existing, subscription.SyncMeta{Status: "OK", Message: "imported=0"}, nil
 }
 func noopProbe(_ context.Context, _ string, _ time.Duration) (time.Duration, error) {
 	return 0, nil
@@ -139,7 +139,7 @@ func TestDriver_SyncAndProbe_RaceFree(t *testing.T) {
 				Vless: vless.Config{Address: "x.test", Port: 443, UUID: "u"},
 			}
 		}
-		return out, subscription.SyncMeta{Status: "OK", Summary: fmt.Sprintf("imported=%d", n)}, nil
+		return out, subscription.SyncMeta{Status: "OK", Message: fmt.Sprintf("imported=%d", n)}, nil
 	}
 	probeFn := func(_ context.Context, _ string, _ time.Duration) (time.Duration, error) {
 		return time.Duration(counter.Load()%30) * time.Millisecond, nil
