@@ -1,6 +1,9 @@
 package bindings
 
 import (
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"testing"
 	"time"
@@ -126,4 +129,48 @@ func TestSubsService_Remove(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, all, 1)
 	require.Equal(t, "s2", all[0].ID)
+}
+
+// failingSaveServerStore returns from Load but always errors on Save — used
+// to exercise the SyncOne disk-failure-after-successful-fetch branch.
+type failingSaveServerStore struct{}
+
+func (failingSaveServerStore) Load() ([]server.Server, error) { return nil, nil }
+func (failingSaveServerStore) Save([]server.Server) error    { return errors.New("disk full") }
+
+// TestSubsService_SyncOne_PreservesUserinfoOnSaveFailure guards against the
+// regression where ServerStore.Save failure overwrites syncErr and silently
+// drops the freshly parsed Subscription-Userinfo, leaving subs.json with
+// stale quota figures next to a red ERROR badge.
+func TestSubsService_SyncOne_PreservesUserinfoOnSaveFailure(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Subscription-Userinfo", "upload=900; download=800; total=1024")
+		_, _ = w.Write([]byte("vless://00000000-0000-0000-0000-000000000000@1.2.3.4:443?type=tcp&security=tls&sni=x#A\n"))
+	}))
+	t.Cleanup(ts.Close)
+
+	dir := t.TempDir()
+	subStore := subscription.FileStore{Path: filepath.Join(dir, "subs.json")}
+	require.NoError(t, subStore.Save([]subscription.Stored{{
+		ID:     "s1",
+		Name:   "test",
+		URL:    ts.URL,
+		Upload: 100, Download: 200, Total: 1024,
+	}}))
+
+	svc := NewSubsService(SubsDeps{
+		SubStore:    subStore,
+		ServerStore: failingSaveServerStore{},
+		Hub:         hub.New(),
+	})
+
+	err := svc.SyncOne("s1")
+	require.Error(t, err, "Save failure must surface to caller")
+
+	got, err := subStore.Load()
+	require.NoError(t, err)
+	require.EqualValues(t, 900, got[0].Upload, "fresh Upload persists despite Save failure")
+	require.EqualValues(t, 800, got[0].Download, "fresh Download persists despite Save failure")
+	require.EqualValues(t, 1024, got[0].Total, "fresh Total persists despite Save failure")
+	require.Equal(t, "error", got[0].LastStatus, "status reflects disk failure")
 }

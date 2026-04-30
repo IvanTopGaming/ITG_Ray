@@ -57,8 +57,17 @@ describe("backendToFrontend", () => {
     expect(backendToFrontend(makeView({ lastSyncStatus: "OK", lastSyncAt: "2026-04-30T10:30:00Z" })).status).toBe("ok");
     expect(backendToFrontend(makeView({ lastSyncStatus: "ERROR", lastSyncAt: "2026-04-30T10:30:00Z" })).status).toBe("error");
     expect(backendToFrontend(makeView({ lastSyncStatus: " Ok ", lastSyncAt: "2026-04-30T10:30:00Z" })).status).toBe("ok");
-    // Prefixed legacy form falls through to error (fail-safe correct).
+    // Prefixed ERROR form falls through to error (fail-safe correct).
     expect(backendToFrontend(makeView({ lastSyncStatus: "ERROR: timeout", lastSyncAt: "2026-04-30T10:30:00Z" })).status).toBe("error");
+  });
+
+  it("normalizes legacy prefixed 'OK <summary>' written by pre-Tier-2a CLI", () => {
+    // Pre-PR cmd/itgray-cli/subs.go wrote `"OK "+meta.Summary` (e.g.
+    // "OK imported=3 invalid=0 skipped=0"). On upgrade those rows must
+    // render as ok, not silently flip to a red ERROR badge.
+    expect(
+      backendToFrontend(makeView({ lastSyncStatus: "OK imported=3 invalid=0 skipped=0", lastSyncAt: "2026-04-30T10:30:00Z" })).status,
+    ).toBe("ok");
   });
 
   it("treats unknown status as error (fail-safe)", () => {

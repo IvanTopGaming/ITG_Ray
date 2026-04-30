@@ -13,6 +13,13 @@ import (
 // The Has* flags distinguish "field absent or malformed in the header" from
 // "field explicitly set to zero" — without them, a partial header would
 // silently overwrite stored quota values with zeros on UpdateMeta.
+//
+// HasExpire mirrors the same protocol for the *time.Time pointer: parseUserinfo
+// sets HasExpire=true whenever the expire key parses, even when its value is
+// the no-expiry sentinel (expire<=0) that maps to Expire=nil. UpdateMeta then
+// gates the Expire write on HasExpire so a provider transitioning a sub from
+// a real timestamp to "no expiry" can clear the stored value, while a header
+// that omits expire entirely still preserves the prior timestamp.
 type Userinfo struct {
 	Upload      int64
 	Download    int64
@@ -21,6 +28,7 @@ type Userinfo struct {
 	HasUpload   bool
 	HasDownload bool
 	HasTotal    bool
+	HasExpire   bool
 }
 
 // Headers holds the de-facto-standard subscription metadata that panels emit
@@ -79,8 +87,12 @@ func parseUserinfo(s string) *Userinfo {
 			u.Total = v
 			u.HasTotal = true
 		case "expire":
-			// expire=0 is the Subscription-Userinfo convention for "no expiry";
-			// don't store a real timestamp at the Unix epoch.
+			// HasExpire is set whenever the key parses — including the
+			// expire=0 "no expiry" sentinel — so UpdateMeta can distinguish
+			// "header omitted expire" (preserve prior) from "header said no
+			// expiry" (clear prior). Only assign a real timestamp for v>0;
+			// the Unix epoch is never a meaningful expiry value here.
+			u.HasExpire = true
 			if v <= 0 {
 				continue
 			}

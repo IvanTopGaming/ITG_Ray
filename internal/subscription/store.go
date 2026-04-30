@@ -152,7 +152,10 @@ func (s FileStore) UpdateMeta(id string, at time.Time, status, message string, u
 			if ui.HasTotal {
 				subs[i].Total = ui.Total
 			}
-			if ui.Expire != nil {
+			if ui.HasExpire {
+				// ui.Expire may be nil when the header signaled expire=0
+				// ("no expiry"): assigning nil clears any prior timestamp,
+				// which is the lifetime-upgrade path we want to support.
 				subs[i].Expire = ui.Expire
 			}
 		}

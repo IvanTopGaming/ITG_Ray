@@ -229,7 +229,7 @@ func TestFileStore_UpdateMeta_WritesMessageAndUserinfo(t *testing.T) {
 		Upload: 10, HasUpload: true,
 		Download: 20, HasDownload: true,
 		Total: 30, HasTotal: true,
-		Expire: &expire,
+		Expire: &expire, HasExpire: true,
 	}
 	at := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
 
@@ -267,6 +267,36 @@ func TestFileStore_UpdateMeta_PartialUserinfo_PreservesUnsetFields(t *testing.T)
 	require.EqualValues(t, 888, got[0].Download, "prior Download preserved (not in header)")
 	require.EqualValues(t, 2000, got[0].Total, "Total updated from header")
 	require.NotNil(t, got[0].Expire, "prior Expire preserved (not in header)")
+}
+
+// TestFileStore_UpdateMeta_HasExpireClearsPriorExpiry guards the lifetime-
+// upgrade path: a subscription that previously had an expiry now reports
+// expire=0 (no expiry). parseUserinfo leaves Expire=nil but flags HasExpire
+// so UpdateMeta knows to clear the stored timestamp instead of preserving it.
+func TestFileStore_UpdateMeta_HasExpireClearsPriorExpiry(t *testing.T) {
+	dir := t.TempDir()
+	fs := FileStore{Path: filepath.Join(dir, "subs.json")}
+	expire := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
+	require.NoError(t, fs.Save([]Stored{{
+		ID: "s1", Name: "A", URL: "https://a.test",
+		Upload: 100, Download: 200, Total: 1000, Expire: &expire,
+	}}))
+
+	// Provider returns expire=0 alongside fresh quota figures: HasExpire=true
+	// with Expire=nil signals "explicitly no expiry".
+	ui := &Userinfo{
+		Upload: 100, HasUpload: true,
+		Download: 200, HasDownload: true,
+		Total: 2000, HasTotal: true,
+		Expire: nil, HasExpire: true,
+	}
+	at := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, fs.UpdateMeta("s1", at, "ok", "", ui))
+
+	got, err := fs.Load()
+	require.NoError(t, err)
+	require.Nil(t, got[0].Expire, "HasExpire=true with Expire=nil must clear the stored timestamp")
+	require.EqualValues(t, 2000, got[0].Total, "fresh Total still applied")
 }
 
 func TestFileStore_UpdateMeta_NilUserinfo_PreservesPriorQuota(t *testing.T) {

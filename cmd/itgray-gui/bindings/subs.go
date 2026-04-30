@@ -163,6 +163,11 @@ func (s *SubsService) SyncOne(id string) error {
 	}
 
 	merged, meta, syncErr := subscription.Sync(ctx, found.ToSyncInput(), existing, syncTimeout)
+	// Capture the upstream-fetch outcome before the Save branch may
+	// overwrite syncErr — Userinfo is meaningful exactly when the fetch
+	// itself succeeded, regardless of whether the disk write that follows
+	// it succeeds.
+	syncOK := syncErr == nil
 
 	// Local override pattern: status/msg start from meta and are explicitly
 	// overridden only when ServerStore.Save fails after a successful Sync.
@@ -170,7 +175,7 @@ func (s *SubsService) SyncOne(id string) error {
 	status := meta.Status
 	msg := meta.Message
 	imported := 0
-	if syncErr == nil {
+	if syncOK {
 		// Successful sync: persist merged servers + count post-merge entries
 		// belonging to this sub. importedCount is what the reducer uses to
 		// keep the badge fresh between snapshot refreshes.
@@ -194,10 +199,11 @@ func (s *SubsService) SyncOne(id string) error {
 	// swallowed so a transient meta-write hiccup does not mask the real
 	// fetch error in syncErr below. CLI truncates the message to 120
 	// bytes; mirror that so the on-disk LastMessage stays manageable.
-	// Only attach Userinfo when the upstream Sync itself succeeded — on
-	// any error path the parsed quota is stale or absent.
+	// Attach Userinfo whenever the upstream fetch succeeded; the gate must
+	// be syncOK, not syncErr, since a post-fetch Save failure overwrites
+	// syncErr but does not invalidate the parsed quota.
 	var ui *subscription.Userinfo
-	if syncErr == nil {
+	if syncOK {
 		ui = meta.Headers.Userinfo
 	}
 	_ = s.d.SubStore.UpdateMeta(id, time.Now(), status, truncate(msg, 120), ui)

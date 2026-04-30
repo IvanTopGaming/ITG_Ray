@@ -28,10 +28,11 @@ function parseTime(t: unknown): number | null {
 function deriveStatus(view: hub.SubView): Status {
   const lastSyncAt = parseTime(view.lastSyncAt);
   // Tolerate legacy uppercase / prefixed values written by older builds:
-  // "OK", "ERROR", "ERROR: timeout" → normalize before matching.
+  // pre-Tier-2a CLI wrote "OK "+summary (e.g. "OK imported=3 invalid=0
+  // skipped=0"); accept both the bare enum and the prefixed legacy form.
   const raw = (view.lastSyncStatus ?? "").trim().toLowerCase();
   if (!raw && lastSyncAt === null) return "never";
-  if (raw === "ok") return "ok";
+  if (raw === "ok" || raw.startsWith("ok ")) return "ok";
   return "error"; // fail-safe: any non-ok value (including unknown) → error
 }
 

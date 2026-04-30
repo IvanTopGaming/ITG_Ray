@@ -45,6 +45,8 @@ func TestParseHeaders_UserinfoExpireZeroIsNoExpiry(t *testing.T) {
 	// Real subscription panels (e.g. okins) emit `expire=0` to mean
 	// "no expiry" rather than omitting the field. Without this guard
 	// we would persist a real timestamp at the Unix epoch (1970-01-01).
+	// HasExpire still flips so UpdateMeta can clear a prior stored
+	// timestamp on the lifetime-upgrade path.
 	h := http.Header{}
 	h.Set("Subscription-Userinfo", "upload=10; download=20; expire=0")
 	m := ParseHeaders(h)
@@ -52,6 +54,7 @@ func TestParseHeaders_UserinfoExpireZeroIsNoExpiry(t *testing.T) {
 	require.Equal(t, int64(10), m.Userinfo.Upload)
 	require.Equal(t, int64(20), m.Userinfo.Download)
 	require.Nil(t, m.Userinfo.Expire, "expire=0 must map to nil, not Unix epoch")
+	require.True(t, m.Userinfo.HasExpire, "expire=0 still flags HasExpire so UpdateMeta clears prior")
 }
 
 func TestParseHeaders_TitlePlaintext(t *testing.T) {
