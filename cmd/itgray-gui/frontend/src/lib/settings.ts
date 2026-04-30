@@ -15,6 +15,26 @@ export type DnsMode = 'auto' | 'custom';
 export type LogLevel = 'error' | 'info' | 'debug' | 'trace';
 export type Ipv6Mode = 'prefer-v4' | 'prefer-v6' | 'disabled';
 
+// NetworkSnapshot captures the network-section values the runtime ACTUALLY
+// used at the last successful Connect (sourced from the vpn:status connected
+// event payload, NOT the live in-memory store — avoids the edit-during-
+// connect race where the user changes a field between chainctl reading
+// config.Network and emitting the event).
+export type NetworkSnapshot = {
+  serverId: string;
+  mode: NetworkMode;
+  network: {
+    tunCidr: string;
+    tunMtu: number;
+    socksPort: number;
+    httpPort: number;
+    allowLan: boolean;
+    ipv6Mode: Ipv6Mode;
+    dnsMode: DnsMode;
+    dnsCustom: string;
+  };
+};
+
 export type Settings = {
   // general
   language: Language;
@@ -83,6 +103,7 @@ let eventsRegistered = false;
 // flushNow's finally so an early-return or thrown exception can't
 // leave it stuck above zero.
 let inFlightUpdates = 0;
+let lastConnectSnapshot: NetworkSnapshot | null = null;
 const listeners = new Set<() => void>();
 
 function notifyListeners(): void {
@@ -145,7 +166,86 @@ function ensureEventsRegistered(): void {
   if (eventsRegistered) return;
   if (typeof window === 'undefined' || !(window as any).go) return;
   EventsOn(HUB_EVENT_SETTINGS, onSettingsEvent);
+  EventsOn('vpn:status', (payload: unknown) => {
+    if (!payload || typeof payload !== 'object') return;
+    const p = payload as { status?: string };
+    if (p.status === 'connected') {
+      snapshotFromConnectedPayload(payload as Parameters<typeof snapshotFromConnectedPayload>[0]);
+    } else if (p.status === 'idle' || p.status === 'error') {
+      clearConnectSnapshot();
+    }
+  });
   eventsRegistered = true;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+//  Reconnect snapshot (vpn:status connected payload)
+// ──────────────────────────────────────────────────────────────────────
+
+export function snapshotFromConnectedPayload(payload: {
+  serverId?: string;
+  mode?: string;
+  network?: {
+    tunCidr?: string;
+    tunMtu?: number;
+    socksPort?: number;
+    httpPort?: number;
+    allowLan?: boolean;
+    ipv6Mode?: string;
+    dns?: { mode?: string; servers?: string[] };
+  };
+}): void {
+  if (!payload?.network) return;
+  const n = payload.network;
+  const mode: NetworkMode = payload.mode === 'sysproxy' ? 'sysproxy' : 'tun';
+  const ipv6Mode: Ipv6Mode =
+    n.ipv6Mode === 'prefer-v6' || n.ipv6Mode === 'disabled' ? n.ipv6Mode : 'prefer-v4';
+  const dnsMode: DnsMode = n.dns?.mode === 'custom' ? 'custom' : 'auto';
+  lastConnectSnapshot = {
+    serverId: payload.serverId ?? '',
+    mode,
+    network: {
+      tunCidr: n.tunCidr ?? '',
+      tunMtu: n.tunMtu ?? 0,
+      socksPort: n.socksPort ?? 0,
+      httpPort: n.httpPort ?? 0,
+      allowLan: n.allowLan ?? false,
+      ipv6Mode,
+      dnsMode,
+      dnsCustom: (n.dns?.servers ?? []).join(', '),
+    },
+  };
+  notifyListeners();
+}
+
+export function clearConnectSnapshot(): void {
+  if (lastConnectSnapshot === null) return;
+  lastConnectSnapshot = null;
+  notifyListeners();
+}
+
+export function getConnectSnapshot(): NetworkSnapshot | null {
+  return lastConnectSnapshot;
+}
+
+function networkDiffersFromSnapshot(): boolean {
+  if (lastConnectSnapshot === null) return false;
+  const s = currentState;
+  const snap = lastConnectSnapshot.network;
+  return (
+    s.tunCidr !== snap.tunCidr ||
+    s.tunMtu !== snap.tunMtu ||
+    s.socksPort !== snap.socksPort ||
+    s.httpPort !== snap.httpPort ||
+    s.allowLan !== snap.allowLan ||
+    s.ipv6Mode !== snap.ipv6Mode ||
+    s.dnsMode !== snap.dnsMode ||
+    s.dnsCustom !== snap.dnsCustom
+  );
+}
+
+export function useNetworkChangedSinceConnect(): boolean {
+  return useSyncExternalStore(subscribe, networkDiffersFromSnapshot, networkDiffersFromSnapshot);
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -223,8 +323,10 @@ export function __resetForTests(): void {
   prevSnapshot = null;
   backendFetchStarted = false;
   inFlightUpdates = 0;
+  lastConnectSnapshot = null;
   if (eventsRegistered) {
     EventsOff(HUB_EVENT_SETTINGS);
+    EventsOff('vpn:status');
     eventsRegistered = false;
   }
   if (typeof window !== 'undefined') {

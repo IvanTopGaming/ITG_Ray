@@ -16,7 +16,15 @@ vi.mock('../../wailsjs/runtime/runtime', () => ({
   EventsOff: (...args: unknown[]) => eventsOffMock(...args),
 }));
 
-import { useSettings, flushSettings, __resetForTests, DEFAULTS } from './settings';
+import {
+  useSettings,
+  flushSettings,
+  __resetForTests,
+  DEFAULTS,
+  snapshotFromConnectedPayload,
+  clearConnectSnapshot,
+  getConnectSnapshot,
+} from './settings';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -291,5 +299,61 @@ describe('useSettings (mocked SettingsService)', () => {
       await Promise.resolve();
     });
     expect(result.current[0].language).toBe('ru');
+  });
+});
+
+describe('reconnect snapshot', () => {
+  beforeEach(() => {
+    clearConnectSnapshot();
+  });
+
+  it('snapshot is null at boot', () => {
+    expect(getConnectSnapshot()).toBeNull();
+  });
+
+  it('connected event populates snapshot from payload', () => {
+    snapshotFromConnectedPayload({
+      serverId: 's1',
+      mode: 'sysproxy',
+      network: {
+        tunCidr: '198.18.0.1/15',
+        tunMtu: 1500,
+        socksPort: 1090,
+        httpPort: 8889,
+        allowLan: false,
+        ipv6Mode: 'prefer-v4',
+        dns: { mode: 'auto', servers: [] },
+      },
+    });
+    const snap = getConnectSnapshot();
+    expect(snap).not.toBeNull();
+    expect(snap?.serverId).toBe('s1');
+    expect(snap?.mode).toBe('sysproxy');
+    expect(snap?.network.socksPort).toBe(1090);
+    expect(snap?.network.httpPort).toBe(8889);
+  });
+
+  it('disconnected event clears snapshot via clearConnectSnapshot', () => {
+    snapshotFromConnectedPayload({
+      serverId: 's1',
+      mode: 'tun',
+      network: {
+        tunCidr: '198.18.0.1/15',
+        tunMtu: 1500,
+        socksPort: 1080,
+        httpPort: 8888,
+        allowLan: false,
+        ipv6Mode: 'prefer-v4',
+        dns: { mode: 'auto' },
+      },
+    });
+    expect(getConnectSnapshot()).not.toBeNull();
+    clearConnectSnapshot();
+    expect(getConnectSnapshot()).toBeNull();
+  });
+
+  it('snapshotFromConnectedPayload(undefined network) is a no-op', () => {
+    snapshotFromConnectedPayload({ serverId: 's1', mode: 'tun' });
+    expect(getConnectSnapshot()).toBeNull();
   });
 });
