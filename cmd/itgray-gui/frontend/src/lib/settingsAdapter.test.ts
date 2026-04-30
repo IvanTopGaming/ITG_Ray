@@ -130,6 +130,12 @@ describe('frontendToBackend', () => {
     });
   });
 
+  it('produces dnsServers: [] when dnsCustom is the empty string', () => {
+    expect(frontendToBackend({ dnsCustom: '' }).get('network')).toEqual({
+      dnsServers: [],
+    });
+  });
+
   it('routes onQuotaLow (frontend) to quotaLow (backend) under notifications', () => {
     const map = frontendToBackend({ onQuotaLow: true });
     expect(map.get('notifications')).toEqual({ quotaLow: true });
