@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
   AlertTriangle,
@@ -10,66 +10,14 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { EventsOff, EventsOn } from "../../wailsjs/runtime/runtime";
+import { List as ListSubs } from "../../wailsjs/go/bindings/SubsService";
+import { backendToFrontend, type Sub } from "@/lib/subsAdapter";
 
 type SyncStatus = "ok" | "error" | "syncing" | "never";
 
-interface FakeSub {
-  id: string;
-  name: string;
-  url: string;
-  status: SyncStatus;
-  lastSyncAt: number | null;
-  serverCount: number;
-  errorMessage?: string;
-  // Provider metadata (parsed from subscription-userinfo header on real backend)
-  usedUpBytes?: number;
-  usedDownBytes?: number;
-  totalBytes?: number;
-  expiresAt?: number; // epoch ms
-}
-
 const GB = 1024 * 1024 * 1024;
 const DAY = 24 * 60 * 60 * 1000;
-
-const INITIAL_SUBS: FakeSub[] = [
-  {
-    id: "sub-1",
-    name: "Main provider",
-    url: "https://provider.example/sub/abc123de4567f8901a2b3c4d5e6f7890",
-    status: "ok",
-    lastSyncAt: Date.now() - 2 * 60 * 1000,
-    serverCount: 8,
-    usedUpBytes: 1.2 * GB,
-    usedDownBytes: 86.4 * GB,
-    totalBytes: 100 * GB,
-    expiresAt: Date.now() + 23 * DAY,
-  },
-  {
-    id: "sub-2",
-    name: "Backup provider",
-    url: "https://backup.example/feed.txt?token=secret-token-here",
-    status: "error",
-    lastSyncAt: Date.now() - 14 * 60 * 1000,
-    serverCount: 4,
-    errorMessage: "Connection timed out after 30 s",
-    usedUpBytes: 0.08 * GB,
-    usedDownBytes: 4.6 * GB,
-    totalBytes: 50 * GB,
-    expiresAt: Date.now() + 5 * DAY,
-  },
-  {
-    id: "sub-3",
-    name: "Premium relay",
-    url: "https://premium.example/sub?key=long-token-string-here",
-    status: "ok",
-    lastSyncAt: Date.now() - 32 * 60 * 1000,
-    serverCount: 12,
-    usedUpBytes: 1.6 * GB,
-    usedDownBytes: 47.4 * GB,
-    totalBytes: 50 * GB,
-    expiresAt: Date.now() + 1 * DAY,
-  },
-];
 
 const SNAP_EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -89,11 +37,49 @@ const itemVariants: Variants = {
 type ModalState =
   | { kind: "closed" }
   | { kind: "add" }
-  | { kind: "edit"; sub: FakeSub };
+  | { kind: "edit"; sub: Sub };
+
+type LoadState =
+  | { kind: "loading" }
+  | { kind: "ready"; subs: Sub[] }
+  | { kind: "error"; message: string };
 
 export function Subscriptions() {
-  const [subs, setSubs] = useState<FakeSub[]>(INITIAL_SUBS);
+  const [load, setLoad] = useState<LoadState>({ kind: "loading" });
   const [modal, setModal] = useState<ModalState>({ kind: "closed" });
+
+  const refresh = useCallback(async () => {
+    try {
+      const views = await ListSubs();
+      setLoad({ kind: "ready", subs: views.map(backendToFrontend) });
+    } catch (err) {
+      setLoad({ kind: "error", message: String(err) });
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+    EventsOn("sub:synced", () => {
+      void refresh();
+    });
+    return () => {
+      EventsOff("sub:synced");
+    };
+  }, [refresh]);
+
+  // Convenience accessors so the existing mock mutation handlers below
+  // (syncOne, syncAll, handleAdd, handleEditSave, handleDelete) keep
+  // their `(prev) => prev.map(...)` form. Tier 3 will replace them with
+  // real SubsService.SyncOne/Add/Remove calls.
+  const subs = load.kind === "ready" ? load.subs : [];
+  const setSubs = (next: Sub[] | ((prev: Sub[]) => Sub[])) => {
+    setLoad((cur) => {
+      if (cur.kind !== "ready") return cur;
+      const updated =
+        typeof next === "function" ? (next as (p: Sub[]) => Sub[])(cur.subs) : next;
+      return { kind: "ready", subs: updated };
+    });
+  };
 
   function syncOne(id: string) {
     setSubs((prev) =>
@@ -111,18 +97,18 @@ export function Subscriptions() {
               status: "ok",
               lastSyncAt: Date.now(),
               serverCount: 6 + Math.floor(Math.random() * 8),
-              errorMessage: undefined,
-              usedDownBytes:
-                (s.usedDownBytes ?? 0) + Math.random() * 0.6 * GB,
-              usedUpBytes:
-                (s.usedUpBytes ?? 0) + Math.random() * 0.04 * GB,
+              lastSyncMessage: undefined,
+              download:
+                (s.download ?? 0) + Math.random() * 0.6 * GB,
+              upload:
+                (s.upload ?? 0) + Math.random() * 0.04 * GB,
             };
           }
           return {
             ...s,
             status: "error",
             lastSyncAt: Date.now(),
-            errorMessage: "Subscription endpoint not reachable",
+            lastSyncMessage: "Subscription endpoint not reachable",
           };
         }),
       );
@@ -134,7 +120,7 @@ export function Subscriptions() {
   }
 
   function handleAdd(name: string, url: string) {
-    const sub: FakeSub = {
+    const sub: Sub = {
       id: `sub-${Date.now()}`,
       name,
       url,
@@ -183,7 +169,41 @@ export function Subscriptions() {
           </div>
         </motion.div>
 
-        {subs.length === 0 ? (
+        {load.kind === "loading" ? (
+          <motion.div
+            variants={itemVariants}
+            className="flex flex-col gap-3"
+          >
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="glass-regular h-24 animate-pulse rounded-2xl"
+              />
+            ))}
+          </motion.div>
+        ) : load.kind === "error" ? (
+          <motion.div
+            variants={itemVariants}
+            className="glass-regular flex items-center justify-between gap-4 rounded-2xl p-5"
+          >
+            <div>
+              <div className="text-[14px] font-medium text-white">
+                Failed to load subscriptions
+              </div>
+              <div className="text-[12px] text-white/60">{load.message}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setLoad({ kind: "loading" });
+                void refresh();
+              }}
+              className="glass-regular rounded-full px-4 py-1.5 text-[12px] text-white hover:bg-white/10"
+            >
+              Retry
+            </button>
+          </motion.div>
+        ) : load.subs.length === 0 ? (
           <motion.div
             variants={itemVariants}
             className="glass-regular rounded-2xl p-10 text-center text-[13px] text-white/55"
@@ -192,7 +212,7 @@ export function Subscriptions() {
           </motion.div>
         ) : (
           <AnimatePresence mode="popLayout">
-            {subs.map((sub) => (
+            {load.subs.map((sub) => (
               <motion.div
                 key={sub.id}
                 layout
@@ -235,7 +255,7 @@ function SubCard({
   onSync,
   onEdit,
 }: {
-  sub: FakeSub;
+  sub: Sub;
   onSync: () => void;
   onEdit: () => void;
 }) {
@@ -273,10 +293,10 @@ function SubCard({
           </button>
         </div>
 
-        {isError && sub.errorMessage && (
+        {isError && sub.lastSyncMessage && (
           <div className="mt-1 flex items-center gap-1.5 text-[11px] text-[#ff9a9a]">
             <AlertTriangle className="h-3.5 w-3.5" />
-            {sub.errorMessage}
+            {sub.lastSyncMessage}
           </div>
         )}
 
@@ -311,13 +331,13 @@ function SubCard({
   );
 }
 
-function SubStats({ sub }: { sub: FakeSub }) {
-  const hasTraffic = sub.totalBytes != null;
-  const hasExpiry = sub.expiresAt != null;
+function SubStats({ sub }: { sub: Sub }) {
+  const hasTraffic = sub.total != null;
+  const hasExpiry = sub.expire != null;
   if (!hasTraffic && !hasExpiry) return null;
 
-  const used = (sub.usedUpBytes ?? 0) + (sub.usedDownBytes ?? 0);
-  const total = sub.totalBytes ?? 0;
+  const used = (sub.upload ?? 0) + (sub.download ?? 0);
+  const total = sub.total ?? 0;
   const pct = total > 0 ? Math.min(100, (used / total) * 100) : 0;
   const trafficColor =
     pct >= 95 ? "#ff5e5e" : pct >= 80 ? "#ffb13c" : "#00e892";
@@ -365,7 +385,7 @@ function SubStats({ sub }: { sub: FakeSub }) {
             Expires
           </span>
           {(() => {
-            const e = formatExpiry(sub.expiresAt!);
+            const e = formatExpiry(sub.expire!);
             return (
               <div className="flex items-baseline gap-2">
                 <span
@@ -374,7 +394,7 @@ function SubStats({ sub }: { sub: FakeSub }) {
                   {e.text}
                 </span>
                 <span className="font-mono text-[10px] tabular-nums text-white/40">
-                  {new Date(sub.expiresAt!).toLocaleDateString("en-CA")}
+                  {new Date(sub.expire!).toLocaleDateString("en-CA")}
                 </span>
               </div>
             );
