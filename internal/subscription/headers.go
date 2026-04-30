@@ -71,6 +71,11 @@ func parseUserinfo(s string) *Userinfo {
 		case "total":
 			u.Total = v
 		case "expire":
+			// expire=0 is the Subscription-Userinfo convention for "no expiry";
+			// don't store a real timestamp at the Unix epoch.
+			if v <= 0 {
+				continue
+			}
 			t := time.Unix(v, 0)
 			u.Expire = &t
 		}
