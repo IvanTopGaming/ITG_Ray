@@ -90,6 +90,12 @@ func defaults() Config {
 	}
 }
 
+// Defaults returns the default Config — same shape callers get when
+// config.Load encounters a missing or empty config.json. Exported so
+// non-package consumers (chainctl, tests) can build fallback Network
+// values without reaching for the unexported defaults().
+func Defaults() Config { return defaults() }
+
 // Load reads config.json and overlays its values onto the defaults.
 // A missing file returns the defaults with no error.
 func Load(path string) (Config, error) {
