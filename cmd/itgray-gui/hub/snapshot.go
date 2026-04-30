@@ -37,14 +37,18 @@ type ServerView struct {
 
 // SubView is the read-only DTO for one subscription.
 type SubView struct {
-	ID              string    `json:"id"`
-	Name            string    `json:"name"`
-	URL             string    `json:"url"`            // raw — frontend masks
-	UpdateInterval  int       `json:"updateInterval"` // seconds
-	LastSyncAt      time.Time `json:"lastSyncAt"`     // zero = never synced
-	LastSyncStatus  string    `json:"lastSyncStatus"` // "OK" | "ERROR" | "PARTIAL" | ""
-	LastSyncMessage string    `json:"lastSyncMessage,omitempty"`
-	ServerCount     int       `json:"serverCount"`
+	ID              string     `json:"id"`
+	Name            string     `json:"name"`
+	URL             string     `json:"url"`            // raw — frontend masks
+	UpdateInterval  int        `json:"updateInterval"` // seconds
+	LastSyncAt      time.Time  `json:"lastSyncAt"`     // zero = never synced
+	LastSyncStatus  string     `json:"lastSyncStatus"` // "ok" | "error" | ""
+	LastSyncMessage string     `json:"lastSyncMessage,omitempty"`
+	ServerCount     int        `json:"serverCount"`
+	Upload          int64      `json:"upload,omitempty"`
+	Download        int64      `json:"download,omitempty"`
+	Total           int64      `json:"total,omitempty"`
+	Expire          *time.Time `json:"expire,omitempty"`
 }
 
 // SettingsView is the flat-by-section settings shape.

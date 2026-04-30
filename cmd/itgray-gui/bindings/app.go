@@ -180,8 +180,12 @@ func toSubViews(in []subscription.Stored, serverCount map[string]int) []hub.SubV
 			UpdateInterval:  int(time.Duration(s.UpdateInterval) / time.Second),
 			LastSyncAt:      s.LastSyncAt,
 			LastSyncStatus:  s.LastStatus,
-			LastSyncMessage: "", // internal/subscription does not yet persist a separate message
+			LastSyncMessage: s.LastMessage,
 			ServerCount:     serverCount[s.ID],
+			Upload:          s.Upload,
+			Download:        s.Download,
+			Total:           s.Total,
+			Expire:          s.Expire,
 		})
 	}
 	return out

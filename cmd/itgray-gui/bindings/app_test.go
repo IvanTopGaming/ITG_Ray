@@ -118,6 +118,31 @@ func TestAppService_GetSnapshot_OnboardedMarker(t *testing.T) {
 	require.True(t, snap.Onboarded)
 }
 
+func TestToSubViews_SurfacesQuotaAndMessage(t *testing.T) {
+	expire := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
+	in := []subscription.Stored{{
+		ID:          "s1",
+		Name:        "A",
+		URL:         "https://a.test",
+		LastStatus:  "ok",
+		LastMessage: "imported=3",
+		Upload:      111,
+		Download:    222,
+		Total:       1024,
+		Expire:      &expire,
+	}}
+
+	out := toSubViews(in, map[string]int{"s1": 3})
+	require.Len(t, out, 1)
+	require.Equal(t, "ok", out[0].LastSyncStatus)
+	require.Equal(t, "imported=3", out[0].LastSyncMessage)
+	require.EqualValues(t, 111, out[0].Upload)
+	require.EqualValues(t, 222, out[0].Download)
+	require.EqualValues(t, 1024, out[0].Total)
+	require.NotNil(t, out[0].Expire)
+	require.True(t, out[0].Expire.Equal(expire))
+}
+
 func writeFile(path string, b []byte) error {
 	f, err := os.Create(path) //nolint:gosec // test-only marker file in t.TempDir
 	if err != nil {
