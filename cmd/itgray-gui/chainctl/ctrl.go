@@ -281,7 +281,7 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 			return mode, fmt.Errorf("DnsSet: %w", err)
 		}
 	} else {
-		if err := c.d.Sysproxy.Set(c.d.SocksProxy); err != nil {
+		if err := c.d.Sysproxy.Set(sysproxy.Settings{Socks: c.d.SocksProxy}); err != nil {
 			_ = c.d.Helper.StopChain(ctx)
 			return mode, fmt.Errorf("sysproxy.Set: %w", err)
 		}

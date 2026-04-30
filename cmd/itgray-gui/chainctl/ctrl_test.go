@@ -285,7 +285,7 @@ type fakeSysproxy struct {
 	on         bool
 }
 
-func (f *fakeSysproxy) Set(_ string) error {
+func (f *fakeSysproxy) Set(_ sysproxy.Settings) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.setCalls++
