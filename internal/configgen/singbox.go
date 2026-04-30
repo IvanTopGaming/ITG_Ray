@@ -73,6 +73,46 @@ func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
 	}
 }
 
+// lanBypassCIDRs is the canonical RFC1918 + loopback + link-local + multicast
+// IPv4/IPv6 list used for "send LAN traffic direct, bypass the proxy". Shared
+// between AllowLAN-driven prepend (Tier 2b) and applyTunModeKillswitch's
+// existing LAN-direct rule so both paths emit the identical sing-box rule
+// shape.
+var lanBypassCIDRs = []string{
+	"10.0.0.0/8",
+	"172.16.0.0/12",
+	"192.168.0.0/16",
+	"127.0.0.0/8",
+	"fc00::/7",
+	"fe80::/10",
+	"224.0.0.0/4",
+}
+
+// lanBypassRule returns the {ip_cidr, outbound:"direct"} rule that drops
+// LAN-bound traffic out of the proxy path.
+func lanBypassRule() map[string]any {
+	cidrs := make([]any, len(lanBypassCIDRs))
+	for i, s := range lanBypassCIDRs {
+		cidrs[i] = s
+	}
+	return map[string]any{"ip_cidr": cidrs, "outbound": "direct"}
+}
+
+// prependLanBypass inserts lanBypassRule() immediately after the existing
+// first rule (the sniff action prepended in BuildSingbox). If the rules
+// slice is empty it just makes the bypass the first rule. Idempotency is
+// caller-managed: BuildSingbox calls this once per build at most.
+func prependLanBypass(rules []map[string]any) []map[string]any {
+	rule := lanBypassRule()
+	if len(rules) == 0 {
+		return []map[string]any{rule}
+	}
+	out := make([]map[string]any, 0, len(rules)+1)
+	out = append(out, rules[0], rule)
+	out = append(out, rules[1:]...)
+	return out
+}
+
 // applyTunModeKillswitch hardens the route block for TUN mode: it sets
 // the route's "final" outbound to "block" (killswitch — unmatched traffic
 // is dropped rather than leaked to the proxy) and prepends an
@@ -90,15 +130,7 @@ func applyTunModeKillswitch(route map[string]any) {
 	// DNS rules can take effect. Without this, TUN inbound treats UDP/53
 	// as opaque traffic and bypasses the DNS module entirely.
 	hijackDnsRule := map[string]any{"protocol": "dns", "action": "hijack-dns"}
-	lanRule := map[string]any{
-		"ip_cidr": []string{
-			"10.0.0.0/8",
-			"172.16.0.0/12",
-			"192.168.0.0/16",
-			"127.0.0.0/8",
-		},
-		"outbound": "direct",
-	}
+	lanRule := lanBypassRule()
 	// Insert hijack-dns then lanRule right after the first rule (which
 	// is the sniff action prepended in BuildSingbox). Order matters:
 	// sniff must run first to populate protocol metadata; hijack-dns
