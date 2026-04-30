@@ -34,6 +34,15 @@ type Network struct {
 	Mode     string   `json:"mode"`
 	TUN      TUN      `json:"tun"`
 	SysProxy SysProxy `json:"sysproxy"`
+	AllowLAN bool     `json:"allow_lan"`
+	IPv6Mode string   `json:"ipv6_mode"` // "prefer-v4" | "prefer-v6" | "disabled"
+	DNS      DNS      `json:"dns"`
+}
+
+// DNS holds resolver overrides that apply across both TUN and SysProxy modes.
+type DNS struct {
+	Mode    string   `json:"mode"`    // "auto" | "custom"
+	Servers []string `json:"servers"` // populated when Mode == "custom"
 }
 
 // KillSwitch toggles the soft killswitch and always-on mode.
@@ -54,6 +63,12 @@ type Notifications struct {
 	Disconnected bool `json:"disconnected"`
 	QuotaLow     bool `json:"quota_low"`
 	SubUpdated   bool `json:"sub_updated"`
+	Sound        bool `json:"sound"`
+}
+
+// Debug captures developer-facing toggles persisted to config.json.
+type Debug struct {
+	LogLevel string `json:"log_level"` // "error" | "info" | "debug" | "trace"
 }
 
 // Config is the top-level application configuration persisted as config.json.
@@ -64,6 +79,7 @@ type Config struct {
 	KillSwitch    KillSwitch    `json:"killswitch"`
 	Updates       Updates       `json:"updates"`
 	Notifications Notifications `json:"notifications"`
+	Debug         Debug         `json:"debug"`
 }
 
 func defaults() Config {
@@ -74,10 +90,14 @@ func defaults() Config {
 			Mode:     "tun",
 			TUN:      TUN{IPv4CIDR: "198.18.0.1/15", MTU: 1500, DNS: []string{"1.1.1.1", "8.8.8.8"}},
 			SysProxy: SysProxy{HTTPPort: 8888, SOCKSPort: 1080},
+			AllowLAN: false,
+			IPv6Mode: "prefer-v4",
+			DNS:      DNS{Mode: "auto", Servers: nil},
 		},
 		KillSwitch:    KillSwitch{Enabled: true},
 		Updates:       Updates{AutoCheck: true, Channel: "stable"},
-		Notifications: Notifications{Connected: true, Disconnected: true, QuotaLow: true, SubUpdated: true},
+		Notifications: Notifications{Connected: true, Disconnected: true, QuotaLow: true, SubUpdated: true, Sound: true},
+		Debug:         Debug{LogLevel: "info"},
 	}
 }
 
