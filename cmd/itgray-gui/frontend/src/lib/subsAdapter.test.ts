@@ -53,6 +53,14 @@ describe("backendToFrontend", () => {
     expect(sub.lastSyncMessage).toBe("connection refused");
   });
 
+  it("normalizes legacy uppercase 'OK' / 'ERROR' / ' Ok ' from older builds", () => {
+    expect(backendToFrontend(makeView({ lastSyncStatus: "OK", lastSyncAt: "2026-04-30T10:30:00Z" })).status).toBe("ok");
+    expect(backendToFrontend(makeView({ lastSyncStatus: "ERROR", lastSyncAt: "2026-04-30T10:30:00Z" })).status).toBe("error");
+    expect(backendToFrontend(makeView({ lastSyncStatus: " Ok ", lastSyncAt: "2026-04-30T10:30:00Z" })).status).toBe("ok");
+    // Prefixed legacy form falls through to error (fail-safe correct).
+    expect(backendToFrontend(makeView({ lastSyncStatus: "ERROR: timeout", lastSyncAt: "2026-04-30T10:30:00Z" })).status).toBe("error");
+  });
+
   it("treats unknown status as error (fail-safe)", () => {
     const sub = backendToFrontend(
       makeView({

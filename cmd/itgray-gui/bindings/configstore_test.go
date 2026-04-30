@@ -76,6 +76,31 @@ func TestApplyNetwork_NewFields(t *testing.T) {
 	require.Equal(t, []string{"1.1.1.1", "9.9.9.9", "8.8.8.8"}, c.Network.DNS.Servers)
 }
 
+// TestApplyNetwork_PortRangeGuard asserts SOCKS/HTTP ports outside
+// 1..65535 (notably 0, which is what the frontend emits when the input
+// is cleared) are silently dropped, mirroring the existing tunMtu
+// clamp. Without this guard, clearing a port input persists 0 to
+// config.json and the next launch tries to bind port 0.
+func TestApplyNetwork_PortRangeGuard(t *testing.T) {
+	c := config.Config{}
+	c.Network.SysProxy.SOCKSPort = 1080
+	c.Network.SysProxy.HTTPPort = 8888
+
+	applyNetwork(&c.Network, map[string]any{
+		"socksPort": float64(0),
+		"httpPort":  float64(70000),
+	})
+	require.Equal(t, 1080, c.Network.SysProxy.SOCKSPort, "0 dropped, prior preserved")
+	require.Equal(t, 8888, c.Network.SysProxy.HTTPPort, "out-of-range dropped, prior preserved")
+
+	applyNetwork(&c.Network, map[string]any{
+		"socksPort": float64(1081),
+		"httpPort":  float64(8889),
+	})
+	require.Equal(t, 1081, c.Network.SysProxy.SOCKSPort, "in-range accepted")
+	require.Equal(t, 8889, c.Network.SysProxy.HTTPPort, "in-range accepted")
+}
+
 // TestApplyKillSwitch verifies the per-key type-asserted handler writes
 // both kill-switch fields independently.
 func TestApplyKillSwitch(t *testing.T) {

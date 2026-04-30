@@ -177,10 +177,17 @@ func applyNetwork(n *config.Network, p map[string]any) {
 		// Out-of-range silently dropped — frontend should clamp before sending.
 	}
 	if v, ok := p["socksPort"].(float64); ok {
-		n.SysProxy.SOCKSPort = int(v)
+		if port := int(v); port >= 1 && port <= 65535 {
+			n.SysProxy.SOCKSPort = port
+		}
+		// Out-of-range silently dropped (mirrors tunMtu) — frontend
+		// flags invalid via isPortValid; clearing the input must not
+		// persist port=0 to disk.
 	}
 	if v, ok := p["httpPort"].(float64); ok {
-		n.SysProxy.HTTPPort = int(v)
+		if port := int(v); port >= 1 && port <= 65535 {
+			n.SysProxy.HTTPPort = port
+		}
 	}
 	if v, ok := p["allowLan"].(bool); ok {
 		n.AllowLAN = v

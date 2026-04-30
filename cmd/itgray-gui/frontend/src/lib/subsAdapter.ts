@@ -27,8 +27,11 @@ function parseTime(t: unknown): number | null {
 
 function deriveStatus(view: hub.SubView): Status {
   const lastSyncAt = parseTime(view.lastSyncAt);
-  if (!view.lastSyncStatus && lastSyncAt === null) return "never";
-  if (view.lastSyncStatus === "ok") return "ok";
+  // Tolerate legacy uppercase / prefixed values written by older builds:
+  // "OK", "ERROR", "ERROR: timeout" → normalize before matching.
+  const raw = (view.lastSyncStatus ?? "").trim().toLowerCase();
+  if (!raw && lastSyncAt === null) return "never";
+  if (raw === "ok") return "ok";
   return "error"; // fail-safe: any non-ok value (including unknown) → error
 }
 

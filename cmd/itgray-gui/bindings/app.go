@@ -235,13 +235,28 @@ func hostPort(addr string, port uint16) string {
 	return fmt.Sprintf("%s:%d", addr, port)
 }
 
-// Settings collection is stubbed in C.T3 — values are filled by C.T12.
+// collectSettings returns a settings snapshot that mirrors
+// internal/config.defaults() so AppService.Snapshot stays consistent
+// with what SettingsService.Get returns. Frontend code uses
+// SettingsService.Get as the source of truth; this exists for late
+// hub-snapshot subscribers.
 func (a *AppService) collectSettings() hub.SettingsView {
 	return hub.SettingsView{
-		General:       hub.GeneralSettings{Language: "auto"},
-		Network:       hub.NetworkSettings{DefaultMode: "tun", TunCIDR: "198.18.0.1/15", TunName: "ITGRay-TUN", SocksPort: 1080, HttpPort: 1081},
+		General: hub.GeneralSettings{Language: "en"},
+		Network: hub.NetworkSettings{
+			DefaultMode: "tun",
+			TunCIDR:     "198.18.0.1/15",
+			TunMtu:      1500,
+			TunName:     "ITGRay-TUN",
+			SocksPort:   1080,
+			HttpPort:    8888,
+			AllowLAN:    false,
+			IPv6Mode:    "prefer-v4",
+			DNS:         hub.DNSSettings{Mode: "auto"},
+		},
+		KillSwitch:    hub.KillSwitchSettings{Enabled: true},
 		Subscriptions: hub.SubscriptionSettings{DefaultUpdateInterval: 3600, UserAgent: "ITG-Ray/0.1"},
-		Notifications: hub.NotificationSettings{OnConnected: true, OnDisconnected: true, QuotaLow: true},
+		Notifications: hub.NotificationSettings{OnConnected: true, OnDisconnected: true, QuotaLow: true, OnSubSynced: true, Sound: true},
 		Debug:         hub.DebugSettings{LogLevel: "info"},
 		About:         hub.AboutSettings{Version: a.d.Version, BuildDate: a.d.BuildDate},
 		Security:      hub.SecuritySettings{Method: "Unencrypted", Available: false, Warning: "secret protection detection not yet wired"},

@@ -53,6 +53,10 @@ function isPortValid(value: number): boolean {
   return Number.isInteger(value) && value >= 1 && value <= 65535;
 }
 
+function isMtuValid(value: number): boolean {
+  return Number.isInteger(value) && value >= 576 && value <= 9000;
+}
+
 export function Settings() {
   const [s, update] = useSettings();
   const active = useScrollSpy(SECTION_IDS);
@@ -202,7 +206,7 @@ export function Settings() {
         <SettingRow label="Allow LAN access" hint="Reach local network devices (printers, NAS) while VPN is on.">
           <Toggle value={s.allowLan} onChange={(v) => update({ allowLan: v })} />
         </SettingRow>
-        <SettingRow label="SOCKS port" hint="Local SOCKS5 proxy port. Default 10808.">
+        <SettingRow label="SOCKS port" hint="Local SOCKS5 proxy port. Default 1080.">
           <input
             type="number"
             min={1}
@@ -217,7 +221,7 @@ export function Settings() {
             )}
           />
         </SettingRow>
-        <SettingRow label="HTTP port" hint="Local HTTP proxy port. Default 10809.">
+        <SettingRow label="HTTP port" hint="Local HTTP proxy port. Default 8888.">
           <input
             type="number"
             min={1}
@@ -291,13 +295,13 @@ export function Settings() {
                       max={9000}
                       step={1}
                       value={s.tunMtu}
-                      onChange={(e) => {
-                        const n = Number(e.target.value);
-                        if (Number.isFinite(n) && n >= 576 && n <= 9000) {
-                          update({ tunMtu: n });
-                        }
-                      }}
-                      className="w-24 px-3 py-1.5 bg-white/[0.06] border border-white/[0.12] rounded-[10px] text-[13px] text-white text-center outline-none transition-colors focus:border-white/[0.30] tabular-nums"
+                      onChange={(e) => update({ tunMtu: Number(e.target.value) || 0 })}
+                      className={cn(
+                        'w-24 px-3 py-1.5 bg-white/[0.06] border rounded-[10px] text-[13px] text-white text-center outline-none transition-colors tabular-nums',
+                        isMtuValid(s.tunMtu)
+                          ? 'border-white/[0.12] focus:border-white/[0.30]'
+                          : 'border-danger/50',
+                      )}
                     />
                   </SettingRow>
                 </div>
@@ -347,7 +351,7 @@ export function Settings() {
         <SettingRow label="Sound" hint="Play a soft chime on state changes.">
           <Toggle value={s.notifySound} onChange={(v) => update({ notifySound: v })} />
         </SettingRow>
-        <SettingRow label="Subscription failures" hint="Notify when a subscription sync fails.">
+        <SettingRow label="Subscription updated" hint="Notify when a subscription is synced.">
           <Toggle value={s.onSubSynced} onChange={(v) => update({ onSubSynced: v })} />
         </SettingRow>
       </motion.div>

@@ -142,9 +142,17 @@ describe('useSettings (mocked SettingsService)', () => {
     expect(updateMock).toHaveBeenCalledWith('general', { autostart: true });
   });
 
-  it('Update rejection is logged but state stays optimistic (Q4 B)', async () => {
+  it('Update rejection is logged; post-flush Get rolls state back to disk truth', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    getMock.mockResolvedValue({ general: {}, network: {}, notifications: {}, debug: {} });
+    // Disk explicitly has autostart=false. ConfigStore.toView always
+    // emits the full struct, so the post-flush Get sees it and the
+    // adapter includes it in the merge.
+    getMock.mockResolvedValue({
+      general: { autostart: false },
+      network: {},
+      notifications: {},
+      debug: {},
+    });
     updateMock.mockRejectedValue(new Error('disk full'));
 
     const { result } = renderHook(() => useSettings());
@@ -155,13 +163,111 @@ describe('useSettings (mocked SettingsService)', () => {
       vi.advanceTimersByTime(200);
       await Promise.resolve();
       await Promise.resolve();
+      await Promise.resolve();
     });
 
-    expect(result.current[0].autostart).toBe(true); // optimistic; no rollback
+    // Disk never received the write (Update rejected). Post-flush Get
+    // re-syncs from disk: autostart returns to its disk value (false).
+    // This implicitly rolls back optimistic state on failed writes.
+    expect(result.current[0].autostart).toBe(false);
     expect(warnSpy).toHaveBeenCalledWith(
       'SettingsService.Update failed',
       expect.objectContaining({ message: 'disk full' }),
     );
+    warnSpy.mockRestore();
+  });
+
+  it('post-flush Get picks up cross-process disk drift (multi-writer)', async () => {
+    // Bootstrap: disk has language=en, autostart=false.
+    getMock.mockResolvedValueOnce({ general: {}, network: {}, notifications: {}, debug: {} });
+    // Post-flush Get: another writer (CLI) changed language=ru on disk
+    // during our flush window.
+    getMock.mockResolvedValueOnce({
+      general: { language: 'ru' },
+      network: {},
+      notifications: {},
+      debug: {},
+    });
+    updateMock.mockResolvedValue({});
+
+    const { result } = renderHook(() => useSettings());
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => result.current[1]({ autostart: true }));
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(updateMock).toHaveBeenCalledTimes(1);
+    expect(getMock).toHaveBeenCalledTimes(2); // bootstrap + post-flush
+    expect(result.current[0].language).toBe('ru'); // disk drift picked up
+    expect(result.current[0].autostart).toBe(true); // our write persisted
+  });
+
+  it('flushNow leaves the in-flight counter at zero on empty section map', async () => {
+    // Regression: an empty section map (e.g. patch with only undefined
+    // keys) used to leave the inFlightUpdate flag stuck at true,
+    // permanently muting backend EventSettings refresh.
+    getMock.mockResolvedValue({ general: {}, network: {}, notifications: {}, debug: {} });
+    updateMock.mockResolvedValue({});
+    const { result } = renderHook(() => useSettings());
+    await act(async () => { await Promise.resolve(); });
+
+    // Force a pending patch with no mappable backend keys by passing
+    // only undefined values. update() still records pendingPatch but
+    // frontendToBackend returns an empty Map.
+    act(() => result.current[1]({ autostart: undefined as unknown as boolean }));
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Now an EventsOn echo should still trigger a fresh Get, proving
+    // the in-flight gate didn't get stuck.
+    const handler = eventsOnMock.mock.calls[0][1] as () => void;
+    getMock.mockResolvedValueOnce({
+      general: { language: 'ru' },
+      network: {},
+      notifications: {},
+      debug: {},
+    });
+    await act(async () => {
+      handler();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current[0].language).toBe('ru');
+  });
+
+  it('retries Get on remount after initial bootstrap failure', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    getMock.mockRejectedValueOnce(new Error('rpc not ready'));
+
+    const first = renderHook(() => useSettings());
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    expect(warnSpy).toHaveBeenCalledWith('SettingsService.Get failed', expect.any(Error));
+    expect(getMock).toHaveBeenCalledTimes(1);
+    first.unmount();
+
+    // Bootstrap was a one-shot module-level guard; without retry-on-fail
+    // it would never fire again. Verify a successful remount picks up
+    // disk truth.
+    getMock.mockResolvedValueOnce({
+      general: { language: 'ru' },
+      network: {},
+      notifications: {},
+      debug: {},
+    });
+    const { result } = renderHook(() => useSettings());
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    expect(getMock).toHaveBeenCalledTimes(2);
+    expect(result.current[0].language).toBe('ru');
     warnSpy.mockRestore();
   });
 

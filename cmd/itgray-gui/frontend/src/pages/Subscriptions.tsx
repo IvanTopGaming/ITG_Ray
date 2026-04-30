@@ -10,7 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { EventsOff, EventsOn } from "../../wailsjs/runtime/runtime";
+import { EventsOn } from "../../wailsjs/runtime/runtime";
 import { List as ListSubs } from "../../wailsjs/go/bindings/SubsService";
 import { backendToFrontend, type Sub } from "@/lib/subsAdapter";
 
@@ -59,12 +59,14 @@ export function Subscriptions() {
 
   useEffect(() => {
     void refresh();
-    EventsOn("sub:synced", () => {
+    // Capture the unsubscribe function returned by EventsOn (Wails v2.4+)
+    // so cleanup only removes our own listener — EventsOff(name) clears
+    // ALL listeners for the event, which would silently tear down any
+    // future co-subscribers (planned tray badge / cross-page toasts).
+    const off = EventsOn("sub:synced", () => {
       void refresh();
     });
-    return () => {
-      EventsOff("sub:synced");
-    };
+    return off;
   }, [refresh]);
 
   // Convenience accessors so the existing mock mutation handlers below

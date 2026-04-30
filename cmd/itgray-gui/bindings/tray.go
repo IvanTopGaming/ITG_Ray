@@ -281,10 +281,12 @@ func (t *TrayService) actionConnectLast() {
 	if id == "" {
 		return
 	}
-	if mode == "" {
-		// On a fresh session (no remembered mode), default to TUN. Sysproxy
-		// is no longer auto-selected as a TunCreate fallback — TUN failures
-		// surface as chain:error and the user re-attempts in sysproxy explicitly.
+	if mode == "" || mode == "auto" {
+		// On a fresh session (no remembered mode) — or a legacy session
+		// record from a pre-ModeAuto-removal build — default to TUN.
+		// Sysproxy is no longer auto-selected as a TunCreate fallback;
+		// TUN failures surface as chain:error and the user re-attempts
+		// sysproxy explicitly.
 		mode = string(chainctl.ModeTUN)
 	}
 	ctx := t.contextOrBackground()

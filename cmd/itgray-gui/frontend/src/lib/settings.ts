@@ -78,7 +78,11 @@ let prevSnapshot: Settings | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let backendFetchStarted = false;
 let eventsRegistered = false;
-let inFlightUpdate = false;
+// Counter (not bool) so overlapping flushes don't clear the in-flight
+// gate prematurely. Incremented in flushSettings(); decremented in
+// flushNow's finally so an early-return or thrown exception can't
+// leave it stuck above zero.
+let inFlightUpdates = 0;
 const listeners = new Set<() => void>();
 
 function notifyListeners(): void {
@@ -98,6 +102,7 @@ function loadFromBackend(): void {
     p = GetSettings();
   } catch (err) {
     console.warn('SettingsService.Get unavailable', err);
+    backendFetchStarted = false; // allow retry on next subscribe
     return;
   }
   p.then((view) => {
@@ -107,6 +112,10 @@ function loadFromBackend(): void {
     notifyListeners();
   }).catch((err) => {
     console.warn('SettingsService.Get failed', err);
+    // Clear the one-shot guard so a future remount/subscribe retries.
+    // Without this, a transient RPC failure on first paint leaves the
+    // UI permanently at DEFAULTS.
+    backendFetchStarted = false;
   });
 }
 
@@ -116,13 +125,11 @@ function loadFromBackend(): void {
 
 function onSettingsEvent(): void {
   if (typeof window === 'undefined' || !(window as any).go) return;
-  // Short-circuit if a local optimistic patch is mid-debounce, or an
-  // Update RPC is in flight. flushSettings() clears pendingPatch
-  // synchronously before awaiting flushNow's Promise.allSettled, so a
-  // backend EventSettings echo arriving in that window would otherwise
-  // trigger a redundant Get(); the in-flight RPC's own echo will refresh
-  // us on completion.
-  if (pendingPatch !== null || inFlightUpdate) return;
+  // Short-circuit if a local optimistic patch is mid-debounce, or any
+  // Update RPC is still in flight. flushNow itself issues a post-flush
+  // GetSettings when the counter drops to zero, so dropping the echo
+  // here is safe: cross-process drift is picked up on completion.
+  if (pendingPatch !== null || inFlightUpdates > 0) return;
   GetSettings()
     .then((view) => {
       const patch = backendToFrontend(view);
@@ -151,24 +158,43 @@ function scheduleFlush(): void {
 }
 
 async function flushNow(patch: Partial<Settings>, snap: Settings): Promise<void> {
-  const sections = frontendToBackend(patch);
-  if (sections.size === 0) return;
+  let didDispatch = false;
+  try {
+    const sections = frontendToBackend(patch);
+    if (sections.size === 0) return;
+    didDispatch = true;
 
-  const calls = Array.from(sections, ([section, p]) =>
-    UpdateSettings(section, p as Record<string, any>),
-  );
-  const results = await Promise.allSettled(calls);
+    const calls = Array.from(sections, ([section, p]) =>
+      UpdateSettings(section, p as Record<string, any>),
+    );
+    const results = await Promise.allSettled(calls);
 
-  for (const r of results) {
-    if (r.status === 'rejected') {
-      console.warn('SettingsService.Update failed', r.reason);
-      // TODO(tier2a-followup): rollback prev section state + emit toast.
-      // Hook: `snap` carries the pre-mutation snapshot for future use.
+    for (const r of results) {
+      if (r.status === 'rejected') {
+        console.warn('SettingsService.Update failed', r.reason);
+      }
+    }
+    void snap; // pre-mutation snapshot; reserved for future toast/rollback hook.
+  } finally {
+    inFlightUpdates = Math.max(0, inFlightUpdates - 1);
+  }
+
+  // Only the last in-flight flush re-syncs from disk. Backend
+  // EventSettings echoes that fired while inFlightUpdates > 0 were
+  // short-circuited; this Get picks up any cross-process changes (CLI
+  // editing config.json, partial-failure rollback) and also implicitly
+  // rolls back optimistic state on rejected writes.
+  if (didDispatch && inFlightUpdates === 0) {
+    try {
+      const view = await GetSettings();
+      const diskPatch = backendToFrontend(view);
+      // Any new optimistic patch queued during our await wins over disk.
+      currentState = { ...currentState, ...diskPatch, ...(pendingPatch ?? {}) };
+      notifyListeners();
+    } catch (err) {
+      console.warn('post-flush settings refresh failed', err);
     }
   }
-  // Reference snap so TS does not flag it unused; remove once rollback wired.
-  void snap;
-  inFlightUpdate = false;
 }
 
 export function flushSettings(): void {
@@ -181,7 +207,7 @@ export function flushSettings(): void {
   const snap = prevSnapshot ?? currentState;
   pendingPatch = null;
   prevSnapshot = null;
-  inFlightUpdate = true;
+  inFlightUpdates += 1;
   void flushNow(patch, snap);
 }
 
@@ -196,7 +222,7 @@ export function __resetForTests(): void {
   pendingPatch = null;
   prevSnapshot = null;
   backendFetchStarted = false;
-  inFlightUpdate = false;
+  inFlightUpdates = 0;
   if (eventsRegistered) {
     EventsOff(HUB_EVENT_SETTINGS);
     eventsRegistered = false;
