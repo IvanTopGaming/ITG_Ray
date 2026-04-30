@@ -148,7 +148,7 @@ export function Settings() {
           />
         </SettingRow>
         <SettingRow label="Launch on system startup" hint="Start ITG Ray automatically when you log in.">
-          <Toggle value={s.launchOnStartup} onChange={(v) => update({ launchOnStartup: v })} />
+          <Toggle value={s.autostart} onChange={(v) => update({ autostart: v })} />
         </SettingRow>
         <SettingRow label="Start minimized to tray" hint="Open in background, no main window on launch.">
           <Toggle value={s.startMinimized} onChange={(v) => update({ startMinimized: v })} />
@@ -163,12 +163,11 @@ export function Settings() {
           hint="TUN intercepts all traffic at OS level. System proxy uses Windows proxy settings only."
         >
           <Segmented
-            value={s.networkMode}
-            onChange={(v) => update({ networkMode: v })}
+            value={s.defaultMode}
+            onChange={(v) => update({ defaultMode: v })}
             options={[
               { value: 'tun', label: 'TUN' },
-              { value: 'system-proxy', label: 'System proxy' },
-              { value: 'off', label: 'Off' },
+              { value: 'sysproxy', label: 'System proxy' },
             ] as const}
           />
         </SettingRow>
@@ -251,13 +250,13 @@ export function Settings() {
       <motion.div id="notifications" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
         <SectionHeader title="Notifications" />
         <SettingRow label="Connection toasts" hint="Show OS notifications on connect, disconnect, and errors.">
-          <Toggle value={s.notifyConnection} onChange={(v) => update({ notifyConnection: v })} />
+          <Toggle value={s.onConnected} onChange={(v) => update({ onConnected: v })} />
         </SettingRow>
         <SettingRow label="Sound" hint="Play a soft chime on state changes.">
           <Toggle value={s.notifySound} onChange={(v) => update({ notifySound: v })} />
         </SettingRow>
         <SettingRow label="Subscription failures" hint="Notify when a subscription sync fails.">
-          <Toggle value={s.notifySubFailure} onChange={(v) => update({ notifySubFailure: v })} />
+          <Toggle value={s.onSubSynced} onChange={(v) => update({ onSubSynced: v })} />
         </SettingRow>
       </motion.div>
 

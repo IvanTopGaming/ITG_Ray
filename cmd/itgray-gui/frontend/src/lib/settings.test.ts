@@ -11,18 +11,18 @@ import { Get as GetSettings } from '../../wailsjs/go/bindings/SettingsService';
 describe('DEFAULTS', () => {
   it('contains all expected keys with correct types', () => {
     expect(DEFAULTS.language).toBe('en');
-    expect(DEFAULTS.launchOnStartup).toBe(false);
+    expect(DEFAULTS.autostart).toBe(false);
     expect(DEFAULTS.startMinimized).toBe(false);
-    expect(DEFAULTS.networkMode).toBe('tun');
+    expect(DEFAULTS.defaultMode).toBe('tun');
     expect(DEFAULTS.dnsMode).toBe('auto');
     expect(DEFAULTS.dnsCustom).toBe('');
-    expect(DEFAULTS.allowLan).toBe(true);
-    expect(DEFAULTS.socksPort).toBe(10808);
-    expect(DEFAULTS.httpPort).toBe(10809);
+    expect(DEFAULTS.allowLan).toBe(false);
+    expect(DEFAULTS.socksPort).toBe(1080);
+    expect(DEFAULTS.httpPort).toBe(8888);
     expect(DEFAULTS.ipv6Mode).toBe('prefer-v4');
-    expect(DEFAULTS.notifyConnection).toBe(true);
-    expect(DEFAULTS.notifySound).toBe(false);
-    expect(DEFAULTS.notifySubFailure).toBe(true);
+    expect(DEFAULTS.onConnected).toBe(true);
+    expect(DEFAULTS.notifySound).toBe(true);
+    expect(DEFAULTS.onSubSynced).toBe(true);
     expect(DEFAULTS.logLevel).toBe('info');
   });
 });
@@ -47,7 +47,7 @@ describe('loadSettings', () => {
     const s = loadSettings();
     expect(s.language).toBe('ru');
     expect(s.allowLan).toBe(false);
-    expect(s.networkMode).toBe('tun'); // from DEFAULTS
+    expect(s.defaultMode).toBe('tun'); // from DEFAULTS
   });
 
   it('returns DEFAULTS and warns on corrupt JSON', () => {
@@ -195,7 +195,7 @@ describe('useSettings backend load', () => {
     await act(async () => { await Promise.resolve(); });
 
     expect(result.current[0].language).toBe('ru');
-    expect(result.current[0].launchOnStartup).toBe(true);
+    expect(result.current[0].autostart).toBe(true);
     expect(result.current[0].socksPort).toBe(12345);
     expect(result.current[0].logLevel).toBe('debug');
     expect(result.current[0].httpPort).toBe(10809);

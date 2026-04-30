@@ -3,42 +3,59 @@ import { Get as GetSettings } from '../../wailsjs/go/bindings/SettingsService';
 import { backendToFrontend } from './settingsAdapter';
 
 export type Language = 'en' | 'ru';
-export type NetworkMode = 'tun' | 'system-proxy' | 'off';
+export type NetworkMode = 'tun' | 'sysproxy';
 export type DnsMode = 'auto' | 'custom';
 export type LogLevel = 'error' | 'info' | 'debug' | 'trace';
 export type Ipv6Mode = 'prefer-v4' | 'prefer-v6' | 'disabled';
 
 export type Settings = {
+  // general
   language: Language;
-  launchOnStartup: boolean;
+  autostart: boolean;
   startMinimized: boolean;
-  networkMode: NetworkMode;
-  dnsMode: DnsMode;
-  dnsCustom: string;
-  allowLan: boolean;
+  // network
+  defaultMode: NetworkMode;
   socksPort: number;
   httpPort: number;
+  allowLan: boolean;
   ipv6Mode: Ipv6Mode;
-  notifyConnection: boolean;
+  dnsMode: DnsMode;
+  dnsCustom: string;
+  tunCidr: string;
+  tunMtu: number;
+  // killswitch
+  killSwitchEnabled: boolean;
+  killSwitchAlwaysOn: boolean;
+  // notifications
+  onConnected: boolean;
+  onDisconnected: boolean;
+  onQuotaLow: boolean;
+  onSubSynced: boolean;
   notifySound: boolean;
-  notifySubFailure: boolean;
+  // debug
   logLevel: LogLevel;
 };
 
 export const DEFAULTS = {
   language: 'en',
-  launchOnStartup: false,
+  autostart: false,
   startMinimized: false,
-  networkMode: 'tun',
+  defaultMode: 'tun',
+  socksPort: 1080,
+  httpPort: 8888,
+  allowLan: false,
+  ipv6Mode: 'prefer-v4',
   dnsMode: 'auto',
   dnsCustom: '',
-  allowLan: true,
-  socksPort: 10808,
-  httpPort: 10809,
-  ipv6Mode: 'prefer-v4',
-  notifyConnection: true,
-  notifySound: false,
-  notifySubFailure: true,
+  tunCidr: '198.18.0.1/15',
+  tunMtu: 1500,
+  killSwitchEnabled: true,
+  killSwitchAlwaysOn: false,
+  onConnected: true,
+  onDisconnected: true,
+  onQuotaLow: true,
+  onSubSynced: true,
+  notifySound: true,
   logLevel: 'info',
 } as const satisfies Settings;
 
