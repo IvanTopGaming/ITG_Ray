@@ -177,18 +177,6 @@ export function Settings() {
             ] as const}
           />
         </SettingRow>
-        {/*
-          The runtime currently ignores everything below — chainctl reads
-          hardcoded literals (defaultTunCIDR, SOCKS port 1080, DNS 1.1.1.1/
-          8.8.8.8) instead of config.Network at connect time. Disable the
-          cluster so users don't change values that silently won't apply;
-          the persistence path stays live for when the Tier 2b runtime
-          wiring lands. Remove the fieldset wrapper at that point.
-        */}
-        <div className="mt-3 mb-2 px-3 py-2 rounded-[10px] bg-white/[0.04] border border-white/[0.08] text-[12px] text-white/[0.65] leading-snug">
-          These per-connection knobs ship UI-only in this release — runtime application is on the next milestone.
-        </div>
-        <fieldset disabled className="border-0 m-0 p-0 min-w-0 opacity-60">
         <SettingRow label="DNS" hint="Override DNS while connected. Uses remote VPN DNS by default.">
           <Dropdown
             value={s.dnsMode}
@@ -321,7 +309,6 @@ export function Settings() {
             </div>
           </div>
         </Reveal>
-        </fieldset>
       </motion.div>
 
       {/* Kill switch */}
