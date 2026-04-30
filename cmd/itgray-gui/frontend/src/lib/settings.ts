@@ -3,6 +3,8 @@ import { Get as GetSettings, Update as UpdateSettings } from '../../wailsjs/go/b
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime';
 import { backendToFrontend, frontendToBackend } from './settingsAdapter';
 
+const HUB_EVENT_SETTINGS = 'settings:changed'; // mirrors hub.EventSettings in cmd/itgray-gui/hub/events.go
+
 // ──────────────────────────────────────────────────────────────────────
 //  Type aliases (preserve existing exports)
 // ──────────────────────────────────────────────────────────────────────
@@ -76,6 +78,7 @@ let prevSnapshot: Settings | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let backendFetchStarted = false;
 let eventsRegistered = false;
+let inFlightUpdate = false;
 const listeners = new Set<() => void>();
 
 function notifyListeners(): void {
@@ -113,10 +116,13 @@ function loadFromBackend(): void {
 
 function onSettingsEvent(): void {
   if (typeof window === 'undefined' || !(window as any).go) return;
-  // Short-circuit if a local optimistic patch is mid-debounce. The next
-  // flushSettings() will reconcile state with disk, and the resulting
-  // backend EventSettings echo will trigger a fresh fetch then.
-  if (pendingPatch !== null) return;
+  // Short-circuit if a local optimistic patch is mid-debounce, or an
+  // Update RPC is in flight. flushSettings() clears pendingPatch
+  // synchronously before awaiting flushNow's Promise.allSettled, so a
+  // backend EventSettings echo arriving in that window would otherwise
+  // trigger a redundant Get(); the in-flight RPC's own echo will refresh
+  // us on completion.
+  if (pendingPatch !== null || inFlightUpdate) return;
   GetSettings()
     .then((view) => {
       const patch = backendToFrontend(view);
@@ -131,7 +137,7 @@ function onSettingsEvent(): void {
 function ensureEventsRegistered(): void {
   if (eventsRegistered) return;
   if (typeof window === 'undefined' || !(window as any).go) return;
-  EventsOn('settings', onSettingsEvent);
+  EventsOn(HUB_EVENT_SETTINGS, onSettingsEvent);
   eventsRegistered = true;
 }
 
@@ -162,6 +168,7 @@ async function flushNow(patch: Partial<Settings>, snap: Settings): Promise<void>
   }
   // Reference snap so TS does not flag it unused; remove once rollback wired.
   void snap;
+  inFlightUpdate = false;
 }
 
 export function flushSettings(): void {
@@ -174,6 +181,7 @@ export function flushSettings(): void {
   const snap = prevSnapshot ?? currentState;
   pendingPatch = null;
   prevSnapshot = null;
+  inFlightUpdate = true;
   void flushNow(patch, snap);
 }
 
@@ -188,8 +196,9 @@ export function __resetForTests(): void {
   pendingPatch = null;
   prevSnapshot = null;
   backendFetchStarted = false;
+  inFlightUpdate = false;
   if (eventsRegistered) {
-    EventsOff('settings');
+    EventsOff(HUB_EVENT_SETTINGS);
     eventsRegistered = false;
   }
   if (typeof window !== 'undefined') {
