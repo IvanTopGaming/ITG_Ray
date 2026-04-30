@@ -62,6 +62,7 @@ export function Settings() {
   const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'uptodate'>('idle');
   const [stuck, setStuck] = useState(false);
   const [about, setAbout] = useState<hub.AboutSettings | null>(null);
+  const [tunAdvancedOpen, setTunAdvancedOpen] = useState(false);
 
   useEffect(() => {
     GetSettings()
@@ -245,40 +246,65 @@ export function Settings() {
             ] as const}
           />
         </SettingRow>
-        {s.defaultMode === 'tun' && (
-          <details className="mt-2 group">
-            <summary className="cursor-pointer text-[13px] text-white/[0.55] hover:text-white/[0.75] select-none py-2 transition-colors">
+        <Reveal show={s.defaultMode === 'tun'}>
+          <div className="mt-2">
+            <button
+              type="button"
+              onClick={() => setTunAdvancedOpen((v) => !v)}
+              aria-expanded={tunAdvancedOpen}
+              aria-controls="tun-advanced-panel"
+              id="tun-advanced-summary"
+              className="flex items-center gap-1.5 cursor-pointer text-[13px] text-white/[0.55] hover:text-white/[0.75] select-none py-2 transition-colors w-full text-left"
+            >
+              <motion.span
+                aria-hidden="true"
+                animate={{ rotate: tunAdvancedOpen ? 90 : 0 }}
+                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                className="inline-flex"
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  <path d="M3 2L7 5L3 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </motion.span>
               Advanced TUN parameters
-            </summary>
-            <div className="mt-1 pl-3 border-l border-white/[0.08]">
-              <SettingRow label="Interface CIDR" hint="TUN adapter IPv4 address and subnet. Default 198.18.0.1/15.">
-                <input
-                  type="text"
-                  value={s.tunCidr}
-                  onChange={(e) => update({ tunCidr: e.target.value })}
-                  placeholder="198.18.0.1/15"
-                  className="w-40 px-3 py-1.5 bg-white/[0.06] border border-white/[0.12] rounded-[10px] text-[13px] text-white placeholder:text-white/[0.30] outline-none transition-colors focus:border-white/[0.30] tabular-nums"
-                />
-              </SettingRow>
-              <SettingRow label="MTU" hint="TUN interface MTU in bytes. Default 1500. Range 576–9000.">
-                <input
-                  type="number"
-                  min={576}
-                  max={9000}
-                  step={1}
-                  value={s.tunMtu}
-                  onChange={(e) => {
-                    const n = Number(e.target.value);
-                    if (Number.isFinite(n) && n >= 576 && n <= 9000) {
-                      update({ tunMtu: n });
-                    }
-                  }}
-                  className="w-24 px-3 py-1.5 bg-white/[0.06] border border-white/[0.12] rounded-[10px] text-[13px] text-white text-center outline-none transition-colors focus:border-white/[0.30] tabular-nums"
-                />
-              </SettingRow>
+            </button>
+            <div
+              id="tun-advanced-panel"
+              role="region"
+              aria-labelledby="tun-advanced-summary"
+            >
+              <Reveal show={tunAdvancedOpen}>
+                <div className="mt-1 pl-3 border-l border-white/[0.08]">
+                  <SettingRow label="Interface CIDR" hint="TUN adapter IPv4 address and subnet. Default 198.18.0.1/15.">
+                    <input
+                      type="text"
+                      value={s.tunCidr}
+                      onChange={(e) => update({ tunCidr: e.target.value })}
+                      placeholder="198.18.0.1/15"
+                      className="w-40 px-3 py-1.5 bg-white/[0.06] border border-white/[0.12] rounded-[10px] text-[13px] text-white placeholder:text-white/[0.30] outline-none transition-colors focus:border-white/[0.30] tabular-nums"
+                    />
+                  </SettingRow>
+                  <SettingRow label="MTU" hint="TUN interface MTU in bytes. Default 1500. Range 576–9000.">
+                    <input
+                      type="number"
+                      min={576}
+                      max={9000}
+                      step={1}
+                      value={s.tunMtu}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        if (Number.isFinite(n) && n >= 576 && n <= 9000) {
+                          update({ tunMtu: n });
+                        }
+                      }}
+                      className="w-24 px-3 py-1.5 bg-white/[0.06] border border-white/[0.12] rounded-[10px] text-[13px] text-white text-center outline-none transition-colors focus:border-white/[0.30] tabular-nums"
+                    />
+                  </SettingRow>
+                </div>
+              </Reveal>
             </div>
-          </details>
-        )}
+          </div>
+        </Reveal>
       </motion.div>
 
       {/* Kill switch */}
