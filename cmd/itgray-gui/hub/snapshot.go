@@ -109,6 +109,7 @@ type NotificationSettings struct {
 	OnDisconnected bool `json:"onDisconnected"`
 	QuotaLow       bool `json:"quotaLow"`
 	OnSubSynced    bool `json:"onSubSynced"`
+	Sound          bool `json:"sound"`
 }
 
 // DebugSettings holds developer-facing toggles. The "open logs folder" UI

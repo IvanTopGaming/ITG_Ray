@@ -67,9 +67,17 @@ export function backendToFrontend(view: hub.SettingsView): Partial<Settings> {
   if (typeof view.notifications?.onConnected === 'boolean') {
     patch.onConnected = view.notifications.onConnected;
   }
-
+  if (typeof view.notifications?.onDisconnected === 'boolean') {
+    patch.onDisconnected = view.notifications.onDisconnected;
+  }
+  if (typeof view.notifications?.quotaLow === 'boolean') {
+    patch.onQuotaLow = view.notifications.quotaLow;
+  }
   if (typeof view.notifications?.onSubSynced === 'boolean') {
     patch.onSubSynced = view.notifications.onSubSynced;
+  }
+  if (typeof view.notifications?.sound === 'boolean') {
+    patch.notifySound = view.notifications.sound;
   }
 
   const logLevel = view.debug?.logLevel;

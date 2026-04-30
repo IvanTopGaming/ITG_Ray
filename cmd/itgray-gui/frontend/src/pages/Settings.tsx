@@ -309,8 +309,14 @@ export function Settings() {
       {/* Notifications */}
       <motion.div id="notifications" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
         <SectionHeader title="Notifications" />
-        <SettingRow label="Connection toasts" hint="Show OS notifications on connect, disconnect, and errors.">
+        <SettingRow label="Notify on connect" hint="Show an OS toast when the tunnel comes up.">
           <Toggle value={s.onConnected} onChange={(v) => update({ onConnected: v })} />
+        </SettingRow>
+        <SettingRow label="Notify on disconnect" hint="Show an OS toast when the tunnel drops.">
+          <Toggle value={s.onDisconnected} onChange={(v) => update({ onDisconnected: v })} />
+        </SettingRow>
+        <SettingRow label="Notify when quota is low" hint="Warn before a subscription's traffic budget runs out.">
+          <Toggle value={s.onQuotaLow} onChange={(v) => update({ onQuotaLow: v })} />
         </SettingRow>
         <SettingRow label="Sound" hint="Play a soft chime on state changes.">
           <Toggle value={s.notifySound} onChange={(v) => update({ notifySound: v })} />

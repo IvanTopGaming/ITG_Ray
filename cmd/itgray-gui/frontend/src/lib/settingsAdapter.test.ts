@@ -57,6 +57,8 @@ describe('backendToFrontend', () => {
       tunCidr: '',
       httpPort: 0,
       onConnected: false,
+      onDisconnected: false,
+      onQuotaLow: false,
       onSubSynced: false,
       logLevel: 'debug',
     });
@@ -140,6 +142,29 @@ describe('backendToFrontend > killSwitch', () => {
     const patch = backendToFrontend(view);
     expect(patch.killSwitchEnabled).toBe(false);
     expect(patch.killSwitchAlwaysOn).toBe(true);
+  });
+});
+
+describe('backendToFrontend > notifications', () => {
+  it('maps the full notifications shape', () => {
+    const view = {
+      general: {},
+      network: {},
+      notifications: {
+        onConnected: true,
+        onDisconnected: false,
+        quotaLow: true,
+        onSubSynced: false,
+        sound: true,
+      },
+      debug: {},
+    } as unknown as hub.SettingsView;
+    const patch = backendToFrontend(view);
+    expect(patch.onConnected).toBe(true);
+    expect(patch.onDisconnected).toBe(false);
+    expect(patch.onQuotaLow).toBe(true);
+    expect(patch.onSubSynced).toBe(false);
+    expect(patch.notifySound).toBe(true);
   });
 });
 

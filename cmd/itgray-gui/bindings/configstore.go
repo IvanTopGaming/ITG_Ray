@@ -112,6 +112,7 @@ func (s *ConfigStore) toView(c *config.Config) hub.SettingsView {
 			OnDisconnected: c.Notifications.Disconnected,
 			QuotaLow:       c.Notifications.QuotaLow,
 			OnSubSynced:    c.Notifications.SubUpdated,
+			Sound:          c.Notifications.Sound,
 		},
 		Debug: hub.DebugSettings{LogLevel: "info"},
 		About: hub.AboutSettings{
@@ -234,5 +235,8 @@ func applyNotifications(n *config.Notifications, p map[string]any) {
 	}
 	if v, ok := p["onSubSynced"].(bool); ok {
 		n.SubUpdated = v
+	}
+	if v, ok := p["sound"].(bool); ok {
+		n.Sound = v
 	}
 }

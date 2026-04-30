@@ -33,6 +33,26 @@ func TestApplyNotifications_QuotaLowKeyRenamed(t *testing.T) {
 	require.False(t, c2.Notifications.QuotaLow, "old onError key must be ignored")
 }
 
+// TestApplyNotifications_NewFields covers the slice-Nt additions —
+// onConnected, onDisconnected, quotaLow, onSubSynced, sound — in a
+// single shot so any future reshuffle of applyNotifications retains
+// full key coverage.
+func TestApplyNotifications_NewFields(t *testing.T) {
+	c := config.Config{}
+	applyNotifications(&c.Notifications, map[string]any{
+		"onConnected":    true,
+		"onDisconnected": false,
+		"quotaLow":       true,
+		"onSubSynced":    false,
+		"sound":          false,
+	})
+	require.True(t, c.Notifications.Connected)
+	require.False(t, c.Notifications.Disconnected)
+	require.True(t, c.Notifications.QuotaLow)
+	require.False(t, c.Notifications.SubUpdated)
+	require.False(t, c.Notifications.Sound)
+}
+
 // TestApplyNetwork_NewFields covers the slice-N additions in a single
 // shot — tunCidr, tunMtu, allowLan, ipv6Mode, dnsMode, dnsServers — and
 // verifies the dnsServers []any → []string filter drops empty entries.
