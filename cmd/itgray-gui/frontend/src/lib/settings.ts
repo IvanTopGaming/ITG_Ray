@@ -96,8 +96,9 @@ function loadFromBackend(): void {
     return;
   }
   p.then((view) => {
-    const patch = backendToFrontend(view);
-    currentState = { ...currentState, ...patch };
+    const diskPatch = backendToFrontend(view);
+    // Disk truth wins over DEFAULTS, but in-flight optimistic edits win over disk.
+    currentState = { ...currentState, ...diskPatch, ...(pendingPatch ?? {}) };
     notifyListeners();
   }).catch((err) => {
     console.warn('SettingsService.Get failed', err);
@@ -157,6 +158,9 @@ export function __resetForTests(): void {
   pendingPatch = null;
   prevSnapshot = null;
   backendFetchStarted = false;
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('beforeunload', flushSettings);
+  }
   listeners.clear();
 }
 
@@ -191,5 +195,6 @@ export function useSettings(): [Settings, (patch: Partial<Settings>) => void] {
 // ──────────────────────────────────────────────────────────────────────
 
 if (typeof window !== 'undefined') {
+  window.removeEventListener('beforeunload', flushSettings);
   window.addEventListener('beforeunload', flushSettings);
 }
