@@ -113,12 +113,12 @@ func newSubCmd() *cobra.Command {
 				merged, meta, err := subscription.Sync(ctx, s.ToSyncInput(), existing, 30*time.Second)
 				if err != nil {
 					fmt.Printf("%s\tERROR: %s\n", s.ID, err.Error())
-					_ = st.UpdateMeta(s.ID, time.Now(), "ERROR: "+truncate(err.Error(), 120), "", nil)
+					_ = st.UpdateMeta(s.ID, time.Now(), "error", truncate(err.Error(), 120), nil)
 					continue
 				}
 				existing = merged
 				fmt.Printf("%s\t%s\t%s\n", s.ID, meta.Status, meta.Message)
-				_ = st.UpdateMeta(s.ID, time.Now(), "OK "+meta.Message, "", nil)
+				_ = st.UpdateMeta(s.ID, time.Now(), "ok", meta.Message, meta.Headers.Userinfo)
 			}
 			return server.Save(serversPath(), existing)
 		},
