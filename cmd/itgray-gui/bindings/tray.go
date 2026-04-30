@@ -282,7 +282,7 @@ func (t *TrayService) actionConnectLast() {
 		return
 	}
 	if mode == "" {
-		mode = string(chainctl.ModeAuto)
+		mode = string(chainctl.ModeTUN)
 	}
 	ctx := t.contextOrBackground()
 	_ = t.d.Chain.Start(ctx, id, chainctl.Mode(mode))

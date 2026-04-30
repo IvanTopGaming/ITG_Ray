@@ -116,7 +116,7 @@ func (a *AppService) GetSnapshot() (hub.Snapshot, error) {
 	}
 	return hub.Snapshot{
 		Status:      hub.StatusIdle,
-		Mode:        "auto",
+		Mode:        "tun",
 		Speeds:      hub.SpeedSample{At: time.Now()},
 		HelperState: a.probeHelper(),
 		Servers:     toServerViews(servers, subOriginByID(subs)),
@@ -239,9 +239,9 @@ func hostPort(addr string, port uint16) string {
 func (a *AppService) collectSettings() hub.SettingsView {
 	return hub.SettingsView{
 		General:       hub.GeneralSettings{Language: "auto", Theme: "dark", CloseToTray: true},
-		Network:       hub.NetworkSettings{DefaultMode: "auto", TunCIDR: "198.18.0.1/15", TunName: "ITGRay-TUN", SocksPort: 1080, XrayPort: 1081},
+		Network:       hub.NetworkSettings{DefaultMode: "tun", TunCIDR: "198.18.0.1/15", TunName: "ITGRay-TUN", SocksPort: 1080, HttpPort: 1081},
 		Subscriptions: hub.SubscriptionSettings{DefaultUpdateInterval: 3600, UserAgent: "ITG-Ray/0.1"},
-		Notifications: hub.NotificationSettings{OnConnected: true, OnDisconnected: true, OnError: true},
+		Notifications: hub.NotificationSettings{OnConnected: true, OnDisconnected: true, QuotaLow: true},
 		Debug:         hub.DebugSettings{LogLevel: "info"},
 		About:         hub.AboutSettings{Version: a.d.Version, BuildDate: a.d.BuildDate},
 		Security:      hub.SecuritySettings{Method: "Unencrypted", Available: false, Warning: "secret protection detection not yet wired"},

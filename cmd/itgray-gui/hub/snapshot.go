@@ -73,11 +73,11 @@ type GeneralSettings struct {
 
 // NetworkSettings holds proxy / TUN routing knobs.
 type NetworkSettings struct {
-	DefaultMode string `json:"defaultMode"` // "tun" | "sysproxy" | "auto"
+	DefaultMode string `json:"defaultMode"` // "tun" | "sysproxy"
 	TunCIDR     string `json:"tunCidr"`     // "198.18.0.1/15"
 	TunName     string `json:"tunName"`     // "ITGRay-TUN"
 	SocksPort   int    `json:"socksPort"`   // sysproxy mode local port
-	XrayPort    int    `json:"xrayPort"`    // internal xray socks port
+	HttpPort    int    `json:"httpPort"`    // sysproxy mode local HTTP port
 }
 
 // SubscriptionSettings holds per-app subscription defaults.
@@ -90,7 +90,7 @@ type SubscriptionSettings struct {
 type NotificationSettings struct {
 	OnConnected    bool `json:"onConnected"`
 	OnDisconnected bool `json:"onDisconnected"`
-	OnError        bool `json:"onError"`
+	QuotaLow       bool `json:"quotaLow"`
 	OnSubSynced    bool `json:"onSubSynced"`
 }
 

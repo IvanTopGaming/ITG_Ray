@@ -26,7 +26,6 @@ type Mode string
 const (
 	ModeTUN      Mode = "tun"
 	ModeSysProxy Mode = "sysproxy"
-	ModeAuto     Mode = "auto"
 )
 
 // HelperClient is the small surface chainctl needs from the helper-RPC
@@ -236,8 +235,8 @@ func (c *Controller) LastSession() (serverID, mode string) {
 }
 
 // bringUp performs the helper-RPC sequence. Returns the effective mode
-// (which can differ from the requested mode if ModeAuto fell back from
-// TUN to sysproxy after a TunCreate failure).
+// (preserved as a return for symmetry with future fall-back logic; today
+// the effective mode always equals the requested mode).
 //
 //nolint:gocyclo,gocognit // orchestration sequence requires linear control flow so the rollback chain stays obvious
 func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode) (Mode, error) {
@@ -250,31 +249,25 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 		}
 	}
 
-	if mode == ModeTUN || mode == ModeAuto {
+	if mode == ModeTUN {
 		if err := c.d.Helper.RouteSnapshot(ctx); err != nil {
 			return mode, fmt.Errorf("RouteSnapshot: %w", err)
 		}
 		if err := c.d.Helper.TunCreate(ctx, c.d.TunName, c.d.TunCIDR); err != nil {
-			if mode == ModeTUN {
-				_ = c.d.Helper.RouteRestore(ctx)
-				return mode, fmt.Errorf("TunCreate: %w", err)
-			}
-			// Auto: fall back to sysproxy. Roll back the route snapshot
-			// since we won't be using TUN after all.
 			_ = c.d.Helper.RouteRestore(ctx)
-			mode = ModeSysProxy
+			return mode, fmt.Errorf("TunCreate: %w", err)
 		}
 	}
 
 	if err := c.d.Helper.StartChain(ctx, singboxJSON, xrayJSON); err != nil {
-		if mode == ModeTUN || mode == ModeAuto {
+		if mode == ModeTUN {
 			_ = c.d.Helper.TunDestroy(ctx)
 			_ = c.d.Helper.RouteRestore(ctx)
 		}
 		return mode, fmt.Errorf("StartChain: %w", err)
 	}
 
-	if mode == ModeTUN || mode == ModeAuto {
+	if mode == ModeTUN {
 		if err := c.d.Helper.RouteAdd(ctx, srv.Vless.Address); err != nil {
 			_ = c.d.Helper.StopChain(ctx)
 			_ = c.d.Helper.TunDestroy(ctx)
@@ -305,12 +298,12 @@ func (c *Controller) tearDown(ctx context.Context, mode Mode) {
 	if mode == ModeSysProxy {
 		_ = c.d.Sysproxy.Clear()
 	}
-	if mode == ModeTUN || mode == ModeAuto {
+	if mode == ModeTUN {
 		_ = c.d.Helper.DnsRestore(ctx)
 		_ = c.d.Helper.RouteRestore(ctx)
 	}
 	_ = c.d.Helper.StopChain(ctx)
-	if mode == ModeTUN || mode == ModeAuto {
+	if mode == ModeTUN {
 		_ = c.d.Helper.TunDestroy(ctx)
 	}
 }

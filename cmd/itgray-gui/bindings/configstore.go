@@ -81,7 +81,7 @@ func (s *ConfigStore) toView(c *config.Config) hub.SettingsView {
 			TunCIDR:     c.Network.TUN.IPv4CIDR,
 			TunName:     "ITGRay-TUN",
 			SocksPort:   c.Network.SysProxy.SOCKSPort,
-			XrayPort:    c.Network.SysProxy.HTTPPort,
+			HttpPort:    c.Network.SysProxy.HTTPPort,
 		},
 		Subscriptions: hub.SubscriptionSettings{
 			DefaultUpdateInterval: 3600,
@@ -90,7 +90,7 @@ func (s *ConfigStore) toView(c *config.Config) hub.SettingsView {
 		Notifications: hub.NotificationSettings{
 			OnConnected:    c.Notifications.Connected,
 			OnDisconnected: c.Notifications.Disconnected,
-			OnError:        c.Notifications.QuotaLow,
+			QuotaLow:       c.Notifications.QuotaLow,
 			OnSubSynced:    c.Notifications.SubUpdated,
 		},
 		Debug: hub.DebugSettings{LogLevel: "info"},
@@ -159,7 +159,7 @@ func applyNetwork(n *config.Network, p map[string]any) {
 	if v, ok := p["socksPort"].(float64); ok {
 		n.SysProxy.SOCKSPort = int(v)
 	}
-	if v, ok := p["xrayPort"].(float64); ok {
+	if v, ok := p["httpPort"].(float64); ok {
 		n.SysProxy.HTTPPort = int(v)
 	}
 }
@@ -171,7 +171,7 @@ func applyNotifications(n *config.Notifications, p map[string]any) {
 	if v, ok := p["onDisconnected"].(bool); ok {
 		n.Disconnected = v
 	}
-	if v, ok := p["onError"].(bool); ok {
+	if v, ok := p["quotaLow"].(bool); ok {
 		n.QuotaLow = v
 	}
 	if v, ok := p["onSubSynced"].(bool); ok {

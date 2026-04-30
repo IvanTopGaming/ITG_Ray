@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
 
@@ -90,4 +91,32 @@ func TestSettingsService_Update_ConcurrentSafe(t *testing.T) {
 	view, err := svc.Get()
 	require.NoError(t, err)
 	require.Contains(t, langs, view.General.Language)
+}
+
+// TestSettingsService_Update_PublishesEventSettings asserts that a
+// successful Update emits hub.EventSettings{section: <section>} so the
+// frontend EventsOn("settings") subscription can refresh.
+func TestSettingsService_Update_PublishesEventSettings(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+
+	h := hub.New()
+	sub := h.Subscribe(4)
+	defer h.Unsubscribe(sub)
+
+	svc := NewSettingsService(SettingsDeps{
+		Store: NewConfigStore(path, "test", "test"),
+		Hub:   h,
+	})
+
+	_, err := svc.Update("network", map[string]any{"defaultMode": "sysproxy"})
+	require.NoError(t, err)
+
+	select {
+	case ev := <-sub:
+		require.Equal(t, hub.EventSettings, ev.Name)
+		require.Equal(t, "network", ev.Payload["section"])
+	case <-time.After(time.Second):
+		t.Fatal("did not receive EventSettings")
+	}
 }

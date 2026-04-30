@@ -77,19 +77,12 @@ func loadRulesFromDataDir(dataDir string) rules.Model {
 // process. It produces the (singboxJSON, xrayJSON) pair the Helper needs
 // to bring the chain up. Mode mapping:
 //   - chainctl.ModeTUN   → configgen.ModeTun (FakeIP, TunName/CIDR set)
-//   - chainctl.ModeAuto  → same as TUN; chainctl falls back to sysproxy
-//     post-TunCreate-failure but the configs were already generated for
-//     TUN mode at that point — that's fine because the helper's
-//     OpStartChain in sysproxy mode reads only the sing-box "mixed"
-//     inbound (which configgen does NOT add for TUN). Auto-fallback is
-//     therefore a v0.2 follow-up; for v0.1 Auto behaves exactly like
-//     TUN, matching the CLI's --use-helper default.
 //   - chainctl.ModeSysProxy → configgen.ModeSysProxy (mixed inbound)
 func buildConfigs(dataDir string) chainctl.ConfigBuilder {
 	return func(srv *server.Server, mode chainctl.Mode) (singboxJSON, xrayJSON []byte, err error) {
 		var sbInput configgen.SingboxInput
 		switch mode {
-		case chainctl.ModeTUN, chainctl.ModeAuto:
+		case chainctl.ModeTUN:
 			sbInput = configgen.SingboxInput{
 				Mode:          configgen.ModeTun,
 				FakeIP:        true,
