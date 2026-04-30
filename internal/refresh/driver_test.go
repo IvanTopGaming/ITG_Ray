@@ -23,7 +23,10 @@ type fakeStore struct {
 
 func (f *fakeStore) Load() ([]subscription.Stored, error)             { return f.subs, nil }
 func (f *fakeStore) Save(s []subscription.Stored) error               { f.subs = s; return nil }
-func (f *fakeStore) UpdateMeta(_ string, _ time.Time, _ string) error { f.updates.Add(1); return nil }
+func (f *fakeStore) UpdateMeta(_ string, _ time.Time, _, _ string, _ *subscription.Userinfo) error {
+	f.updates.Add(1)
+	return nil
+}
 
 // noopSync / noopProbe are placeholders for the skeleton tests; later tasks
 // add tests that drive these through fake versions with side-effects.

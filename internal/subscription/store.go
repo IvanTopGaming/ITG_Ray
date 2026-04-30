@@ -78,7 +78,7 @@ func (s Stored) ToSyncInput() Subscription {
 type Store interface {
 	Load() ([]Stored, error)
 	Save(subs []Stored) error
-	UpdateMeta(id string, at time.Time, status string) error
+	UpdateMeta(id string, at time.Time, status, message string, ui *Userinfo) error
 }
 
 // FileStore persists Stored entries as JSON at Path, using atomic file replace.
@@ -119,9 +119,12 @@ func (s FileStore) Save(subs []Stored) error {
 	return config.WriteAtomic(s.Path, b, 0o600)
 }
 
-// UpdateMeta mutates LastSyncAt + LastStatus for one ID and saves. Unknown
-// IDs are a no-op (no error) — the user may have removed the sub in a race.
-func (s FileStore) UpdateMeta(id string, at time.Time, status string) error {
+// UpdateMeta updates the metadata for one subscription. status is the clean
+// enum ("ok"|"error"|""), message is human-readable detail, and ui (when
+// non-nil) overwrites the quota/expiry fields. ui=nil preserves prior values
+// — a transient sync failure does not blank a subscription's traffic display.
+// Unknown id is a no-op (no error).
+func (s FileStore) UpdateMeta(id string, at time.Time, status, message string, ui *Userinfo) error {
 	mu := lockForPath(s.Path)
 	mu.Lock()
 	defer mu.Unlock()
@@ -130,11 +133,19 @@ func (s FileStore) UpdateMeta(id string, at time.Time, status string) error {
 		return err
 	}
 	for i := range subs {
-		if subs[i].ID == id {
-			subs[i].LastSyncAt = at
-			subs[i].LastStatus = status
-			return s.Save(subs)
+		if subs[i].ID != id {
+			continue
 		}
+		subs[i].LastSyncAt = at
+		subs[i].LastStatus = status
+		subs[i].LastMessage = message
+		if ui != nil {
+			subs[i].Upload = ui.Upload
+			subs[i].Download = ui.Download
+			subs[i].Total = ui.Total
+			subs[i].Expire = ui.Expire
+		}
+		return s.Save(subs)
 	}
 	return nil
 }

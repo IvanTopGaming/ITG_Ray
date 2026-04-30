@@ -17,9 +17,11 @@ import (
 
 // metaCapture stores all UpdateMeta calls.
 type metaCall struct {
-	ID     string
-	At     time.Time
-	Status string
+	ID      string
+	At      time.Time
+	Status  string
+	Message string
+	UI      *subscription.Userinfo
 }
 
 type metaCaptureStore struct {
@@ -30,10 +32,10 @@ type metaCaptureStore struct {
 
 func (m *metaCaptureStore) Load() ([]subscription.Stored, error) { return m.subs, nil }
 func (m *metaCaptureStore) Save(s []subscription.Stored) error   { m.subs = s; return nil }
-func (m *metaCaptureStore) UpdateMeta(id string, at time.Time, status string) error {
+func (m *metaCaptureStore) UpdateMeta(id string, at time.Time, status, message string, ui *subscription.Userinfo) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.log = append(m.log, metaCall{ID: id, At: at, Status: status})
+	m.log = append(m.log, metaCall{ID: id, At: at, Status: status, Message: message, UI: ui})
 	return nil
 }
 

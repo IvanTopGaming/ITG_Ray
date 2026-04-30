@@ -48,7 +48,7 @@ func (d *Driver) syncOne(ctx context.Context, sub subscription.Stored) {
 	} else {
 		status = "OK " + meta.Summary
 	}
-	if err := d.subs.UpdateMeta(sub.ID, d.now(), status); err != nil {
+	if err := d.subs.UpdateMeta(sub.ID, d.now(), status, "", nil); err != nil {
 		d.log.Error("refresh.sync.updateMeta", "id", sub.ID, "err", err)
 	}
 	d.log.Info("subscription.sync",
@@ -63,7 +63,7 @@ func (d *Driver) recordMeta(ctx context.Context, id, status string) {
 	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return
 	}
-	if err := d.subs.UpdateMeta(id, d.now(), status); err != nil {
+	if err := d.subs.UpdateMeta(id, d.now(), status, "", nil); err != nil {
 		d.log.Error("refresh.sync.updateMeta", "id", id, "err", err)
 	}
 }

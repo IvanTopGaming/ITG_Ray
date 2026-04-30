@@ -200,7 +200,7 @@ func (s *SubsService) SyncOne(id string) error {
 	} else {
 		storedStatus = "ERROR: " + truncate(msg, 120)
 	}
-	_ = s.d.SubStore.UpdateMeta(id, time.Now(), storedStatus)
+	_ = s.d.SubStore.UpdateMeta(id, time.Now(), storedStatus, "", nil)
 
 	s.d.Hub.Publish(hub.Event{
 		Name: hub.EventSubSynced,

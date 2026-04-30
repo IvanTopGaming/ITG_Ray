@@ -48,7 +48,7 @@ type ServerStore interface {
 type SubStore interface {
 	Load() ([]subscription.Stored, error)
 	Save([]subscription.Stored) error
-	UpdateMeta(id string, at time.Time, status string) error
+	UpdateMeta(id string, at time.Time, status, message string, ui *subscription.Userinfo) error
 }
 
 // HelperProber returns the current helper-service state.
