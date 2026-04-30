@@ -1,5 +1,6 @@
 import { useSyncExternalStore, useCallback } from 'react';
 import { Get as GetSettings, Update as UpdateSettings } from '../../wailsjs/go/bindings/SettingsService';
+import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime';
 import { backendToFrontend, frontendToBackend } from './settingsAdapter';
 
 // ──────────────────────────────────────────────────────────────────────
@@ -74,6 +75,7 @@ let pendingPatch: Partial<Settings> | null = null;
 let prevSnapshot: Settings | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let backendFetchStarted = false;
+let eventsRegistered = false;
 const listeners = new Set<() => void>();
 
 function notifyListeners(): void {
@@ -103,6 +105,34 @@ function loadFromBackend(): void {
   }).catch((err) => {
     console.warn('SettingsService.Get failed', err);
   });
+}
+
+// ──────────────────────────────────────────────────────────────────────
+//  Cross-process refresh: hub.EventSettings → re-fetch + merge
+// ──────────────────────────────────────────────────────────────────────
+
+function onSettingsEvent(): void {
+  if (typeof window === 'undefined' || !(window as any).go) return;
+  // Short-circuit if a local optimistic patch is mid-debounce. The next
+  // flushSettings() will reconcile state with disk, and the resulting
+  // backend EventSettings echo will trigger a fresh fetch then.
+  if (pendingPatch !== null) return;
+  GetSettings()
+    .then((view) => {
+      const patch = backendToFrontend(view);
+      currentState = { ...currentState, ...patch };
+      notifyListeners();
+    })
+    .catch((err) => {
+      console.warn('settings refresh after event failed', err);
+    });
+}
+
+function ensureEventsRegistered(): void {
+  if (eventsRegistered) return;
+  if (typeof window === 'undefined' || !(window as any).go) return;
+  EventsOn('settings', onSettingsEvent);
+  eventsRegistered = true;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -158,6 +188,10 @@ export function __resetForTests(): void {
   pendingPatch = null;
   prevSnapshot = null;
   backendFetchStarted = false;
+  if (eventsRegistered) {
+    EventsOff('settings');
+    eventsRegistered = false;
+  }
   if (typeof window !== 'undefined') {
     window.removeEventListener('beforeunload', flushSettings);
   }
@@ -175,6 +209,7 @@ function getSnapshot(): Settings {
 function subscribe(cb: () => void): () => void {
   listeners.add(cb);
   if (!backendFetchStarted) loadFromBackend();
+  ensureEventsRegistered();
   return () => listeners.delete(cb);
 }
 
