@@ -3,6 +3,7 @@ package bindings
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
@@ -172,7 +173,10 @@ func applyNetwork(n *config.Network, p map[string]any) {
 		n.TUN.IPv4CIDR = v
 	}
 	if v, ok := p["tunMtu"].(float64); ok {
-		n.TUN.MTU = int(v)
+		if mtu := int(v); mtu >= 576 && mtu <= 9000 {
+			n.TUN.MTU = mtu
+		}
+		// Out-of-range silently dropped — frontend should clamp before sending.
 	}
 	if v, ok := p["socksPort"].(float64); ok {
 		n.SysProxy.SOCKSPort = int(v)
@@ -192,8 +196,11 @@ func applyNetwork(n *config.Network, p map[string]any) {
 	if servers, ok := p["dnsServers"].([]any); ok {
 		out := make([]string, 0, len(servers))
 		for _, s := range servers {
-			if str, ok := s.(string); ok && str != "" {
-				out = append(out, str)
+			if str, ok := s.(string); ok {
+				str = strings.TrimSpace(str)
+				if str != "" {
+					out = append(out, str)
+				}
 			}
 		}
 		n.DNS.Servers = out

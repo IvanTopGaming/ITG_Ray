@@ -264,8 +264,14 @@ export function Settings() {
                   type="number"
                   min={576}
                   max={9000}
+                  step={1}
                   value={s.tunMtu}
-                  onChange={(e) => update({ tunMtu: Number(e.target.value) || 0 })}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    if (Number.isFinite(n) && n >= 576 && n <= 9000) {
+                      update({ tunMtu: n });
+                    }
+                  }}
                   className="w-24 px-3 py-1.5 bg-white/[0.06] border border-white/[0.12] rounded-[10px] text-[13px] text-white text-center outline-none transition-colors focus:border-white/[0.30] tabular-nums"
                 />
               </SettingRow>
