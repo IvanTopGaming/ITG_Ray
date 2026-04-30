@@ -149,13 +149,11 @@ func main() {
 			// rather than dropped into a closed hub.
 			chainCtrl.Reconcile(ctx)
 		},
-		OnBeforeClose: func(ctx context.Context) (prevent bool) {
-			// Always hide-to-tray on close; "quit" is only available via
-			// the tray menu. Keeps the process alive so the tray (or, for
-			// now, the headless event loop) continues driving the chain.
-			wailsruntime.WindowHide(ctx)
-			return true
-		},
+		// OnBeforeClose intentionally omitted: a system-tray adapter
+		// is a v0.2 task (see TrayService comment above) and Wails
+		// v2.11 has no first-party tray UI to drive a hide-to-tray
+		// flow. Until that ships, close = quit so users have a
+		// reachable exit.
 		OnShutdown: func(ctx context.Context) {
 			traySvc.Shutdown()
 			app.Shutdown(ctx)
