@@ -96,6 +96,21 @@ describe('backendToFrontend', () => {
   });
 });
 
+describe('backendToFrontend > general', () => {
+  it('maps general.autostart -> autostart', () => {
+    const view = {
+      general: { language: 'ru', autostart: true, startMinimized: false },
+      network: {},
+      notifications: {},
+      debug: {},
+    } as unknown as hub.SettingsView;
+    const patch = backendToFrontend(view);
+    expect(patch.autostart).toBe(true);
+    expect(patch.language).toBe('ru');
+    expect(patch.startMinimized).toBe(false);
+  });
+});
+
 describe('frontendToBackend', () => {
   it('returns empty map for empty patch', () => {
     expect(frontendToBackend({}).size).toBe(0);
