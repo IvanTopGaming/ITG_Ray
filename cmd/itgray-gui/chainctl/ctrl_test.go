@@ -371,6 +371,45 @@ func TestStart_NetworkLoaderError_PublishesChainError(t *testing.T) {
 	require.Contains(t, ev.Payload["message"].(string), "config.Load")
 }
 
+// TestStart_ConnectedEvent_PayloadIncludesNetwork pins that the
+// vpn:status connected event carries a "network" key projecting the
+// config.Network the runtime ACTUALLY used during this Connect cycle.
+// Frontend (Tier 2b Task 7) snapshots from this payload to drive the
+// reconnect-required pill, avoiding the edit-during-connect race
+// where a user could change a Network field between chainctl's
+// Network() read and the publish.
+//
+// Subscribe BEFORE Start: the connected event is published from the
+// bringUp goroutine, and a late subscribe could miss it.
+func TestStart_ConnectedEvent_PayloadIncludesNetwork(t *testing.T) {
+	dir := t.TempDir()
+	store := newMemStore(fixtureServer())
+	h := hub.New()
+	t.Cleanup(h.Close)
+	net := config.Defaults().Network
+	net.SysProxy.SOCKSPort = 1090
+
+	c := New(&Deps{
+		DataDir:     dir,
+		ServerStore: store,
+		Helper:      newFake(),
+		Sysproxy:    &fakeSysproxy{},
+		Hub:         h,
+		Network:     staticNetwork(net),
+	})
+	rcv := h.Subscribe(64)
+	defer h.Unsubscribe(rcv)
+	require.NoError(t, c.Start(context.Background(), "a", ModeSysProxy))
+
+	ev := waitForVpnStatus(t, rcv, string(hub.StatusConnected), 2*time.Second)
+	netView, ok := ev.Payload["network"]
+	require.True(t, ok, "connected event must carry network payload")
+	require.NotNil(t, netView)
+	view, ok := netView.(map[string]any)
+	require.True(t, ok, "network payload must be map[string]any")
+	require.EqualValues(t, 1090, view["socksPort"])
+}
+
 // TestStart_MTUOutOfRange_PassesRawToBuildConfigs pins the chainctl/
 // configbuilder split: chainctl forwards the raw Network to the
 // builder; clamping on the builder side lands in Task 5. Today the

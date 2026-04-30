@@ -95,6 +95,29 @@ type Deps struct {
 	Network func() (config.Network, error)
 }
 
+// networkSettingsView projects a config.Network into the camelCase shape
+// the frontend expects on the vpn:status connected payload. Mirrors
+// bindings.ConfigStore.toView's Network projection — duplicated here to
+// avoid a chainctl → bindings import cycle. Tier 2b: payload reflects
+// what the runtime ACTUALLY used at this Connect (avoids edit-during-
+// connect race in the frontend reconnect-required pill).
+func networkSettingsView(n config.Network) map[string]any {
+	return map[string]any{
+		"defaultMode": n.EffectiveMode(),
+		"tunCidr":     n.TUN.IPv4CIDR,
+		"tunMtu":      n.TUN.MTU,
+		"tunName":     defaultTunName,
+		"socksPort":   n.SysProxy.SOCKSPort,
+		"httpPort":    n.SysProxy.HTTPPort,
+		"allowLan":    n.AllowLAN,
+		"ipv6Mode":    n.IPv6Mode,
+		"dns": map[string]any{
+			"mode":    n.DNS.Mode,
+			"servers": n.DNS.Servers,
+		},
+	}
+}
+
 // Controller is the public type owning the chain lifecycle.
 type Controller struct {
 	d        Deps
@@ -155,7 +178,7 @@ func (c *Controller) Start(ctx context.Context, serverID string, mode Mode) erro
 	})
 
 	go func() {
-		effectiveMode, err := c.bringUp(ctx, srv, mode)
+		effectiveMode, net, err := c.bringUp(ctx, srv, mode)
 		if err != nil {
 			c.d.Hub.Publish(hub.Event{
 				Name: hub.EventChainError,
@@ -186,6 +209,7 @@ func (c *Controller) Start(ctx context.Context, serverID string, mode Mode) erro
 				"status":   string(hub.StatusConnected),
 				"serverId": srv.ID,
 				"mode":     string(effectiveMode),
+				"network":  networkSettingsView(net),
 			},
 		})
 		c.runPoller(pollCtx)
@@ -241,17 +265,20 @@ func (c *Controller) LastSession() (serverID, mode string) {
 
 // bringUp performs the helper-RPC sequence. Returns the effective mode
 // (preserved as a return for symmetry with future fall-back logic; today
-// the effective mode always equals the requested mode).
+// the effective mode always equals the requested mode) and the
+// config.Network the runtime actually used — Start propagates the
+// latter into the vpn:status connected payload so the frontend can
+// snapshot exactly what landed (avoids edit-during-connect race).
 //
 //nolint:gocyclo,gocognit // orchestration sequence requires linear control flow so the rollback chain stays obvious
-func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode) (Mode, error) {
+func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode) (Mode, config.Network, error) {
 	net, err := c.d.Network()
 	if err != nil {
 		c.d.Hub.Publish(hub.Event{
 			Name:    hub.EventChainError,
 			Payload: map[string]any{"message": fmt.Sprintf("config.Load: %v", err)},
 		})
-		return mode, fmt.Errorf("config.Load: %w", err)
+		return mode, config.Network{}, fmt.Errorf("config.Load: %w", err)
 	}
 	tunName := defaultTunName // package-level constant; not user-configurable
 	tunCIDR := net.TUN.IPv4CIDR
@@ -263,17 +290,17 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 	if c.d.BuildConfigs != nil {
 		singboxJSON, xrayJSON, err = c.d.BuildConfigs(srv, mode, net)
 		if err != nil {
-			return mode, fmt.Errorf("configgen: %w", err)
+			return mode, config.Network{}, fmt.Errorf("configgen: %w", err)
 		}
 	}
 
 	if mode == ModeTUN {
 		if err := c.d.Helper.RouteSnapshot(ctx); err != nil {
-			return mode, fmt.Errorf("RouteSnapshot: %w", err)
+			return mode, config.Network{}, fmt.Errorf("RouteSnapshot: %w", err)
 		}
 		if err := c.d.Helper.TunCreate(ctx, tunName, tunCIDR); err != nil {
 			_ = c.d.Helper.RouteRestore(ctx)
-			return mode, fmt.Errorf("TunCreate: %w", err)
+			return mode, config.Network{}, fmt.Errorf("TunCreate: %w", err)
 		}
 	}
 
@@ -282,7 +309,7 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 			_ = c.d.Helper.TunDestroy(ctx)
 			_ = c.d.Helper.RouteRestore(ctx)
 		}
-		return mode, fmt.Errorf("StartChain: %w", err)
+		return mode, config.Network{}, fmt.Errorf("StartChain: %w", err)
 	}
 
 	if mode == ModeTUN {
@@ -290,24 +317,24 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 			_ = c.d.Helper.StopChain(ctx)
 			_ = c.d.Helper.TunDestroy(ctx)
 			_ = c.d.Helper.RouteRestore(ctx)
-			return mode, fmt.Errorf("RouteAdd: %w", err)
+			return mode, config.Network{}, fmt.Errorf("RouteAdd: %w", err)
 		}
 		if err := c.d.Helper.DnsSet(ctx, dnsServers); err != nil {
 			_ = c.d.Helper.StopChain(ctx)
 			_ = c.d.Helper.RouteRestore(ctx)
 			_ = c.d.Helper.TunDestroy(ctx)
-			return mode, fmt.Errorf("DnsSet: %w", err)
+			return mode, config.Network{}, fmt.Errorf("DnsSet: %w", err)
 		}
 	} else {
 		if err := c.d.Sysproxy.Set(sysproxy.Settings{Socks: socksAddr, HTTP: httpAddr}); err != nil {
 			_ = c.d.Helper.StopChain(ctx)
-			return mode, fmt.Errorf("sysproxy.Set: %w", err)
+			return mode, config.Network{}, fmt.Errorf("sysproxy.Set: %w", err)
 		}
 	}
 	c.mu.Lock()
 	c.mode = mode
 	c.mu.Unlock()
-	return mode, nil
+	return mode, net, nil
 }
 
 // tearDown is best-effort: every step is independent and errors are

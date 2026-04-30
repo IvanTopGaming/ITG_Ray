@@ -9,6 +9,7 @@ import (
 
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/bindings"
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/chainctl"
+	"github.com/itg-team/itg-ray/internal/config"
 	"github.com/itg-team/itg-ray/internal/logging"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/subscription"
@@ -96,6 +97,21 @@ func main() {
 	helperBootCtx, cancelHelperBoot := context.WithCancel(context.Background())
 	helperClient := newHelperClient(helperBootCtx)
 	cancelHelperBoot()
+	// networkLoader reads the user's persisted config.json on every
+	// Connect cycle. The path mirrors bindings.NewConfigStore below so
+	// chainctl reads exactly what SettingsService.Update writes — no
+	// process restart required for Network edits to land on the next
+	// connection. config.Load overlays defaults onto missing/partial
+	// fields, so a fresh box (no config.json yet) yields the same
+	// Network values DefaultNetworkLoader used to.
+	configPath := filepath.Join(dataDir, "config.json")
+	networkLoader := func() (config.Network, error) {
+		c, err := config.Load(configPath)
+		if err != nil {
+			return config.Network{}, err
+		}
+		return c.Network, nil
+	}
 	chainCtrl := chainctl.New(&chainctl.Deps{
 		DataDir:      dataDir,
 		ServerStore:  serverStoreGetter{serverStore},
@@ -103,18 +119,13 @@ func main() {
 		Sysproxy:     sysproxy.New(),
 		Hub:          app.Hub(),
 		BuildConfigs: buildConfigs(dataDir),
-		// Task 6 of Tier 2b will replace this with a real
-		// config.Load(filepath.Join(dataDir, "config.json"))-backed
-		// closure so user edits to Network land on the next Connect
-		// without a process restart. DefaultNetworkLoader keeps the
-		// existing stock-config behaviour until then.
-		Network: chainctl.DefaultNetworkLoader(),
+		Network:      networkLoader,
 	})
 	runSvc := bindings.NewRunService(bindings.RunDeps{
 		Chain: chainCtrl,
 		Hub:   app.Hub(),
 	})
-	settingsStore := bindings.NewConfigStore(filepath.Join(dataDir, "config.json"), Version, BuildDate)
+	settingsStore := bindings.NewConfigStore(configPath, Version, BuildDate)
 	settingsSvc := bindings.NewSettingsService(bindings.SettingsDeps{
 		Store: settingsStore,
 		Hub:   app.Hub(),

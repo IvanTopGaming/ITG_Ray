@@ -36,6 +36,18 @@ type Network struct {
 	DNS      DNS      `json:"dns"`
 }
 
+// EffectiveMode returns the user-facing Mode, normalizing the legacy
+// pre-Tier-2a "auto" sentinel to "tun" so the camelCase frontend shape
+// (whether emitted via SettingsView or via the vpn:status hub payload)
+// stays consistent. Today only "tun" and "sysproxy" are valid modes;
+// "auto" is treated as a synonym for "tun" until next save normalizes it.
+func (n Network) EffectiveMode() string {
+	if n.Mode == "auto" {
+		return "tun"
+	}
+	return n.Mode
+}
+
 // DNS holds resolver overrides that apply across both TUN and SysProxy modes.
 type DNS struct {
 	Mode    string   `json:"mode"`    // "auto" | "custom"

@@ -72,11 +72,9 @@ func (s *ConfigStore) toView(c *config.Config) hub.SettingsView {
 	// Normalize legacy on-disk "auto" mode (pre-Tier-2a) to "tun" so the
 	// removed ModeAuto runtime branch is not silently exercised on
 	// upgrade — chainctl.bringUp would not match Auto post-F2 and the
-	// chain would fail to set up routing.
-	mode := c.Network.Mode
-	if mode == "auto" {
-		mode = "tun"
-	}
+	// chain would fail to set up routing. Shared with chainctl's
+	// vpn:status projection via config.Network.EffectiveMode.
+	mode := c.Network.EffectiveMode()
 	return hub.SettingsView{
 		General: hub.GeneralSettings{
 			Language:       c.General.Language,

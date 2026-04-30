@@ -89,3 +89,42 @@ func TestDefaultNetworkLoader(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, config.Defaults().Network, net)
 }
+
+// TestNetworkSettingsView_AllKeys pins all 9 camelCase keys emitted on the
+// vpn:status connected payload. A typo in any key (e.g. tunMtu → tunMTU)
+// would silently mismatch the frontend; this test catches it at unit time.
+func TestNetworkSettingsView_AllKeys(t *testing.T) {
+	expire := []string{"1.1.1.1", "8.8.8.8"}
+	n := config.Network{
+		Mode:     "tun",
+		TUN:      config.TUN{IPv4CIDR: "10.99.0.1/24", MTU: 1400},
+		SysProxy: config.SysProxy{HTTPPort: 8889, SOCKSPort: 1090},
+		AllowLAN: true,
+		IPv6Mode: "prefer-v6",
+		DNS:      config.DNS{Mode: "custom", Servers: expire},
+	}
+	view := networkSettingsView(n)
+
+	require.Equal(t, "tun", view["defaultMode"])
+	require.Equal(t, "10.99.0.1/24", view["tunCidr"])
+	require.Equal(t, 1400, view["tunMtu"])
+	require.Equal(t, "ITGRay-TUN", view["tunName"])
+	require.Equal(t, 1090, view["socksPort"])
+	require.Equal(t, 8889, view["httpPort"])
+	require.Equal(t, true, view["allowLan"])
+	require.Equal(t, "prefer-v6", view["ipv6Mode"])
+
+	dns := view["dns"].(map[string]any)
+	require.Equal(t, "custom", dns["mode"])
+	require.Equal(t, expire, dns["servers"])
+}
+
+// TestNetworkSettingsView_NormalizesLegacyAutoMode verifies the legacy
+// pre-Tier-2a "auto" on-disk sentinel is collapsed to "tun" via the
+// shared config.Network.EffectiveMode helper, keeping the vpn:status
+// projection consistent with bindings.ConfigStore.toView.
+func TestNetworkSettingsView_NormalizesLegacyAutoMode(t *testing.T) {
+	n := config.Network{Mode: "auto"} // pre-Tier-2a legacy on-disk shape
+	view := networkSettingsView(n)
+	require.Equal(t, "tun", view["defaultMode"], "auto must normalize to tun")
+}
