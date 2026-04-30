@@ -99,6 +99,10 @@ func (s *ConfigStore) toView(c *config.Config) hub.SettingsView {
 				Servers: c.Network.DNS.Servers,
 			},
 		},
+		KillSwitch: hub.KillSwitchSettings{
+			Enabled:  c.KillSwitch.Enabled,
+			AlwaysOn: c.KillSwitch.AlwaysOn,
+		},
 		Subscriptions: hub.SubscriptionSettings{
 			DefaultUpdateInterval: 3600,
 			UserAgent:             "ITG-Ray/" + s.version,
@@ -133,6 +137,8 @@ func applyPatch(c *config.Config, section string, patch map[string]any) error {
 		applyGeneral(&c.General, patch)
 	case "network":
 		applyNetwork(&c.Network, patch)
+	case "killswitch":
+		applyKillSwitch(&c.KillSwitch, patch)
 	case "subscriptions":
 		// no persisted fields yet; accept the patch as a no-op so the
 		// frontend can wire forms without backend churn.
@@ -204,6 +210,15 @@ func applyNetwork(n *config.Network, p map[string]any) {
 			}
 		}
 		n.DNS.Servers = out
+	}
+}
+
+func applyKillSwitch(k *config.KillSwitch, p map[string]any) {
+	if v, ok := p["enabled"].(bool); ok {
+		k.Enabled = v
+	}
+	if v, ok := p["alwaysOn"].(bool); ok {
+		k.AlwaysOn = v
 	}
 }
 

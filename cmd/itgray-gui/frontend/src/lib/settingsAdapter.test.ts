@@ -128,6 +128,21 @@ describe('backendToFrontend > network', () => {
   });
 });
 
+describe('backendToFrontend > killSwitch', () => {
+  it('maps killSwitch fields', () => {
+    const view = {
+      general: {},
+      network: {},
+      killSwitch: { enabled: false, alwaysOn: true },
+      notifications: {},
+      debug: {},
+    } as unknown as hub.SettingsView;
+    const patch = backendToFrontend(view);
+    expect(patch.killSwitchEnabled).toBe(false);
+    expect(patch.killSwitchAlwaysOn).toBe(true);
+  });
+});
+
 describe('backendToFrontend > general', () => {
   it('maps general.autostart -> autostart', () => {
     const view = {

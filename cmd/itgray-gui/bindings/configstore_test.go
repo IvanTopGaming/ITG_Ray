@@ -56,6 +56,27 @@ func TestApplyNetwork_NewFields(t *testing.T) {
 	require.Equal(t, []string{"1.1.1.1", "9.9.9.9", "8.8.8.8"}, c.Network.DNS.Servers)
 }
 
+// TestApplyKillSwitch verifies the per-key type-asserted handler writes
+// both kill-switch fields independently.
+func TestApplyKillSwitch(t *testing.T) {
+	c := config.Config{}
+	applyKillSwitch(&c.KillSwitch, map[string]any{"enabled": false, "alwaysOn": true})
+	require.False(t, c.KillSwitch.Enabled)
+	require.True(t, c.KillSwitch.AlwaysOn)
+}
+
+// TestApplyPatch_KillSwitchSection drives the section dispatcher end-to-end
+// through ConfigStore.UpdateSection so the "killswitch" case is verified
+// alongside the projection back into SettingsView.
+func TestApplyPatch_KillSwitchSection(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	store := NewConfigStore(path, "test", "test")
+	view, err := store.UpdateSection("killswitch", map[string]any{"enabled": false})
+	require.NoError(t, err)
+	require.False(t, view.KillSwitch.Enabled)
+}
+
 // TestConfigStore_NormalizesLegacyAutoMode ensures an on-disk
 // "mode": "auto" from pre-Tier-2a configs gets normalized to "tun"
 // when surfaced via View(), so the now-removed Auto runtime branch

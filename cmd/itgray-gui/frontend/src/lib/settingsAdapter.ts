@@ -57,6 +57,13 @@ export function backendToFrontend(view: hub.SettingsView): Partial<Settings> {
     patch.dnsCustom = view.network.dns.servers.join(', ');
   }
 
+  if (typeof view.killSwitch?.enabled === 'boolean') {
+    patch.killSwitchEnabled = view.killSwitch.enabled;
+  }
+  if (typeof view.killSwitch?.alwaysOn === 'boolean') {
+    patch.killSwitchAlwaysOn = view.killSwitch.alwaysOn;
+  }
+
   if (typeof view.notifications?.onConnected === 'boolean') {
     patch.onConnected = view.notifications.onConnected;
   }

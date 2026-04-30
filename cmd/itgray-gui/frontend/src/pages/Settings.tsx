@@ -30,6 +30,7 @@ const sectionVariants: Variants = {
 const SECTIONS = [
   { id: 'general', label: 'General' },
   { id: 'connection', label: 'Connection' },
+  { id: 'killswitch', label: 'Kill switch' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'helper', label: 'Helper' },
   { id: 'logs', label: 'Logs' },
@@ -278,6 +279,31 @@ export function Settings() {
             </div>
           </details>
         )}
+      </motion.div>
+
+      {/* Kill switch */}
+      <motion.div id="killswitch" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
+        <SectionHeader title="Kill switch" />
+        <SettingRow
+          label="Block traffic when VPN drops"
+          hint="Cut the network if the tunnel goes down so traffic never leaks unprotected."
+        >
+          <Toggle
+            value={s.killSwitchEnabled}
+            onChange={(v) => update({ killSwitchEnabled: v })}
+          />
+        </SettingRow>
+        <SettingRow
+          label="Always-on"
+          hint="Require an active VPN connection to use the network at all."
+          className={!s.killSwitchEnabled ? 'opacity-50' : undefined}
+        >
+          <Toggle
+            value={s.killSwitchAlwaysOn}
+            disabled={!s.killSwitchEnabled}
+            onChange={(v) => update({ killSwitchAlwaysOn: v })}
+          />
+        </SettingRow>
       </motion.div>
 
       {/* Notifications */}

@@ -55,6 +55,7 @@ type SubView struct {
 type SettingsView struct {
 	General       GeneralSettings      `json:"general"`
 	Network       NetworkSettings      `json:"network"`
+	KillSwitch    KillSwitchSettings   `json:"killSwitch"`
 	Subscriptions SubscriptionSettings `json:"subscriptions"`
 	Notifications NotificationSettings `json:"notifications"`
 	Debug         DebugSettings        `json:"debug"`
@@ -88,6 +89,12 @@ type NetworkSettings struct {
 type DNSSettings struct {
 	Mode    string   `json:"mode"`    // "auto" | "custom"
 	Servers []string `json:"servers"` // populated when Mode == "custom"
+}
+
+// KillSwitchSettings exposes the kill-switch toggles to the GUI.
+type KillSwitchSettings struct {
+	Enabled  bool `json:"enabled"`
+	AlwaysOn bool `json:"alwaysOn"`
 }
 
 // SubscriptionSettings holds per-app subscription defaults.
