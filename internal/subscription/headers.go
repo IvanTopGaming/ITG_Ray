@@ -10,12 +10,17 @@ import (
 )
 
 // Userinfo holds quota figures parsed from the Subscription-Userinfo header.
-// All byte counts are int64; Expire is a Unix-time pointer (nil when absent).
+// The Has* flags distinguish "field absent or malformed in the header" from
+// "field explicitly set to zero" — without them, a partial header would
+// silently overwrite stored quota values with zeros on UpdateMeta.
 type Userinfo struct {
-	Upload   int64
-	Download int64
-	Total    int64
-	Expire   *time.Time
+	Upload      int64
+	Download    int64
+	Total       int64
+	Expire      *time.Time
+	HasUpload   bool
+	HasDownload bool
+	HasTotal    bool
 }
 
 // Headers holds the de-facto-standard subscription metadata that panels emit
@@ -66,10 +71,13 @@ func parseUserinfo(s string) *Userinfo {
 		switch strings.TrimSpace(kv[0]) {
 		case "upload":
 			u.Upload = v
+			u.HasUpload = true
 		case "download":
 			u.Download = v
+			u.HasDownload = true
 		case "total":
 			u.Total = v
+			u.HasTotal = true
 		case "expire":
 			// expire=0 is the Subscription-Userinfo convention for "no expiry";
 			// don't store a real timestamp at the Unix epoch.

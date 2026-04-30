@@ -225,7 +225,12 @@ func TestFileStore_UpdateMeta_WritesMessageAndUserinfo(t *testing.T) {
 	require.NoError(t, fs.Save([]Stored{{ID: "s1", Name: "A", URL: "https://a.test"}}))
 
 	expire := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
-	ui := &Userinfo{Upload: 10, Download: 20, Total: 30, Expire: &expire}
+	ui := &Userinfo{
+		Upload: 10, HasUpload: true,
+		Download: 20, HasDownload: true,
+		Total: 30, HasTotal: true,
+		Expire: &expire,
+	}
 	at := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
 
 	require.NoError(t, fs.UpdateMeta("s1", at, "ok", "imported=3", ui))
@@ -239,6 +244,29 @@ func TestFileStore_UpdateMeta_WritesMessageAndUserinfo(t *testing.T) {
 	require.EqualValues(t, 30, got[0].Total)
 	require.NotNil(t, got[0].Expire)
 	require.True(t, got[0].Expire.Equal(expire))
+}
+
+func TestFileStore_UpdateMeta_PartialUserinfo_PreservesUnsetFields(t *testing.T) {
+	dir := t.TempDir()
+	fs := FileStore{Path: filepath.Join(dir, "subs.json")}
+	expire := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
+	require.NoError(t, fs.Save([]Stored{{
+		ID: "s1", Name: "A", URL: "https://a.test",
+		Upload: 999, Download: 888, Total: 1000, Expire: &expire,
+	}}))
+
+	// Header arrives with only Total present; Upload/Download/Expire absent
+	// or malformed. Only the present field should overwrite stored state.
+	ui := &Userinfo{Total: 2000, HasTotal: true}
+	at := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
+
+	require.NoError(t, fs.UpdateMeta("s1", at, "ok", "", ui))
+	got, err := fs.Load()
+	require.NoError(t, err)
+	require.EqualValues(t, 999, got[0].Upload, "prior Upload preserved (not in header)")
+	require.EqualValues(t, 888, got[0].Download, "prior Download preserved (not in header)")
+	require.EqualValues(t, 2000, got[0].Total, "Total updated from header")
+	require.NotNil(t, got[0].Expire, "prior Expire preserved (not in header)")
 }
 
 func TestFileStore_UpdateMeta_NilUserinfo_PreservesPriorQuota(t *testing.T) {

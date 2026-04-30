@@ -67,7 +67,11 @@ func TestSyncOne_Success_WritesServersAndOKMeta(t *testing.T) {
 	st := &metaCaptureStore{}
 
 	merged := []server.Server{{ID: "srv1", Name: "X", Vless: vless.Config{Address: "a.test", Port: 443, UUID: "u"}}}
-	ui := &subscription.Userinfo{Upload: 100, Download: 200, Total: 1000}
+	ui := &subscription.Userinfo{
+		Upload: 100, HasUpload: true,
+		Download: 200, HasDownload: true,
+		Total: 1000, HasTotal: true,
+	}
 	syncFn := func(_ context.Context, _ subscription.Subscription, _ []server.Server, _ time.Duration) ([]server.Server, subscription.SyncMeta, error) {
 		return merged, subscription.SyncMeta{
 			Status:  "ok",

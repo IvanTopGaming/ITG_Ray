@@ -140,10 +140,21 @@ func (s FileStore) UpdateMeta(id string, at time.Time, status, message string, u
 		subs[i].LastStatus = status
 		subs[i].LastMessage = message
 		if ui != nil {
-			subs[i].Upload = ui.Upload
-			subs[i].Download = ui.Download
-			subs[i].Total = ui.Total
-			subs[i].Expire = ui.Expire
+			// Field-by-field: only overwrite values the header actually
+			// supplied. A malformed or partial Subscription-Userinfo must
+			// not blank prior good quota figures.
+			if ui.HasUpload {
+				subs[i].Upload = ui.Upload
+			}
+			if ui.HasDownload {
+				subs[i].Download = ui.Download
+			}
+			if ui.HasTotal {
+				subs[i].Total = ui.Total
+			}
+			if ui.Expire != nil {
+				subs[i].Expire = ui.Expire
+			}
 		}
 		return s.Save(subs)
 	}
