@@ -114,7 +114,7 @@ func (s *ConfigStore) toView(c *config.Config) hub.SettingsView {
 			OnSubSynced:    c.Notifications.SubUpdated,
 			Sound:          c.Notifications.Sound,
 		},
-		Debug: hub.DebugSettings{LogLevel: "info"},
+		Debug: hub.DebugSettings{LogLevel: c.Debug.LogLevel},
 		About: hub.AboutSettings{
 			Version:   s.version,
 			BuildDate: s.buildDate,
@@ -146,8 +146,7 @@ func applyPatch(c *config.Config, section string, patch map[string]any) error {
 	case "notifications":
 		applyNotifications(&c.Notifications, patch)
 	case "debug":
-		// log level is process-scoped (not persisted yet); accept the
-		// patch silently.
+		applyDebug(&c.Debug, patch)
 	default:
 		return errors.New("settings.Update: unknown section " + section)
 	}
@@ -238,5 +237,11 @@ func applyNotifications(n *config.Notifications, p map[string]any) {
 	}
 	if v, ok := p["sound"].(bool); ok {
 		n.Sound = v
+	}
+}
+
+func applyDebug(d *config.Debug, p map[string]any) {
+	if v, ok := p["logLevel"].(string); ok {
+		d.LogLevel = v
 	}
 }

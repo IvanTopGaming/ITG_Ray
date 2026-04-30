@@ -97,6 +97,15 @@ func TestApplyPatch_KillSwitchSection(t *testing.T) {
 	require.False(t, view.KillSwitch.Enabled)
 }
 
+// TestApplyDebug_PersistsLogLevel verifies the new debug handler writes
+// LogLevel through the patch surface — including the freshly-allowed
+// "trace" value the frontend gained in slice D.
+func TestApplyDebug_PersistsLogLevel(t *testing.T) {
+	c := config.Config{}
+	applyDebug(&c.Debug, map[string]any{"logLevel": "trace"})
+	require.Equal(t, "trace", c.Debug.LogLevel)
+}
+
 // TestConfigStore_NormalizesLegacyAutoMode ensures an on-disk
 // "mode": "auto" from pre-Tier-2a configs gets normalized to "tun"
 // when surfaced via View(), so the now-removed Auto runtime branch

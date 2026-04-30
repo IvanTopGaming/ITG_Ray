@@ -81,7 +81,7 @@ export function backendToFrontend(view: hub.SettingsView): Partial<Settings> {
   }
 
   const logLevel = view.debug?.logLevel;
-  if (logLevel === 'debug' || logLevel === 'info' || logLevel === 'error') {
+  if (logLevel === 'debug' || logLevel === 'info' || logLevel === 'error' || logLevel === 'trace') {
     patch.logLevel = logLevel;
   }
 

@@ -168,6 +168,19 @@ describe('backendToFrontend > notifications', () => {
   });
 });
 
+describe('backendToFrontend > debug', () => {
+  it('passes through trace log level', () => {
+    const view = {
+      general: {},
+      network: {},
+      notifications: {},
+      debug: { logLevel: 'trace' },
+    } as unknown as hub.SettingsView;
+    const patch = backendToFrontend(view);
+    expect(patch.logLevel).toBe('trace');
+  });
+});
+
 describe('backendToFrontend > general', () => {
   it('maps general.autostart -> autostart', () => {
     const view = {
