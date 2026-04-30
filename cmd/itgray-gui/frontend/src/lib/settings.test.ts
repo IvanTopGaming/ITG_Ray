@@ -183,9 +183,9 @@ describe('useSettings backend load', () => {
   it('merges backend mapped fields over localStorage on first subscribe', async () => {
     vi.mocked(GetSettings).mockResolvedValue({
       general: { language: 'ru', theme: 'dark', autostart: true, closeToTray: false, startMinimized: false },
-      network: { defaultMode: 'tun', tunCidr: '', tunName: '', socksPort: 12345, xrayPort: 0 },
+      network: { defaultMode: 'tun', tunCidr: '', tunName: '', socksPort: 12345, httpPort: 0 },
       subscriptions: { defaultUpdateInterval: 0, userAgent: '' },
-      notifications: { onConnected: false, onDisconnected: false, onError: false, onSubSynced: false },
+      notifications: { onConnected: false, onDisconnected: false, quotaLow: false, onSubSynced: false },
       debug: { logLevel: 'debug' },
       about: { version: '', gitRev: '', buildDate: '' },
       security: { method: '', available: false },

@@ -1,6 +1,8 @@
 package bindings
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/itg-team/itg-ray/internal/config"
@@ -29,4 +31,18 @@ func TestApplyNotifications_QuotaLowKeyRenamed(t *testing.T) {
 	c2 := config.Config{}
 	applyNotifications(&c2.Notifications, map[string]any{"onError": true})
 	require.False(t, c2.Notifications.QuotaLow, "old onError key must be ignored")
+}
+
+// TestConfigStore_NormalizesLegacyAutoMode ensures an on-disk
+// "mode": "auto" from pre-Tier-2a configs gets normalized to "tun"
+// when surfaced via View(), so the now-removed Auto runtime branch
+// is not silently exercised on upgrade.
+func TestConfigStore_NormalizesLegacyAutoMode(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"network":{"mode":"auto"}}`), 0o600))
+	store := NewConfigStore(path, "test", "test")
+	view, err := store.View()
+	require.NoError(t, err)
+	require.Equal(t, "tun", view.Network.DefaultMode)
 }

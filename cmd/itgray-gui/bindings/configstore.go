@@ -68,6 +68,14 @@ func (s *ConfigStore) UpdateSection(section string, patch map[string]any) (hub.S
 }
 
 func (s *ConfigStore) toView(c *config.Config) hub.SettingsView {
+	// Normalize legacy on-disk "auto" mode (pre-Tier-2a) to "tun" so the
+	// removed ModeAuto runtime branch is not silently exercised on
+	// upgrade — chainctl.bringUp would not match Auto post-F2 and the
+	// chain would fail to set up routing.
+	mode := c.Network.Mode
+	if mode == "auto" {
+		mode = "tun"
+	}
 	return hub.SettingsView{
 		General: hub.GeneralSettings{
 			Language:       c.General.Language,
@@ -77,7 +85,7 @@ func (s *ConfigStore) toView(c *config.Config) hub.SettingsView {
 			StartMinimized: c.General.StartMinimized,
 		},
 		Network: hub.NetworkSettings{
-			DefaultMode: c.Network.Mode,
+			DefaultMode: mode,
 			TunCIDR:     c.Network.TUN.IPv4CIDR,
 			TunName:     "ITGRay-TUN",
 			SocksPort:   c.Network.SysProxy.SOCKSPort,
