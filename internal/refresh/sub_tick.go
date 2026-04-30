@@ -19,8 +19,7 @@ func (d *Driver) syncOne(ctx context.Context, sub subscription.Stored) {
 	existing, err := server.Load(d.serversPath)
 	if err != nil {
 		d.serversMu.Unlock()
-		status := "ERROR: load servers: " + truncate(err.Error(), lastStatusMaxLen)
-		d.recordMeta(ctx, sub.ID, status)
+		d.recordMeta(ctx, sub.ID, "error", "load servers: "+truncate(err.Error(), lastStatusMaxLen))
 		d.log.Error("refresh.sync.load", "id", sub.ID, "err", err)
 		return
 	}
@@ -29,8 +28,7 @@ func (d *Driver) syncOne(ctx context.Context, sub subscription.Stored) {
 	if syncErr == nil {
 		if saveErr := server.Save(d.serversPath, merged); saveErr != nil {
 			d.serversMu.Unlock()
-			status := "ERROR: save servers: " + truncate(saveErr.Error(), lastStatusMaxLen)
-			d.recordMeta(ctx, sub.ID, status)
+			d.recordMeta(ctx, sub.ID, "error", "save servers: "+truncate(saveErr.Error(), lastStatusMaxLen))
 			d.log.Error("refresh.sync.save", "id", sub.ID, "err", saveErr)
 			return
 		}
@@ -42,28 +40,29 @@ func (d *Driver) syncOne(ctx context.Context, sub subscription.Stored) {
 		return
 	}
 
-	var status string
-	if syncErr != nil {
-		status = "ERROR: " + truncate(syncErr.Error(), lastStatusMaxLen)
-	} else {
-		status = "OK " + meta.Message
+	var ui *subscription.Userinfo
+	if syncErr == nil {
+		ui = meta.Headers.Userinfo
 	}
-	if err := d.subs.UpdateMeta(sub.ID, d.now(), status, "", nil); err != nil {
+	if err := d.subs.UpdateMeta(sub.ID, d.now(), meta.Status, truncate(meta.Message, lastStatusMaxLen), ui); err != nil {
 		d.log.Error("refresh.sync.updateMeta", "id", sub.ID, "err", err)
 	}
 	d.log.Info("subscription.sync",
 		slog.String("id", sub.ID),
-		slog.String("status", status),
+		slog.String("status", meta.Status),
+		slog.String("message", truncate(meta.Message, 80)),
 		slog.Duration("duration", d.now().Sub(start)),
 	)
 }
 
 // recordMeta is a small helper that respects ctx-cancel for shutdown.
-func (d *Driver) recordMeta(ctx context.Context, id, status string) {
+// ui is intentionally omitted — recordMeta is only used for pre-sync
+// failures where there is no fresh Userinfo to write.
+func (d *Driver) recordMeta(ctx context.Context, id, status, message string) {
 	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return
 	}
-	if err := d.subs.UpdateMeta(id, d.now(), status, "", nil); err != nil {
+	if err := d.subs.UpdateMeta(id, d.now(), status, message, nil); err != nil {
 		d.log.Error("refresh.sync.updateMeta", "id", id, "err", err)
 	}
 }
