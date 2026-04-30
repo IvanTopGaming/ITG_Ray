@@ -73,11 +73,21 @@ type GeneralSettings struct {
 
 // NetworkSettings holds proxy / TUN routing knobs.
 type NetworkSettings struct {
-	DefaultMode string `json:"defaultMode"` // "tun" | "sysproxy"
-	TunCIDR     string `json:"tunCidr"`     // "198.18.0.1/15"
-	TunName     string `json:"tunName"`     // "ITGRay-TUN"
-	SocksPort   int    `json:"socksPort"`   // sysproxy mode local port
-	HttpPort    int    `json:"httpPort"`    // sysproxy mode local HTTP port
+	DefaultMode string      `json:"defaultMode"` // "tun" | "sysproxy"
+	TunCIDR     string      `json:"tunCidr"`     // "198.18.0.1/15"
+	TunMtu      int         `json:"tunMtu"`      // TUN interface MTU
+	TunName     string      `json:"tunName"`     // "ITGRay-TUN"
+	SocksPort   int         `json:"socksPort"`   // sysproxy mode local port
+	HttpPort    int         `json:"httpPort"`    // sysproxy mode local HTTP port
+	AllowLAN    bool        `json:"allowLan"`    // expose proxy to LAN
+	IPv6Mode    string      `json:"ipv6Mode"`    // "prefer-v4" | "prefer-v6" | "disabled"
+	DNS         DNSSettings `json:"dns"`
+}
+
+// DNSSettings holds resolver overrides surfaced via SettingsView.
+type DNSSettings struct {
+	Mode    string   `json:"mode"`    // "auto" | "custom"
+	Servers []string `json:"servers"` // populated when Mode == "custom"
 }
 
 // SubscriptionSettings holds per-app subscription defaults.

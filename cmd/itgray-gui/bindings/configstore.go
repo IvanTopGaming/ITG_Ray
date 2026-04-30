@@ -87,9 +87,16 @@ func (s *ConfigStore) toView(c *config.Config) hub.SettingsView {
 		Network: hub.NetworkSettings{
 			DefaultMode: mode,
 			TunCIDR:     c.Network.TUN.IPv4CIDR,
+			TunMtu:      c.Network.TUN.MTU,
 			TunName:     "ITGRay-TUN",
 			SocksPort:   c.Network.SysProxy.SOCKSPort,
 			HttpPort:    c.Network.SysProxy.HTTPPort,
+			AllowLAN:    c.Network.AllowLAN,
+			IPv6Mode:    c.Network.IPv6Mode,
+			DNS: hub.DNSSettings{
+				Mode:    c.Network.DNS.Mode,
+				Servers: c.Network.DNS.Servers,
+			},
 		},
 		Subscriptions: hub.SubscriptionSettings{
 			DefaultUpdateInterval: 3600,
@@ -164,11 +171,32 @@ func applyNetwork(n *config.Network, p map[string]any) {
 	if v, ok := p["tunCidr"].(string); ok {
 		n.TUN.IPv4CIDR = v
 	}
+	if v, ok := p["tunMtu"].(float64); ok {
+		n.TUN.MTU = int(v)
+	}
 	if v, ok := p["socksPort"].(float64); ok {
 		n.SysProxy.SOCKSPort = int(v)
 	}
 	if v, ok := p["httpPort"].(float64); ok {
 		n.SysProxy.HTTPPort = int(v)
+	}
+	if v, ok := p["allowLan"].(bool); ok {
+		n.AllowLAN = v
+	}
+	if v, ok := p["ipv6Mode"].(string); ok {
+		n.IPv6Mode = v
+	}
+	if v, ok := p["dnsMode"].(string); ok {
+		n.DNS.Mode = v
+	}
+	if servers, ok := p["dnsServers"].([]any); ok {
+		out := make([]string, 0, len(servers))
+		for _, s := range servers {
+			if str, ok := s.(string); ok && str != "" {
+				out = append(out, str)
+			}
+		}
+		n.DNS.Servers = out
 	}
 }
 

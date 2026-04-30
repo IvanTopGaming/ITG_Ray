@@ -54,6 +54,8 @@ describe('backendToFrontend', () => {
       startMinimized: true,
       defaultMode: 'tun',
       socksPort: 12345,
+      tunCidr: '',
+      httpPort: 0,
       onConnected: false,
       onSubSynced: false,
       logLevel: 'debug',
@@ -87,12 +89,42 @@ describe('backendToFrontend', () => {
   it('does not include unmapped frontend keys', () => {
     const view = makeView();
     const patch = backendToFrontend(view);
+    // Fields with no corresponding backend value in the makeView baseline.
     expect(patch).not.toHaveProperty('dnsMode');
     expect(patch).not.toHaveProperty('dnsCustom');
     expect(patch).not.toHaveProperty('allowLan');
-    expect(patch).not.toHaveProperty('httpPort');
     expect(patch).not.toHaveProperty('ipv6Mode');
     expect(patch).not.toHaveProperty('notifySound');
+    expect(patch).not.toHaveProperty('tunMtu');
+  });
+});
+
+describe('backendToFrontend > network', () => {
+  it('maps the full network shape including DNS', () => {
+    const view = {
+      general: {},
+      network: {
+        defaultMode: 'sysproxy',
+        tunCidr: '10.0.0.1/24',
+        tunMtu: 1400,
+        socksPort: 1080,
+        httpPort: 8888,
+        allowLan: true,
+        ipv6Mode: 'disabled',
+        dns: { mode: 'custom', servers: ['1.1.1.1', '9.9.9.9'] },
+      },
+      notifications: {},
+      debug: {},
+    } as unknown as hub.SettingsView;
+    const patch = backendToFrontend(view);
+    expect(patch.defaultMode).toBe('sysproxy');
+    expect(patch.tunCidr).toBe('10.0.0.1/24');
+    expect(patch.tunMtu).toBe(1400);
+    expect(patch.httpPort).toBe(8888);
+    expect(patch.allowLan).toBe(true);
+    expect(patch.ipv6Mode).toBe('disabled');
+    expect(patch.dnsMode).toBe('custom');
+    expect(patch.dnsCustom).toBe('1.1.1.1, 9.9.9.9');
   });
 });
 

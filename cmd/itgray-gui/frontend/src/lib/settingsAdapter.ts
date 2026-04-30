@@ -32,6 +32,31 @@ export function backendToFrontend(view: hub.SettingsView): Partial<Settings> {
     patch.socksPort = view.network.socksPort;
   }
 
+  // Network — extended fields (slice N)
+  if (typeof view.network?.tunCidr === 'string') {
+    patch.tunCidr = view.network.tunCidr;
+  }
+  if (typeof view.network?.tunMtu === 'number') {
+    patch.tunMtu = view.network.tunMtu;
+  }
+  if (typeof view.network?.httpPort === 'number') {
+    patch.httpPort = view.network.httpPort;
+  }
+  if (typeof view.network?.allowLan === 'boolean') {
+    patch.allowLan = view.network.allowLan;
+  }
+  const ipv6 = view.network?.ipv6Mode;
+  if (ipv6 === 'prefer-v4' || ipv6 === 'prefer-v6' || ipv6 === 'disabled') {
+    patch.ipv6Mode = ipv6;
+  }
+  const dnsMode = view.network?.dns?.mode;
+  if (dnsMode === 'auto' || dnsMode === 'custom') {
+    patch.dnsMode = dnsMode;
+  }
+  if (Array.isArray(view.network?.dns?.servers)) {
+    patch.dnsCustom = view.network.dns.servers.join(', ');
+  }
+
   if (typeof view.notifications?.onConnected === 'boolean') {
     patch.onConnected = view.notifications.onConnected;
   }
