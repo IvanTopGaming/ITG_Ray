@@ -18,9 +18,8 @@ type General struct {
 
 // TUN holds the TUN-mode adapter parameters.
 type TUN struct {
-	IPv4CIDR string   `json:"ipv4_cidr"`
-	MTU      int      `json:"mtu"`
-	DNS      []string `json:"dns"`
+	IPv4CIDR string `json:"ipv4_cidr"`
+	MTU      int    `json:"mtu"`
 }
 
 // SysProxy holds the System Proxy ports.
@@ -88,7 +87,7 @@ func defaults() Config {
 		General: General{Language: "en", Theme: "dark", CloseToTray: true},
 		Network: Network{
 			Mode:     "tun",
-			TUN:      TUN{IPv4CIDR: "198.18.0.1/15", MTU: 1500, DNS: []string{"1.1.1.1", "8.8.8.8"}},
+			TUN:      TUN{IPv4CIDR: "198.18.0.1/15", MTU: 1500},
 			SysProxy: SysProxy{HTTPPort: 8888, SOCKSPort: 1080},
 			AllowLAN: false,
 			IPv6Mode: "prefer-v4",
