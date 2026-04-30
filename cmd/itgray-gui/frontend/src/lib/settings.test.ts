@@ -1,216 +1,189 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 
+// Mocks must be set up BEFORE importing the SUT.
+const getMock = vi.fn();
+const updateMock = vi.fn();
+const eventsOnMock = vi.fn();
+const eventsOffMock = vi.fn();
+
 vi.mock('../../wailsjs/go/bindings/SettingsService', () => ({
-  Get: vi.fn(),
+  Get: (...args: unknown[]) => getMock(...args),
+  Update: (...args: unknown[]) => updateMock(...args),
+}));
+vi.mock('../../wailsjs/runtime/runtime', () => ({
+  EventsOn: (...args: unknown[]) => eventsOnMock(...args),
+  EventsOff: (...args: unknown[]) => eventsOffMock(...args),
 }));
 
-import { DEFAULTS, STORAGE_KEY, loadSettings, saveSettings, flushSettings, useSettings, __resetForTests } from './settings';
-import { Get as GetSettings } from '../../wailsjs/go/bindings/SettingsService';
+import { useSettings, flushSettings, __resetForTests, DEFAULTS } from './settings';
 
-describe('DEFAULTS', () => {
-  it('contains all expected keys with correct types', () => {
-    expect(DEFAULTS.language).toBe('en');
-    expect(DEFAULTS.autostart).toBe(false);
-    expect(DEFAULTS.startMinimized).toBe(false);
-    expect(DEFAULTS.defaultMode).toBe('tun');
-    expect(DEFAULTS.dnsMode).toBe('auto');
-    expect(DEFAULTS.dnsCustom).toBe('');
-    expect(DEFAULTS.allowLan).toBe(false);
-    expect(DEFAULTS.socksPort).toBe(1080);
-    expect(DEFAULTS.httpPort).toBe(8888);
-    expect(DEFAULTS.ipv6Mode).toBe('prefer-v4');
-    expect(DEFAULTS.onConnected).toBe(true);
-    expect(DEFAULTS.notifySound).toBe(true);
-    expect(DEFAULTS.onSubSynced).toBe(true);
-    expect(DEFAULTS.logLevel).toBe('info');
-  });
+beforeEach(() => {
+  vi.useFakeTimers();
+  // Pretend we are in a Wails-injected window.
+  (window as any).go = {};
+  getMock.mockReset();
+  updateMock.mockReset();
+  eventsOnMock.mockReset();
+  eventsOffMock.mockReset();
+  __resetForTests();
 });
 
-describe('loadSettings', () => {
-  beforeEach(() => {
-    __resetForTests();
-    localStorage.clear();
-  });
-
-  it('returns DEFAULTS when localStorage is empty', () => {
-    expect(loadSettings()).toEqual(DEFAULTS);
-  });
-
-  it('returns DEFAULTS without writing to localStorage on first load', () => {
-    loadSettings();
-    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
-  });
-
-  it('returns saved values merged over DEFAULTS', () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ language: 'ru', allowLan: false }));
-    const s = loadSettings();
-    expect(s.language).toBe('ru');
-    expect(s.allowLan).toBe(false);
-    expect(s.defaultMode).toBe('tun'); // from DEFAULTS
-  });
-
-  it('returns DEFAULTS and warns on corrupt JSON', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    localStorage.setItem(STORAGE_KEY, '{not json');
-    expect(loadSettings()).toEqual(DEFAULTS);
-    expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
-  });
+afterEach(() => {
+  vi.useRealTimers();
+  delete (window as any).go;
 });
 
-describe('saveSettings', () => {
-  beforeEach(() => {
-    __resetForTests();
-    localStorage.clear();
-    vi.useFakeTimers();
-  });
+describe('useSettings (mocked SettingsService)', () => {
+  it('returns DEFAULTS synchronously, then merges Get() result', async () => {
+    getMock.mockResolvedValue({
+      general: { language: 'ru' },
+      network: { defaultMode: 'sysproxy' },
+      notifications: {},
+      debug: {},
+    });
 
-  it('writes JSON to localStorage after debounce window', () => {
-    saveSettings({ ...DEFAULTS, language: 'ru' });
-    expect(localStorage.getItem(STORAGE_KEY)).toBeNull(); // not yet flushed
-    vi.advanceTimersByTime(250);
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
-    expect(stored.language).toBe('ru');
-  });
-
-  it('coalesces rapid calls into one write', () => {
-    saveSettings({ ...DEFAULTS, language: 'ru' });
-    saveSettings({ ...DEFAULTS, language: 'en', allowLan: false });
-    vi.advanceTimersByTime(250);
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
-    expect(stored.language).toBe('en');
-    expect(stored.allowLan).toBe(false);
-  });
-});
-
-describe('flushSettings', () => {
-  beforeEach(() => {
-    __resetForTests();
-    localStorage.clear();
-    vi.useFakeTimers();
-  });
-
-  it('writes pending value immediately without waiting for debounce', () => {
-    saveSettings({ ...DEFAULTS, language: 'ru' });
-    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
-    flushSettings();
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
-    expect(stored.language).toBe('ru');
-  });
-
-  it('is a no-op when nothing is pending', () => {
-    expect(() => flushSettings()).not.toThrow();
-    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
-  });
-
-  it('cancels the scheduled timer so no second write fires', () => {
-    saveSettings({ ...DEFAULTS, language: 'ru' });
-    flushSettings();
-    localStorage.clear();
-    vi.advanceTimersByTime(250);
-    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
-  });
-});
-
-describe('useSettings', () => {
-  beforeEach(() => {
-    __resetForTests();
-    localStorage.clear();
-    vi.useFakeTimers();
-  });
-
-  it('returns DEFAULTS initially', () => {
     const { result } = renderHook(() => useSettings());
+
     expect(result.current[0]).toEqual(DEFAULTS);
-  });
 
-  it('updates state and persists when patch is applied', () => {
-    const { result } = renderHook(() => useSettings());
-    act(() => result.current[1]({ language: 'ru' }));
-    expect(result.current[0].language).toBe('ru');
-    expect(result.current[0].allowLan).toBe(true); // unchanged
-    vi.advanceTimersByTime(250);
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
-    expect(stored.language).toBe('ru');
-  });
-
-  it('shares state across multiple hook subscribers', () => {
-    const { result: a } = renderHook(() => useSettings());
-    const { result: b } = renderHook(() => useSettings());
-    act(() => a.current[1]({ allowLan: false }));
-    expect(b.current[0].allowLan).toBe(false);
-  });
-
-  it('persists pending changes immediately on flushSettings()', () => {
-    const { result } = renderHook(() => useSettings());
-    act(() => result.current[1]({ language: 'ru' }));
-    // Don't advance timers; flush manually.
-    flushSettings();
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
-    expect(stored.language).toBe('ru');
-  });
-
-  it('reloads state when another tab writes to localStorage', () => {
-    const { result } = renderHook(() => useSettings());
-    act(() => {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...DEFAULTS, language: 'ru' }));
-      window.dispatchEvent(new StorageEvent('storage', { key: STORAGE_KEY, newValue: localStorage.getItem(STORAGE_KEY) }));
+    await act(async () => {
+      await Promise.resolve(); // flush microtasks
+      await Promise.resolve();
     });
     expect(result.current[0].language).toBe('ru');
+    expect(result.current[0].defaultMode).toBe('sysproxy');
+    expect(getMock).toHaveBeenCalledTimes(1);
   });
 
-  it('returns a stable update reference across renders', () => {
-    const { result, rerender } = renderHook(() => useSettings());
-    const first = result.current[1];
-    rerender();
-    expect(result.current[1]).toBe(first);
-  });
-});
-
-describe('useSettings backend load', () => {
-  beforeEach(() => {
-    vi.useRealTimers();
-    __resetForTests();
-    localStorage.clear();
-    vi.mocked(GetSettings).mockReset();
-    (window as any).go = {};
-  });
-  afterEach(() => {
-    delete (window as any).go;
-  });
-
-  it('merges backend mapped fields over localStorage on first subscribe', async () => {
-    vi.mocked(GetSettings).mockResolvedValue({
-      general: { language: 'ru', theme: 'dark', autostart: true, closeToTray: false, startMinimized: false },
-      network: { defaultMode: 'tun', tunCidr: '', tunName: '', socksPort: 12345, httpPort: 0 },
-      subscriptions: { defaultUpdateInterval: 0, userAgent: '' },
-      notifications: { onConnected: false, onDisconnected: false, quotaLow: false, onSubSynced: false },
-      debug: { logLevel: 'debug' },
-      about: { version: '', gitRev: '', buildDate: '' },
-      security: { method: '', available: false },
-    } as any);
+  it('update() merges optimistically and fires Update RPC after 200ms', async () => {
+    getMock.mockResolvedValue({ general: {}, network: {}, notifications: {}, debug: {} });
+    updateMock.mockResolvedValue({});
 
     const { result } = renderHook(() => useSettings());
     await act(async () => { await Promise.resolve(); });
 
-    expect(result.current[0].language).toBe('ru');
+    act(() => {
+      result.current[1]({ autostart: true });
+    });
     expect(result.current[0].autostart).toBe(true);
-    expect(result.current[0].socksPort).toBe(12345);
-    expect(result.current[0].logLevel).toBe('debug');
-    expect(result.current[0].httpPort).toBe(10809);
-    expect(result.current[0].dnsMode).toBe('auto');
+    expect(updateMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(199);
+    });
+    expect(updateMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+      await Promise.resolve();
+    });
+    expect(updateMock).toHaveBeenCalledWith('general', { autostart: true });
   });
 
-  it('leaves state unchanged when backend rejects', async () => {
-    vi.mocked(GetSettings).mockRejectedValue(new Error('binding failed'));
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('coalesces multiple updates within debounce window into one section RPC', async () => {
+    getMock.mockResolvedValue({ general: {}, network: {}, notifications: {}, debug: {} });
+    updateMock.mockResolvedValue({});
+    const { result } = renderHook(() => useSettings());
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => result.current[1]({ socksPort: 1080 }));
+    act(() => { vi.advanceTimersByTime(50); });
+    act(() => result.current[1]({ socksPort: 1081 }));
+    act(() => { vi.advanceTimersByTime(70); });
+    act(() => result.current[1]({ allowLan: true }));
+
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+      await Promise.resolve();
+    });
+
+    expect(updateMock).toHaveBeenCalledTimes(1);
+    expect(updateMock).toHaveBeenCalledWith('network', { socksPort: 1081, allowLan: true });
+  });
+
+  it('multi-section patch fires one RPC per section in parallel', async () => {
+    getMock.mockResolvedValue({ general: {}, network: {}, notifications: {}, debug: {} });
+    updateMock.mockResolvedValue({});
+    const { result } = renderHook(() => useSettings());
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => result.current[1]({ language: 'en', socksPort: 1080, onConnected: false }));
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(updateMock).toHaveBeenCalledTimes(3);
+    const calls = updateMock.mock.calls.map(([section, patch]) => [section, patch]).sort(
+      (a, b) => String(a[0]).localeCompare(String(b[0])),
+    );
+    expect(calls).toEqual([
+      ['general', { language: 'en' }],
+      ['network', { socksPort: 1080 }],
+      ['notifications', { onConnected: false }],
+    ]);
+  });
+
+  it('flushSettings() forces immediate RPC', async () => {
+    getMock.mockResolvedValue({ general: {}, network: {}, notifications: {}, debug: {} });
+    updateMock.mockResolvedValue({});
+    const { result } = renderHook(() => useSettings());
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => result.current[1]({ autostart: true }));
+    expect(updateMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      flushSettings();
+      await Promise.resolve();
+    });
+    expect(updateMock).toHaveBeenCalledWith('general', { autostart: true });
+  });
+
+  it('Update rejection is logged but state stays optimistic (Q4 B)', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    getMock.mockResolvedValue({ general: {}, network: {}, notifications: {}, debug: {} });
+    updateMock.mockRejectedValue(new Error('disk full'));
 
     const { result } = renderHook(() => useSettings());
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => { await Promise.resolve(); });
 
-    expect(result.current[0]).toEqual(DEFAULTS);
-    expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
+    act(() => result.current[1]({ autostart: true }));
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current[0].autostart).toBe(true); // optimistic; no rollback
+    expect(warnSpy).toHaveBeenCalledWith(
+      'SettingsService.Update failed',
+      expect.objectContaining({ message: 'disk full' }),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('EventsOn("settings:changed") triggers Get + state merge', async () => {
+    getMock.mockResolvedValueOnce({ general: {}, network: {}, notifications: {}, debug: {} });
+    const { result } = renderHook(() => useSettings());
+    await act(async () => { await Promise.resolve(); });
+
+    expect(eventsOnMock).toHaveBeenCalledWith('settings:changed', expect.any(Function));
+    const handler = eventsOnMock.mock.calls[0][1] as () => void;
+
+    getMock.mockResolvedValueOnce({
+      general: { language: 'ru' },
+      network: {},
+      notifications: {},
+      debug: {},
+    });
+    await act(async () => {
+      handler();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current[0].language).toBe('ru');
   });
 });
