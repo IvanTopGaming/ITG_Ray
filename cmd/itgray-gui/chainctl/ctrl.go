@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
+	"github.com/itg-team/itg-ray/internal/config"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/sysproxy"
 )
@@ -27,6 +28,10 @@ const (
 	ModeTUN      Mode = "tun"
 	ModeSysProxy Mode = "sysproxy"
 )
+
+// defaultTunName is the fixed TUN adapter name. Not user-configurable — the
+// name is baked into the helper binary's wintun driver registration.
+const defaultTunName = "ITGRay-TUN"
 
 // HelperClient is the small surface chainctl needs from the helper-RPC
 // client. The real helper-RPC client (per Plan B) bundles many of these
@@ -63,10 +68,10 @@ type ServerStore interface {
 	Get(id string) (*server.Server, error)
 }
 
-// ConfigBuilder produces the singbox+xray JSON pair for a given server
-// and mode. Injected so tests can stub it out without dragging the full
-// configgen / vless stack into fixtures.
-type ConfigBuilder func(srv *server.Server, mode Mode) (singboxJSON, xrayJSON []byte, err error)
+// ConfigBuilder produces the singbox+xray JSON pair for a given server,
+// mode, and live network config. Injected so tests can stub it out without
+// dragging the full configgen / vless stack into fixtures.
+type ConfigBuilder func(srv *server.Server, mode Mode, net config.Network) (singboxJSON, xrayJSON []byte, err error)
 
 // Deps is the constructor input.
 type Deps struct {
@@ -76,10 +81,18 @@ type Deps struct {
 	Sysproxy     sysproxy.Manager
 	Hub          *hub.Hub
 	BuildConfigs ConfigBuilder // optional; nil means "skip config generation" (tests + reconcile)
-	SocksProxy   string        // sysproxy mode target, e.g. "127.0.0.1:1080"
-	TunName      string        // e.g. "ITGRay-TUN"
-	TunCIDR      string        // e.g. "198.18.0.1/15"
-	DNSServers   []string      // e.g. {"1.1.1.1", "8.8.8.8"}
+	// Network reads the user's persisted config.Network on every Connect
+	// cycle. nil falls back to DefaultNetworkLoader (config.Defaults().Network),
+	// which keeps existing tests / non-GUI consumers working.
+	//
+	// Concurrency contract: Network MUST be safe for concurrent calls.
+	// bringUp invokes it from the worker goroutine launched in Start, while
+	// a caller may concurrently mutate the underlying store via
+	// SettingsService.Update / config.FileStore writes. Implementations
+	// backed by config.Load(path) are safe by virtue of the FileStore's
+	// internal locking; in-memory test loaders should likewise avoid
+	// shared mutable state without a lock.
+	Network func() (config.Network, error)
 }
 
 // Controller is the public type owning the chain lifecycle.
@@ -94,23 +107,15 @@ type Controller struct {
 	prevAt   time.Time
 }
 
-// New constructs a Controller. Defaults are filled for fields the caller
-// left blank so chainctl works against the standard helper layout out of
-// the box. Deps is taken by pointer because it is heavy enough (152 bytes)
-// that gocritic flags pass-by-value, and chainctl mirrors the bindings
-// package convention where Deps live for the process lifetime anyway.
+// New constructs a Controller. Defaults: when Deps.Network is nil, it is
+// replaced with DefaultNetworkLoader so chainctl works against the
+// stock config out of the box (tests, CLI use cases). Deps is taken by
+// pointer because it is heavy enough that gocritic flags pass-by-value,
+// and chainctl mirrors the bindings package convention where Deps live
+// for the process lifetime anyway.
 func New(d *Deps) *Controller {
-	if d.SocksProxy == "" {
-		d.SocksProxy = "127.0.0.1:1080"
-	}
-	if d.TunName == "" {
-		d.TunName = "ITGRay-TUN"
-	}
-	if d.TunCIDR == "" {
-		d.TunCIDR = "198.18.0.1/15"
-	}
-	if len(d.DNSServers) == 0 {
-		d.DNSServers = []string{"1.1.1.1", "8.8.8.8"}
+	if d.Network == nil {
+		d.Network = DefaultNetworkLoader()
 	}
 	return &Controller{d: *d}
 }
@@ -240,10 +245,23 @@ func (c *Controller) LastSession() (serverID, mode string) {
 //
 //nolint:gocyclo,gocognit // orchestration sequence requires linear control flow so the rollback chain stays obvious
 func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode) (Mode, error) {
+	net, err := c.d.Network()
+	if err != nil {
+		c.d.Hub.Publish(hub.Event{
+			Name:    hub.EventChainError,
+			Payload: map[string]any{"message": fmt.Sprintf("config.Load: %v", err)},
+		})
+		return mode, fmt.Errorf("config.Load: %w", err)
+	}
+	tunName := defaultTunName // package-level constant; not user-configurable
+	tunCIDR := net.TUN.IPv4CIDR
+	socksAddr := fmt.Sprintf("127.0.0.1:%d", net.SysProxy.SOCKSPort)
+	httpAddr := fmt.Sprintf("127.0.0.1:%d", net.SysProxy.HTTPPort)
+	dnsServers := ResolveDNS(net.DNS)
+
 	var singboxJSON, xrayJSON []byte
 	if c.d.BuildConfigs != nil {
-		var err error
-		singboxJSON, xrayJSON, err = c.d.BuildConfigs(srv, mode)
+		singboxJSON, xrayJSON, err = c.d.BuildConfigs(srv, mode, net)
 		if err != nil {
 			return mode, fmt.Errorf("configgen: %w", err)
 		}
@@ -253,7 +271,7 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 		if err := c.d.Helper.RouteSnapshot(ctx); err != nil {
 			return mode, fmt.Errorf("RouteSnapshot: %w", err)
 		}
-		if err := c.d.Helper.TunCreate(ctx, c.d.TunName, c.d.TunCIDR); err != nil {
+		if err := c.d.Helper.TunCreate(ctx, tunName, tunCIDR); err != nil {
 			_ = c.d.Helper.RouteRestore(ctx)
 			return mode, fmt.Errorf("TunCreate: %w", err)
 		}
@@ -274,14 +292,14 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 			_ = c.d.Helper.RouteRestore(ctx)
 			return mode, fmt.Errorf("RouteAdd: %w", err)
 		}
-		if err := c.d.Helper.DnsSet(ctx, c.d.DNSServers); err != nil {
+		if err := c.d.Helper.DnsSet(ctx, dnsServers); err != nil {
 			_ = c.d.Helper.StopChain(ctx)
 			_ = c.d.Helper.RouteRestore(ctx)
 			_ = c.d.Helper.TunDestroy(ctx)
 			return mode, fmt.Errorf("DnsSet: %w", err)
 		}
 	} else {
-		if err := c.d.Sysproxy.Set(sysproxy.Settings{Socks: c.d.SocksProxy}); err != nil {
+		if err := c.d.Sysproxy.Set(sysproxy.Settings{Socks: socksAddr, HTTP: httpAddr}); err != nil {
 			_ = c.d.Helper.StopChain(ctx)
 			return mode, fmt.Errorf("sysproxy.Set: %w", err)
 		}

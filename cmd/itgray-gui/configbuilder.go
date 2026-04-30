@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/chainctl"
+	"github.com/itg-team/itg-ray/internal/config"
 	"github.com/itg-team/itg-ray/internal/configgen"
 	"github.com/itg-team/itg-ray/internal/rules"
 	"github.com/itg-team/itg-ray/internal/server"
@@ -79,7 +80,12 @@ func loadRulesFromDataDir(dataDir string) rules.Model {
 //   - chainctl.ModeTUN   → configgen.ModeTun (FakeIP, TunName/CIDR set)
 //   - chainctl.ModeSysProxy → configgen.ModeSysProxy (mixed inbound)
 func buildConfigs(dataDir string) chainctl.ConfigBuilder {
-	return func(srv *server.Server, mode chainctl.Mode) (singboxJSON, xrayJSON []byte, err error) {
+	// The net parameter is intentionally unused for now — Task 5 of the
+	// Tier 2b plan threads it into SingboxInput (TUN CIDR/MTU,
+	// SysProxy ports, DNS strategy). Keeping the new signature here lets
+	// chainctl ship its accessor migration without forcing the
+	// configgen rewrite into the same commit.
+	return func(srv *server.Server, mode chainctl.Mode, _ config.Network) (singboxJSON, xrayJSON []byte, err error) {
 		var sbInput configgen.SingboxInput
 		switch mode {
 		case chainctl.ModeTUN:

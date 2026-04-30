@@ -103,10 +103,12 @@ func main() {
 		Sysproxy:     sysproxy.New(),
 		Hub:          app.Hub(),
 		BuildConfigs: buildConfigs(dataDir),
-		SocksProxy:   "127.0.0.1:1080",
-		TunName:      defaultTunName,
-		TunCIDR:      defaultTunCIDR,
-		DNSServers:   []string{"1.1.1.1", "8.8.8.8"},
+		// Task 6 of Tier 2b will replace this with a real
+		// config.Load(filepath.Join(dataDir, "config.json"))-backed
+		// closure so user edits to Network land on the next Connect
+		// without a process restart. DefaultNetworkLoader keeps the
+		// existing stock-config behaviour until then.
+		Network: chainctl.DefaultNetworkLoader(),
 	})
 	runSvc := bindings.NewRunService(bindings.RunDeps{
 		Chain: chainCtrl,

@@ -2,11 +2,13 @@ package chainctl
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
+	"github.com/itg-team/itg-ray/internal/config"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/sysproxy"
 	"github.com/itg-team/itg-ray/internal/vless"
@@ -34,6 +36,20 @@ func (s *memStore) Get(id string) (*server.Server, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.m[id], nil
+}
+
+// staticNetwork builds a chainctl.Deps.Network closure that returns the
+// supplied config.Network on every call. Used by Tier 2b tests to feed
+// non-default values into bringUp without spinning up a config.FileStore.
+func staticNetwork(net config.Network) func() (config.Network, error) {
+	return func() (config.Network, error) { return net, nil }
+}
+
+// errNetwork builds a Network closure that always returns err. Pinned
+// to the spec wording so chain:error assertions can match on
+// "config.Load: <err>" without coupling to the closure's call site.
+func errNetwork(err error) func() (config.Network, error) {
+	return func() (config.Network, error) { return config.Network{}, err }
 }
 
 // fixtureServer is the canonical seed used across the suite.
@@ -97,6 +113,24 @@ func waitForEvent(t *testing.T, rcv <-chan hub.Event, want string, d time.Durati
 			}
 		}
 	}
+}
+
+// waitForVpnStatus waits up to timeout for a vpn:status event whose
+// "status" payload equals want. It drains intermediate states
+// (e.g. connecting -> connected) under a single overall deadline,
+// avoiding the re-arming-per-iteration flake risk of looping
+// waitForEvent calls with fresh deadlines.
+func waitForVpnStatus(t *testing.T, rcv <-chan hub.Event, want string, timeout time.Duration) hub.Event {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Until(deadline) > 0 {
+		ev := waitForEvent(t, rcv, hub.EventVPNStatus, time.Until(deadline))
+		if ev.Payload["status"] == want {
+			return ev
+		}
+	}
+	t.Fatalf("vpn:status %q not seen within %v", want, timeout)
+	return hub.Event{}
 }
 
 func TestController_Start_Stop_TUN_HappyPath(t *testing.T) {
@@ -273,23 +307,126 @@ func TestController_Start_Stop_SysProxy_HappyPath(t *testing.T) {
 	require.GreaterOrEqual(t, fsp.ClearCalls(), 1, "sysproxy.Clear must be called during tearDown")
 }
 
+// TestStart_PassesNetworkValuesToSysproxy pins that the config-driven
+// SOCKS/HTTP ports on Network.SysProxy flow into the sysproxy.Manager
+// argument during a sysproxy-mode bringup. This is the Tier 2b
+// runtime-wiring smoke test — without it, the new accessor could be
+// silently ignored and the sysproxy would still get the old hardcoded
+// "127.0.0.1:1080" / no-HTTP literal pair.
+func TestStart_PassesNetworkValuesToSysproxy(t *testing.T) {
+	dir := t.TempDir()
+	store := newMemStore(fixtureServer())
+	h := hub.New()
+	t.Cleanup(h.Close)
+	spy := &fakeSysproxy{}
+	net := config.Defaults().Network
+	net.SysProxy.SOCKSPort = 1090
+	net.SysProxy.HTTPPort = 8889
+
+	c := New(&Deps{
+		DataDir:     dir,
+		ServerStore: store,
+		Helper:      newFake(),
+		Sysproxy:    spy,
+		Hub:         h,
+		Network:     staticNetwork(net),
+	})
+	rcv := h.Subscribe(64)
+	defer h.Unsubscribe(rcv)
+	require.NoError(t, c.Start(context.Background(), "a", ModeSysProxy))
+	// bringUp is async; wait for the connected event so we know
+	// sysproxy.Set has run before reading spy.last.
+	_ = waitForVpnStatus(t, rcv, string(hub.StatusConnected), 2*time.Second)
+
+	spy.mu.Lock()
+	got := spy.last
+	spy.mu.Unlock()
+	require.Equal(t, sysproxy.Settings{Socks: "127.0.0.1:1090", HTTP: "127.0.0.1:8889"}, got)
+}
+
+// TestStart_NetworkLoaderError_PublishesChainError pins the failure
+// surface for a corrupt config.json: bringUp must emit chain:error with
+// "config.Load: <err>" and bounce back to idle. Without this contract
+// a partially-init Controller could wedge the UI on connecting.
+func TestStart_NetworkLoaderError_PublishesChainError(t *testing.T) {
+	dir := t.TempDir()
+	store := newMemStore(fixtureServer())
+	h := hub.New()
+	t.Cleanup(h.Close)
+
+	c := New(&Deps{
+		DataDir:     dir,
+		ServerStore: store,
+		Helper:      newFake(),
+		Sysproxy:    sysproxy.New(),
+		Hub:         h,
+		Network:     errNetwork(errors.New("disk corrupt")),
+	})
+	rcv := h.Subscribe(64)
+	defer h.Unsubscribe(rcv)
+	// Start kicks off bringUp on a goroutine; the loader error surfaces
+	// via chain:error rather than the synchronous Start return.
+	require.NoError(t, c.Start(context.Background(), "a", ModeTUN))
+	ev := waitForEvent(t, rcv, hub.EventChainError, 2*time.Second)
+	require.Contains(t, ev.Payload["message"].(string), "config.Load")
+}
+
+// TestStart_MTUOutOfRange_PassesRawToBuildConfigs pins the chainctl/
+// configbuilder split: chainctl forwards the raw Network to the
+// builder; clamping on the builder side lands in Task 5. Today the
+// chainctl-side ClampMTU helper is exercised directly in
+// network_test.go and is unused at the helper boundary because
+// HelperAdapter.TunCreate is a no-op in production.
+func TestStart_MTUOutOfRange_PassesRawToBuildConfigs(t *testing.T) {
+	dir := t.TempDir()
+	store := newMemStore(fixtureServer())
+	h := hub.New()
+	t.Cleanup(h.Close)
+	captured := config.Network{}
+	builder := func(_ *server.Server, _ Mode, net config.Network) ([]byte, []byte, error) {
+		captured = net
+		return []byte("{}"), []byte("{}"), nil
+	}
+	net := config.Defaults().Network
+	net.TUN.MTU = 100 // out of [576, 9000]; chainctl passes it through
+
+	c := New(&Deps{
+		DataDir:      dir,
+		ServerStore:  store,
+		Helper:       newFake(),
+		Sysproxy:     sysproxy.New(),
+		Hub:          h,
+		BuildConfigs: builder,
+		Network:      staticNetwork(net),
+	})
+	rcv := h.Subscribe(64)
+	defer h.Unsubscribe(rcv)
+	require.NoError(t, c.Start(context.Background(), "a", ModeTUN))
+	_ = waitForVpnStatus(t, rcv, string(hub.StatusConnected), 2*time.Second)
+	require.Equal(t, 100, captured.TUN.MTU)
+}
+
 // fakeSysproxy records Set/Clear/IsSet invocations so tests can assert
-// the bringUp/tearDown sequence drove the sysproxy.Manager. It is
-// safe for concurrent use because the Controller's bringUp runs on a
-// worker goroutine while the test asserts from the main goroutine.
+// the bringUp/tearDown sequence drove the sysproxy.Manager. The last
+// Settings argument is captured for Tier 2b assertions that pin the
+// config-driven SOCKS/HTTP ports landing on the manager. Safe for
+// concurrent use because the Controller's bringUp runs on a worker
+// goroutine while the test asserts from the main goroutine.
 type fakeSysproxy struct {
 	mu         sync.Mutex
 	setCalls   int
 	clearCalls int
 	isSetCalls int
 	on         bool
+	last       sysproxy.Settings
 }
 
-func (f *fakeSysproxy) Set(_ sysproxy.Settings) error {
+func (f *fakeSysproxy) Set(s sysproxy.Settings) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.setCalls++
 	f.on = true
+	f.last = s
 	return nil
 }
 
