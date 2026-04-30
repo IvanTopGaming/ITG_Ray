@@ -26,12 +26,16 @@ const (
 type SingboxInput struct {
 	Mode             Mode
 	SocksInboundPort int
+	HTTPInboundPort  int        // Tier 2b: separate http inbound; 0 → no http
 	TunName          string
 	TunIPv4          string
+	MTU              int        // Tier 2b: TUN interface MTU; 0 → OS default
 	XraySOCKSHost    string
 	XraySOCKSPort    int
 	Rules            rules.Model
 	DNSUpstreams     []string
+	AllowLAN         bool       // Tier 2b: prepend LAN-bypass rule
+	IPv6Strategy     string     // Tier 2b: dns.strategy override
 	// FakeIP, when true and Mode==ModeTun, enables sing-box's FakeIP DNS
 	// module. A/AAAA queries return synthetic IPs in 198.18.0.0/15 (which
 	// the TunIPv4 prefix covers), so DNS round-trips don't traverse the
@@ -47,6 +51,10 @@ type SingboxInput struct {
 // In any other configuration, it emits a single "default" server with no
 // rules.
 func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
+	strategy := in.IPv6Strategy
+	if strategy == "" {
+		strategy = "prefer_ipv4"
+	}
 	if in.Mode == ModeTun && in.FakeIP {
 		return map[string]any{
 			"servers": []map[string]any{
@@ -62,14 +70,14 @@ func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
 				"inet4_range": "198.18.0.0/15",
 			},
 			"independent_cache": true,
-			"strategy":          "prefer_ipv4",
+			"strategy":          strategy,
 		}
 	}
 	return map[string]any{
 		"servers": []map[string]any{
 			{"tag": "default", "address": upstreams[0]},
 		},
-		"strategy": "prefer_ipv4",
+		"strategy": strategy,
 	}
 }
 
@@ -123,34 +131,56 @@ func prependLanBypass(rules []map[string]any) []map[string]any {
 // slices that can arise from JSON round-tripping. Note: sing-box's route
 // schema names this key "final" (not "default_outbound"); we keep that
 // nomenclature so library validation accepts the document.
-func applyTunModeKillswitch(route map[string]any) {
+func applyTunModeKillswitch(route map[string]any, lanBypassPrepended bool) {
 	route["final"] = "block"
 	// hijackDnsRule feeds DNS traffic (detected via sniff in the rule
 	// preceding it) into sing-box's DNS engine so that FakeIP and other
 	// DNS rules can take effect. Without this, TUN inbound treats UDP/53
 	// as opaque traffic and bypasses the DNS module entirely.
 	hijackDnsRule := map[string]any{"protocol": "dns", "action": "hijack-dns"}
-	lanRule := lanBypassRule()
-	// Insert hijack-dns then lanRule right after the first rule (which
-	// is the sniff action prepended in BuildSingbox). Order matters:
-	// sniff must run first to populate protocol metadata; hijack-dns
-	// must run before LAN-direct so DNS to the LAN gateway is also
-	// hijacked into the DNS engine, not shunted around it.
+	// Insert hijack-dns (and lanRule when not already prepended) right after
+	// the first rule (the sniff action prepended in BuildSingbox). Order
+	// matters: sniff must run first to populate protocol metadata; hijack-dns
+	// must run before LAN-direct so DNS to the LAN gateway is also hijacked
+	// into the DNS engine, not shunted around it.
 	switch existing := route["rules"].(type) {
 	case []map[string]any:
-		if len(existing) > 0 {
-			route["rules"] = append([]map[string]any{existing[0], hijackDnsRule, lanRule}, existing[1:]...)
+		if lanBypassPrepended {
+			// LAN already there from AllowLAN; just inject hijack-dns after sniff.
+			if len(existing) > 0 {
+				route["rules"] = append([]map[string]any{existing[0], hijackDnsRule}, existing[1:]...)
+			} else {
+				route["rules"] = []map[string]any{hijackDnsRule}
+			}
 		} else {
-			route["rules"] = []map[string]any{hijackDnsRule, lanRule}
+			lanRule := lanBypassRule()
+			if len(existing) > 0 {
+				route["rules"] = append([]map[string]any{existing[0], hijackDnsRule, lanRule}, existing[1:]...)
+			} else {
+				route["rules"] = []map[string]any{hijackDnsRule, lanRule}
+			}
 		}
 	case []any:
-		if len(existing) > 0 {
-			route["rules"] = append([]any{existing[0], hijackDnsRule, lanRule}, existing[1:]...)
+		if lanBypassPrepended {
+			if len(existing) > 0 {
+				route["rules"] = append([]any{existing[0], hijackDnsRule}, existing[1:]...)
+			} else {
+				route["rules"] = []any{hijackDnsRule}
+			}
 		} else {
-			route["rules"] = []any{hijackDnsRule, lanRule}
+			lanRule := lanBypassRule()
+			if len(existing) > 0 {
+				route["rules"] = append([]any{existing[0], hijackDnsRule, lanRule}, existing[1:]...)
+			} else {
+				route["rules"] = []any{hijackDnsRule, lanRule}
+			}
 		}
 	default:
-		route["rules"] = []map[string]any{hijackDnsRule, lanRule}
+		if lanBypassPrepended {
+			route["rules"] = []map[string]any{hijackDnsRule}
+		} else {
+			route["rules"] = []map[string]any{hijackDnsRule, lanBypassRule()}
+		}
 	}
 	// Append a catch-all proxy rule at the END so default traffic that
 	// didn't match LAN exception or user rules goes through the proxy
@@ -193,8 +223,25 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 		route["rules"] = []map[string]any{sniffRule}
 	}
 
+	lanBypassPrepended := false
+	if in.AllowLAN {
+		// After json.Unmarshal + the sniff prepend above, route["rules"] is
+		// []any (sniff and existing rules are heterogeneous map types). Convert
+		// back to []map[string]any so prependLanBypass can do its insertion,
+		// then store back as the same shape — JSON marshal handles either.
+		if rs, ok := route["rules"].([]any); ok {
+			typed := make([]map[string]any, 0, len(rs))
+			for _, r := range rs {
+				if m, ok := r.(map[string]any); ok {
+					typed = append(typed, m)
+				}
+			}
+			route["rules"] = prependLanBypass(typed)
+			lanBypassPrepended = true
+		}
+	}
 	if in.Mode == ModeTun {
-		applyTunModeKillswitch(route)
+		applyTunModeKillswitch(route, lanBypassPrepended)
 	}
 
 	upstreams := in.DNSUpstreams
@@ -214,6 +261,9 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 			"address":        []string{in.TunIPv4},
 			"auto_route":     true,
 			"strict_route":   false,
+		}
+		if in.MTU > 0 {
+			inbound["mtu"] = in.MTU
 		}
 	default:
 		// Note: legacy inbound `sniff` / `sniff_override_destination` fields
@@ -243,6 +293,32 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 		},
 		"route": route,
 	}
-	doc["inbounds"] = []map[string]any{inbound}
+	var inbounds []map[string]any
+	switch in.Mode {
+	case ModeTun:
+		inbounds = []map[string]any{inbound}
+	case ModeSysProxy:
+		if in.HTTPInboundPort > 0 && in.HTTPInboundPort != in.SocksInboundPort {
+			inbounds = []map[string]any{
+				{
+					"type":        "socks",
+					"tag":         "in-socks",
+					"listen":      "127.0.0.1",
+					"listen_port": in.SocksInboundPort,
+				},
+				{
+					"type":        "http",
+					"tag":         "in-http",
+					"listen":      "127.0.0.1",
+					"listen_port": in.HTTPInboundPort,
+				},
+			}
+		} else {
+			inbounds = []map[string]any{inbound} // mixed fallback
+		}
+	default:
+		inbounds = []map[string]any{inbound}
+	}
+	doc["inbounds"] = inbounds
 	return json.MarshalIndent(doc, "", "  ")
 }
