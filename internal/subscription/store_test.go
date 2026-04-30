@@ -180,3 +180,39 @@ func TestFileStore_Save_AtomicReplaceUnderConcurrentReaders(t *testing.T) {
 	close(stop)
 	wg.Wait()
 }
+
+func TestStored_RoundTrip_NewMetadataFields(t *testing.T) {
+	dir := t.TempDir()
+	fs := FileStore{Path: filepath.Join(dir, "subs.json")}
+
+	expire := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
+	in := []Stored{{
+		ID:          "s1",
+		Name:        "A",
+		URL:         "https://a.test",
+		LastMessage: "imported=3 invalid=0 skipped=0",
+		Upload:      111,
+		Download:    222,
+		Total:       1024 * 1024 * 1024,
+		Expire:      &expire,
+	}}
+	if err := fs.Save(in); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	got, err := fs.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("len=%d, want 1", len(got))
+	}
+	if got[0].LastMessage != "imported=3 invalid=0 skipped=0" {
+		t.Errorf("LastMessage=%q", got[0].LastMessage)
+	}
+	if got[0].Upload != 111 || got[0].Download != 222 || got[0].Total != 1024*1024*1024 {
+		t.Errorf("quota fields lost: %+v", got[0])
+	}
+	if got[0].Expire == nil || !got[0].Expire.Equal(expire) {
+		t.Errorf("Expire round-trip lost: %v", got[0].Expire)
+	}
+}

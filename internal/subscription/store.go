@@ -46,13 +46,18 @@ func lockForPath(path string) *sync.Mutex {
 // LastSyncAt = "0001-01-01T00:00:00Z" in JSON. Use LastSyncAt.IsZero() to
 // distinguish "never synced" from a real timestamp.
 type Stored struct {
-	ID             string    `json:"id"`
-	Name           string    `json:"name"`
-	URL            string    `json:"url"`
-	UserAgent      string    `json:"user_agent,omitempty"`
-	UpdateInterval Duration  `json:"update_interval,omitempty"`
-	LastSyncAt     time.Time `json:"last_sync_at,omitempty"`
-	LastStatus     string    `json:"last_status,omitempty"`
+	ID             string     `json:"id"`
+	Name           string     `json:"name"`
+	URL            string     `json:"url"`
+	UserAgent      string     `json:"user_agent,omitempty"`
+	UpdateInterval Duration   `json:"update_interval,omitempty"`
+	LastSyncAt     time.Time  `json:"last_sync_at,omitempty"`
+	LastStatus     string     `json:"last_status,omitempty"`
+	LastMessage    string     `json:"last_message,omitempty"`
+	Upload         int64      `json:"upload,omitempty"`
+	Download       int64      `json:"download,omitempty"`
+	Total          int64      `json:"total,omitempty"`
+	Expire         *time.Time `json:"expire,omitempty"`
 }
 
 // ToSyncInput converts a Stored entry into the in-memory Subscription type
