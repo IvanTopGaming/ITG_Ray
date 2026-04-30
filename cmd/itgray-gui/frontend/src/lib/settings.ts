@@ -1,6 +1,10 @@
 import { useSyncExternalStore, useCallback } from 'react';
-import { Get as GetSettings } from '../../wailsjs/go/bindings/SettingsService';
-import { backendToFrontend } from './settingsAdapter';
+import { Get as GetSettings, Update as UpdateSettings } from '../../wailsjs/go/bindings/SettingsService';
+import { backendToFrontend, frontendToBackend } from './settingsAdapter';
+
+// ──────────────────────────────────────────────────────────────────────
+//  Type aliases (preserve existing exports)
+// ──────────────────────────────────────────────────────────────────────
 
 export type Language = 'en' | 'ru';
 export type NetworkMode = 'tun' | 'sysproxy';
@@ -59,64 +63,30 @@ export const DEFAULTS = {
   logLevel: 'info',
 } as const satisfies Settings;
 
-export const STORAGE_KEY = 'itgray.settings.v1';
+// ──────────────────────────────────────────────────────────────────────
+//  Module state
+// ──────────────────────────────────────────────────────────────────────
 
-// Returned objects are always fresh shallow copies so callers can mutate freely
-// without corrupting the singleton DEFAULTS reference (TS marks it readonly,
-// but the runtime object is shared otherwise).
-export function loadSettings(): Settings {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return { ...DEFAULTS };
-  try {
-    const parsed = JSON.parse(raw) as Partial<Settings>;
-    return { ...DEFAULTS, ...parsed };
-  } catch (err) {
-    console.warn('[settings] corrupt JSON in localStorage, using defaults', err);
-    return { ...DEFAULTS };
-  }
-}
+const DEBOUNCE_MS = 200;
 
+let currentState: Settings = { ...DEFAULTS };
+let pendingPatch: Partial<Settings> | null = null;
+let prevSnapshot: Settings | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
-let pendingValue: Settings | null = null;
-
-export function saveSettings(s: Settings): void {
-  pendingValue = s;
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    if (pendingValue) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(pendingValue));
-    }
-    saveTimer = null;
-    pendingValue = null;
-  }, 200);
-}
-
-// Force any pending debounced write to flush immediately. Wire this to
-// `beforeunload` once a consumer (e.g. useSettings in T3) is available so the
-// last edit before tab-close isn't lost in the 200ms window.
-export function flushSettings(): void {
-  if (!saveTimer) return;
-  clearTimeout(saveTimer);
-  saveTimer = null;
-  if (pendingValue) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(pendingValue));
-    pendingValue = null;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// External store for useSyncExternalStore — shared singleton state so all
-// hook consumers re-render together on any patch or cross-tab storage event.
-// ---------------------------------------------------------------------------
-
-let currentState: Settings | null = null;
-const listeners = new Set<() => void>();
 let backendFetchStarted = false;
+const listeners = new Set<() => void>();
+
+function notifyListeners(): void {
+  listeners.forEach((cb) => cb());
+}
+
+// ──────────────────────────────────────────────────────────────────────
+//  Backend bootstrap
+// ──────────────────────────────────────────────────────────────────────
 
 function loadFromBackend(): void {
   if (backendFetchStarted) return;
   backendFetchStarted = true;
-  // Bail when running outside a Wails-injected window (jsdom tests, SSR).
   if (typeof window === 'undefined' || !(window as any).go) return;
   let p;
   try {
@@ -127,73 +97,99 @@ function loadFromBackend(): void {
   }
   p.then((view) => {
     const patch = backendToFrontend(view);
-    currentState = { ...getSnapshot(), ...patch };
+    currentState = { ...currentState, ...patch };
     notifyListeners();
   }).catch((err) => {
     console.warn('SettingsService.Get failed', err);
   });
 }
 
-function getSnapshot(): Settings {
-  if (currentState === null) currentState = loadSettings();
-  return currentState;
+// ──────────────────────────────────────────────────────────────────────
+//  Write path: optimistic merge -> debounced section dispatch
+// ──────────────────────────────────────────────────────────────────────
+
+function scheduleFlush(): void {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(flushSettings, DEBOUNCE_MS);
 }
 
-function handleStorage(event: StorageEvent): void {
-  if (event.key === STORAGE_KEY) {
-    currentState = loadSettings();
-    notifyListeners();
-  }
-}
+async function flushNow(patch: Partial<Settings>, snap: Settings): Promise<void> {
+  const sections = frontendToBackend(patch);
+  if (sections.size === 0) return;
 
-function handleBeforeUnload(): void {
-  flushSettings();
-}
+  const calls = Array.from(sections, ([section, p]) =>
+    UpdateSettings(section, p as Record<string, any>),
+  );
+  const results = await Promise.allSettled(calls);
 
-function notifyListeners(): void {
-  for (const cb of listeners) cb();
-}
-
-function subscribe(cb: () => void): () => void {
-  const isFirst = listeners.size === 0;
-  listeners.add(cb);
-  if (isFirst && typeof window !== 'undefined') {
-    window.addEventListener('storage', handleStorage);
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    loadFromBackend();
-  }
-  return (): void => {
-    listeners.delete(cb);
-    if (listeners.size === 0) {
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('storage', handleStorage);
-        window.removeEventListener('beforeunload', handleBeforeUnload);
-      }
+  for (const r of results) {
+    if (r.status === 'rejected') {
+      console.warn('SettingsService.Update failed', r.reason);
+      // TODO(tier2a-followup): rollback prev section state + emit toast.
+      // Hook: `snap` carries the pre-mutation snapshot for future use.
     }
-  };
+  }
+  // Reference snap so TS does not flag it unused; remove once rollback wired.
+  void snap;
 }
 
-/**
- * Reset all module-level state. Test-only — do not call from production code.
- * The double-underscore prefix is the convention for "internal API, not for app use".
- */
-export function __resetForTests(): void {
-  currentState = null;
-  listeners.clear();
+export function flushSettings(): void {
   if (saveTimer) {
     clearTimeout(saveTimer);
     saveTimer = null;
   }
-  pendingValue = null;
+  if (!pendingPatch) return;
+  const patch = pendingPatch;
+  const snap = prevSnapshot ?? currentState;
+  pendingPatch = null;
+  prevSnapshot = null;
+  void flushNow(patch, snap);
+}
+
+// ──────────────────────────────────────────────────────────────────────
+//  Test seam
+// ──────────────────────────────────────────────────────────────────────
+
+export function __resetForTests(): void {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = null;
+  currentState = { ...DEFAULTS };
+  pendingPatch = null;
+  prevSnapshot = null;
   backendFetchStarted = false;
+  listeners.clear();
+}
+
+// ──────────────────────────────────────────────────────────────────────
+//  React subscription (unchanged signature)
+// ──────────────────────────────────────────────────────────────────────
+
+function getSnapshot(): Settings {
+  return currentState;
+}
+
+function subscribe(cb: () => void): () => void {
+  listeners.add(cb);
+  if (!backendFetchStarted) loadFromBackend();
+  return () => listeners.delete(cb);
 }
 
 export function useSettings(): [Settings, (patch: Partial<Settings>) => void] {
   const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   const update = useCallback((patch: Partial<Settings>): void => {
-    currentState = { ...getSnapshot(), ...patch };
-    saveSettings(currentState);
+    if (prevSnapshot === null) prevSnapshot = currentState;
+    currentState = { ...currentState, ...patch };
+    pendingPatch = { ...(pendingPatch ?? {}), ...patch };
     notifyListeners();
+    scheduleFlush();
   }, []);
   return [state, update];
+}
+
+// ──────────────────────────────────────────────────────────────────────
+//  Browser lifecycle
+// ──────────────────────────────────────────────────────────────────────
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', flushSettings);
 }
