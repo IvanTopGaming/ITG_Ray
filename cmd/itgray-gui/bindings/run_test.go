@@ -64,8 +64,8 @@ func (s runMemStore) Get(id string) (*server.Server, error) { return s.m[id], ni
 type runFakeSysproxy struct{}
 
 func (runFakeSysproxy) Set(sysproxy.Settings) error { return nil }
-func (runFakeSysproxy) Clear() error         { return nil }
-func (runFakeSysproxy) IsSet() (bool, error) { return false, nil }
+func (runFakeSysproxy) Clear() error                { return nil }
+func (runFakeSysproxy) IsSet() (bool, error)        { return false, nil }
 
 // setupRun wires a RunService against a fake helper + in-memory server
 // store. Returns the service plus the underlying Controller (in case the

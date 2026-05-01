@@ -136,7 +136,7 @@ func TestSubsService_Remove(t *testing.T) {
 type failingSaveServerStore struct{}
 
 func (failingSaveServerStore) Load() ([]server.Server, error) { return nil, nil }
-func (failingSaveServerStore) Save([]server.Server) error    { return errors.New("disk full") }
+func (failingSaveServerStore) Save([]server.Server) error     { return errors.New("disk full") }
 
 // TestSubsService_SyncOne_PreservesUserinfoOnSaveFailure guards against the
 // regression where ServerStore.Save failure overwrites syncErr and silently

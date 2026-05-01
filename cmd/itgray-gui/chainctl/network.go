@@ -1,6 +1,8 @@
 package chainctl
 
 import (
+	"log/slog"
+
 	"github.com/itg-team/itg-ray/internal/config"
 )
 
@@ -11,6 +13,10 @@ import (
 // reject mid-Connect.
 func ClampMTU(mtu int) int {
 	if mtu < 576 || mtu > 9000 {
+		if mtu != 0 {
+			slog.Info("chainctl: MTU out of [576,9000] range, falling back to OS default",
+				slog.String("scope", "chainctl.network"), slog.Int("mtu", mtu))
+		}
 		return 0
 	}
 	return mtu
@@ -29,6 +35,10 @@ func ResolveDNS(d config.DNS) []string {
 		out := make([]string, len(d.Servers))
 		copy(out, d.Servers)
 		return out
+	}
+	if d.Mode == "custom" {
+		slog.Info("chainctl: DNS Mode=custom with empty Servers, falling back to defaults",
+			slog.String("scope", "chainctl.network"))
 	}
 	return []string{"1.1.1.1", "8.8.8.8"}
 }

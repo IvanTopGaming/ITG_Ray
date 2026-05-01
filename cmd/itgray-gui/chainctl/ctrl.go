@@ -88,10 +88,11 @@ type Deps struct {
 	// Concurrency contract: Network MUST be safe for concurrent calls.
 	// bringUp invokes it from the worker goroutine launched in Start, while
 	// a caller may concurrently mutate the underlying store via
-	// SettingsService.Update / config.FileStore writes. Implementations
-	// backed by config.Load(path) are safe by virtue of the FileStore's
-	// internal locking; in-memory test loaders should likewise avoid
-	// shared mutable state without a lock.
+	// SettingsService.Update / config.Save writes. The default loader
+	// backed by config.Load(path) is safe by virtue of config.Save's
+	// atomic tmp+rename semantics — readers always observe a complete
+	// prior or complete next state, never a torn write. In-memory test
+	// loaders should likewise avoid shared mutable state without a lock.
 	Network func() (config.Network, error)
 }
 

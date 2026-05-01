@@ -3,6 +3,7 @@ package configgen
 
 import (
 	"encoding/json"
+	"log/slog"
 
 	"github.com/itg-team/itg-ray/internal/rules"
 )
@@ -26,16 +27,16 @@ const (
 type SingboxInput struct {
 	Mode             Mode
 	SocksInboundPort int
-	HTTPInboundPort  int        // Tier 2b: separate http inbound; 0 → no http
+	HTTPInboundPort  int // Tier 2b: separate http inbound; 0 → no http
 	TunName          string
 	TunIPv4          string
-	MTU              int        // Tier 2b: TUN interface MTU; 0 → OS default
+	MTU              int // Tier 2b: TUN interface MTU; 0 → OS default
 	XraySOCKSHost    string
 	XraySOCKSPort    int
 	Rules            rules.Model
 	DNSUpstreams     []string
-	AllowLAN         bool       // Tier 2b: prepend LAN-bypass rule
-	IPv6Strategy     string     // Tier 2b: dns.strategy override
+	AllowLAN         bool   // Tier 2b: prepend LAN-bypass rule
+	IPv6Strategy     string // Tier 2b: dns.strategy override
 	// FakeIP, when true and Mode==ModeTun, enables sing-box's FakeIP DNS
 	// module. A/AAAA queries return synthetic IPs in 198.18.0.0/15 (which
 	// the TunIPv4 prefix covers), so DNS round-trips don't traverse the
@@ -314,6 +315,11 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 				},
 			}
 		} else {
+			if in.HTTPInboundPort > 0 && in.HTTPInboundPort == in.SocksInboundPort {
+				slog.Warn("configgen: SocksInboundPort==HTTPInboundPort, falling back to single mixed inbound",
+					slog.String("scope", "configgen.singbox"),
+					slog.Int("port", in.SocksInboundPort))
+			}
 			inbounds = []map[string]any{inbound} // mixed fallback
 		}
 	default:
