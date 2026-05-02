@@ -68,6 +68,38 @@ export function Settings() {
   const [about, setAbout] = useState<hub.AboutSettings | null>(null);
   const [tunAdvancedOpen, setTunAdvancedOpen] = useState(false);
 
+  // Draft-string state for numeric inputs decouples user typing from the
+  // store flush. Without this, every keystroke pushes a parsed Number
+  // through update(); intermediate values that fail backend range
+  // validation (e.g. "1500" → backspace → "150") get rejected on the
+  // round-trip and the EventSettings echo snaps the field back to the
+  // last persisted value, making it effectively uneditable. The draft
+  // mirrors the canonical store value and only commits when parseable
+  // AND validator-clean. type="text" + inputMode="numeric" keeps the
+  // numeric keyboard on mobile without the browser-level coercion that
+  // type="number" applies mid-typing.
+  //
+  // Validity-driven border + aria-invalid key off the draft (not the
+  // canonical), so the user gets immediate red-border feedback while
+  // typing intermediate-invalid values. The danger color disappears as
+  // soon as the draft parses to a validator-clean value, at which point
+  // update() also fires.
+  const [tunMtuDraft, setTunMtuDraft] = useState(String(s.tunMtu));
+  const [socksPortDraft, setSocksPortDraft] = useState(String(s.socksPort));
+  const [httpPortDraft, setHttpPortDraft] = useState(String(s.httpPort));
+
+  // Sync the drafts when the canonical store value changes from the
+  // outside (backend EventSettings push, post-flush re-fetch, navigation).
+  useEffect(() => {
+    setTunMtuDraft(String(s.tunMtu));
+  }, [s.tunMtu]);
+  useEffect(() => {
+    setSocksPortDraft(String(s.socksPort));
+  }, [s.socksPort]);
+  useEffect(() => {
+    setHttpPortDraft(String(s.httpPort));
+  }, [s.httpPort]);
+
   useEffect(() => {
     GetSettings()
       .then((view) => setAbout(view.about))
@@ -208,14 +240,26 @@ export function Settings() {
         </SettingRow>
         <SettingRow label="SOCKS port" hint="Local SOCKS5 proxy port. Default 1080.">
           <input
-            type="number"
-            min={1}
-            max={65535}
-            value={s.socksPort}
-            onChange={(e) => update({ socksPort: Number(e.target.value) || 0 })}
+            type="text"
+            inputMode="numeric"
+            value={socksPortDraft}
+            onChange={(e) => {
+              setSocksPortDraft(e.target.value);
+              const n = Number(e.target.value);
+              if (Number.isFinite(n) && isPortValid(n)) {
+                update({ socksPort: n });
+              }
+            }}
+            onBlur={() => {
+              const n = Number(socksPortDraft);
+              if (!Number.isFinite(n) || !isPortValid(n)) {
+                setSocksPortDraft(String(s.socksPort));
+              }
+            }}
+            aria-invalid={!isPortValid(Number(socksPortDraft))}
             className={cn(
               'w-24 px-3 py-1.5 bg-white/[0.06] border rounded-[10px] text-[13px] text-white text-center outline-none transition-colors tabular-nums',
-              isPortValid(s.socksPort)
+              isPortValid(Number(socksPortDraft))
                 ? 'border-white/[0.12] focus:border-white/[0.30]'
                 : 'border-danger/50',
             )}
@@ -223,14 +267,26 @@ export function Settings() {
         </SettingRow>
         <SettingRow label="HTTP port" hint="Local HTTP proxy port. Default 8888.">
           <input
-            type="number"
-            min={1}
-            max={65535}
-            value={s.httpPort}
-            onChange={(e) => update({ httpPort: Number(e.target.value) || 0 })}
+            type="text"
+            inputMode="numeric"
+            value={httpPortDraft}
+            onChange={(e) => {
+              setHttpPortDraft(e.target.value);
+              const n = Number(e.target.value);
+              if (Number.isFinite(n) && isPortValid(n)) {
+                update({ httpPort: n });
+              }
+            }}
+            onBlur={() => {
+              const n = Number(httpPortDraft);
+              if (!Number.isFinite(n) || !isPortValid(n)) {
+                setHttpPortDraft(String(s.httpPort));
+              }
+            }}
+            aria-invalid={!isPortValid(Number(httpPortDraft))}
             className={cn(
               'w-24 px-3 py-1.5 bg-white/[0.06] border rounded-[10px] text-[13px] text-white text-center outline-none transition-colors tabular-nums',
-              isPortValid(s.httpPort)
+              isPortValid(Number(httpPortDraft))
                 ? 'border-white/[0.12] focus:border-white/[0.30]'
                 : 'border-danger/50',
             )}
@@ -290,15 +346,26 @@ export function Settings() {
                   </SettingRow>
                   <SettingRow label="MTU" hint="TUN interface MTU in bytes. Default 1500. Range 576–9000.">
                     <input
-                      type="number"
-                      min={576}
-                      max={9000}
-                      step={1}
-                      value={s.tunMtu}
-                      onChange={(e) => update({ tunMtu: Number(e.target.value) || 0 })}
+                      type="text"
+                      inputMode="numeric"
+                      value={tunMtuDraft}
+                      onChange={(e) => {
+                        setTunMtuDraft(e.target.value);
+                        const n = Number(e.target.value);
+                        if (Number.isFinite(n) && isMtuValid(n)) {
+                          update({ tunMtu: n });
+                        }
+                      }}
+                      onBlur={() => {
+                        const n = Number(tunMtuDraft);
+                        if (!Number.isFinite(n) || !isMtuValid(n)) {
+                          setTunMtuDraft(String(s.tunMtu));
+                        }
+                      }}
+                      aria-invalid={!isMtuValid(Number(tunMtuDraft))}
                       className={cn(
                         'w-24 px-3 py-1.5 bg-white/[0.06] border rounded-[10px] text-[13px] text-white text-center outline-none transition-colors tabular-nums',
-                        isMtuValid(s.tunMtu)
+                        isMtuValid(Number(tunMtuDraft))
                           ? 'border-white/[0.12] focus:border-white/[0.30]'
                           : 'border-danger/50',
                       )}
