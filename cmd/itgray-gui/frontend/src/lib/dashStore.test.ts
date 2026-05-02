@@ -1,0 +1,283 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const { eventHandlers, getSnapshotMock, runConnectMock, runDisconnectMock } = vi.hoisted(() => ({
+  eventHandlers: {} as Record<string, (...args: any[]) => void>,
+  getSnapshotMock: vi.fn(),
+  runConnectMock: vi.fn(),
+  runDisconnectMock: vi.fn(),
+}));
+
+vi.mock("../../wailsjs/runtime/runtime", () => ({
+  EventsOn: (name: string, cb: (...args: any[]) => void) => {
+    eventHandlers[name] = cb;
+    return () => { delete eventHandlers[name]; };
+  },
+}));
+
+vi.mock("../../wailsjs/go/bindings/AppService", () => ({
+  GetSnapshot: () => getSnapshotMock(),
+}));
+
+vi.mock("../../wailsjs/go/bindings/RunService", () => ({
+  Connect: (id: string, mode: string) => runConnectMock(id, mode),
+  Disconnect: () => runDisconnectMock(),
+}));
+
+import {
+  __resetForTest,
+  __bootstrapForTest,
+  effectiveStatus,
+  getDashState,
+  dashConnect,
+  dashDisconnect,
+  dashSwitchMode,
+  clearLastError,
+  type ChainStatus,
+} from "./dashStore";
+
+function fireEvent(name: string, payload: any) {
+  const cb = eventHandlers[name];
+  if (!cb) throw new Error(`no handler registered for ${name}`);
+  cb(payload);
+}
+
+const baseSnapshot = {
+  status: "idle",
+  currentServer: null,
+  mode: "tun",
+  speeds: { upBps: 0, downBps: 0, at: new Date().toISOString() },
+  helperState: "running",
+  servers: [],
+  subs: [],
+  settings: {},
+  onboarded: true,
+  version: "test",
+};
+
+beforeEach(() => {
+  for (const k of Object.keys(eventHandlers)) delete eventHandlers[k];
+  getSnapshotMock.mockReset();
+  runConnectMock.mockReset();
+  runDisconnectMock.mockReset();
+  __resetForTest();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe("dashStore — bootstrap", () => {
+  it("seeds state from GetSnapshot on first read", async () => {
+    getSnapshotMock.mockResolvedValue({
+      ...baseSnapshot,
+      status: "idle",
+      mode: "sysproxy",
+      servers: [{ id: "a", name: "A", favorite: true, latencyMs: 10 }],
+    });
+    await __bootstrapForTest();
+    const state = getDashState();
+    expect(state.bootstrapped).toBe(true);
+    expect(state.status).toBe("idle");
+    expect(state.mode).toBe("sysproxy");
+    expect(state.allServers).toHaveLength(1);
+  });
+
+  it("sets lastError when snapshot fetch fails", async () => {
+    getSnapshotMock.mockRejectedValue(new Error("disk read failed"));
+    await __bootstrapForTest();  // bootstrap catches the error internally; this resolves
+    const state = getDashState();
+    expect(state.bootstrapped).toBe(false);
+    expect(state.lastError?.message).toContain("disk read failed");
+  });
+});
+
+describe("dashStore — vpn:status", () => {
+  it("connecting transition updates status only", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    fireEvent("vpn:status", { status: "connecting" });
+    expect(getDashState().status).toBe("connecting");
+    expect(getDashState().currentServer).toBeNull();
+  });
+
+  it("connected transition resolves server from cache and sets connectedAt", async () => {
+    getSnapshotMock.mockResolvedValue({
+      ...baseSnapshot,
+      servers: [{ id: "s1", name: "DE", favorite: false, latencyMs: 30 }],
+    });
+    await __bootstrapForTest();
+    fireEvent("vpn:status", { status: "connected", serverId: "s1", mode: "tun" });
+    const st = getDashState();
+    expect(st.status).toBe("connected");
+    expect(st.currentServer?.name).toBe("DE");
+    expect(st.connectedAt).not.toBeNull();
+  });
+
+  it("connected with cache miss falls back to {id, name=''}", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    fireEvent("vpn:status", { status: "connected", serverId: "missing", mode: "tun" });
+    const st = getDashState();
+    expect(st.currentServer?.id).toBe("missing");
+    expect(st.currentServer?.name).toBe("");
+  });
+
+  it("idle transition clears history/totals/connectedAt", async () => {
+    getSnapshotMock.mockResolvedValue({
+      ...baseSnapshot,
+      servers: [{ id: "s1", name: "DE", favorite: false, latencyMs: 0 }],
+    });
+    await __bootstrapForTest();
+    fireEvent("vpn:status", { status: "connected", serverId: "s1" });
+    fireEvent("vpn:speed", { downBps: 1000, upBps: 500 });
+    expect(getDashState().history).toHaveLength(1);
+    fireEvent("vpn:status", { status: "idle" });
+    const st = getDashState();
+    expect(st.history).toEqual([]);
+    expect(st.totals).toEqual({ down: 0, up: 0 });
+    expect(st.connectedAt).toBeNull();
+  });
+});
+
+describe("dashStore — vpn:speed", () => {
+  beforeEach(async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    fireEvent("vpn:status", { status: "connected", serverId: "s1" });
+  });
+
+  it("ignores samples when not connected", () => {
+    fireEvent("vpn:status", { status: "idle" });
+    fireEvent("vpn:speed", { downBps: 999, upBps: 999 });
+    expect(getDashState().history).toEqual([]);
+  });
+
+  it("caps the ring buffer at 60", () => {
+    for (let i = 0; i < 65; i++) {
+      fireEvent("vpn:speed", { downBps: i, upBps: i });
+    }
+    expect(getDashState().history).toHaveLength(60);
+    expect(getDashState().history[0].downBps).toBe(5);
+    expect(getDashState().history[59].downBps).toBe(64);
+  });
+
+  it("accumulates totals", () => {
+    fireEvent("vpn:speed", { downBps: 100, upBps: 50 });
+    fireEvent("vpn:speed", { downBps: 200, upBps: 100 });
+    expect(getDashState().totals).toEqual({ down: 300, up: 150 });
+  });
+});
+
+describe("dashStore — chain:error", () => {
+  it("sets lastError without changing status", async () => {
+    getSnapshotMock.mockResolvedValue({ ...baseSnapshot, status: "connecting" });
+    await __bootstrapForTest();
+    fireEvent("chain:error", { kind: "bringup_failed", message: "tunnel up failed" });
+    const st = getDashState();
+    expect(st.status).toBe("connecting");
+    expect(st.lastError?.kind).toBe("bringup_failed");
+    expect(st.lastError?.message).toBe("tunnel up failed");
+  });
+});
+
+describe("dashStore — helper:state", () => {
+  it("updates helperState", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    fireEvent("helper:state", { state: "stopped" });
+    expect(getDashState().helperState).toBe("stopped");
+  });
+});
+
+describe("effectiveStatus", () => {
+  it("returns 'error' when idle + lastError", () => {
+    const st = { status: "idle" as ChainStatus, lastError: { kind: "x", message: "y", at: 0 } } as any;
+    expect(effectiveStatus(st)).toBe("error");
+  });
+  it("returns raw status otherwise", () => {
+    const a = { status: "connecting", lastError: null } as any;
+    expect(effectiveStatus(a)).toBe("connecting");
+    const b = { status: "connected", lastError: { kind: "x", message: "y", at: 0 } } as any;
+    expect(effectiveStatus(b)).toBe("connected");
+  });
+});
+
+describe("clearLastError", () => {
+  it("clears the error field", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    fireEvent("chain:error", { kind: "x", message: "y" });
+    expect(getDashState().lastError).not.toBeNull();
+    clearLastError();
+    expect(getDashState().lastError).toBeNull();
+  });
+});
+
+describe("dashConnect", () => {
+  it("calls Connect with serverId and current mode when idle", async () => {
+    getSnapshotMock.mockResolvedValue({ ...baseSnapshot, mode: "sysproxy" });
+    await __bootstrapForTest();
+    runConnectMock.mockResolvedValue(undefined);
+    await dashConnect("server-id-1");
+    expect(runConnectMock).toHaveBeenCalledWith("server-id-1", "sysproxy");
+  });
+
+  it("disconnects first when currently connected", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    fireEvent("vpn:status", { status: "connected", serverId: "old" });
+    runDisconnectMock.mockImplementation(async () => {
+      setTimeout(() => fireEvent("vpn:status", { status: "idle" }), 0);
+    });
+    runConnectMock.mockResolvedValue(undefined);
+    await dashConnect("new");
+    expect(runDisconnectMock).toHaveBeenCalled();
+    expect(runConnectMock).toHaveBeenCalledWith("new", "tun");
+  });
+
+  it("sets lastError on Connect rejection", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    runConnectMock.mockRejectedValue(new Error("helper down"));
+    await expect(dashConnect("s1")).rejects.toThrow("helper down");
+    expect(getDashState().lastError?.kind).toBe("connect_failed");
+  });
+});
+
+describe("dashDisconnect", () => {
+  it("calls Disconnect", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    runDisconnectMock.mockResolvedValue(undefined);
+    await dashDisconnect();
+    expect(runDisconnectMock).toHaveBeenCalled();
+  });
+});
+
+describe("dashSwitchMode", () => {
+  it("just updates mode locally when idle", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    await dashSwitchMode("sysproxy");
+    expect(getDashState().mode).toBe("sysproxy");
+    expect(runDisconnectMock).not.toHaveBeenCalled();
+    expect(runConnectMock).not.toHaveBeenCalled();
+  });
+
+  it("does Disconnect → Connect when connected", async () => {
+    getSnapshotMock.mockResolvedValue({
+      ...baseSnapshot,
+      servers: [{ id: "s1", name: "DE", favorite: false, latencyMs: 0 }],
+    });
+    await __bootstrapForTest();
+    fireEvent("vpn:status", { status: "connected", serverId: "s1" });
+    runDisconnectMock.mockImplementation(async () => {
+      setTimeout(() => fireEvent("vpn:status", { status: "idle" }), 0);
+    });
+    runConnectMock.mockResolvedValue(undefined);
+    await dashSwitchMode("sysproxy");
+    expect(runDisconnectMock).toHaveBeenCalled();
+    expect(runConnectMock).toHaveBeenCalledWith("s1", "sysproxy");
+    expect(getDashState().mode).toBe("sysproxy");
+  });
+});
