@@ -10,17 +10,14 @@ import (
 // General holds UI and behaviour preferences.
 type General struct {
 	Language       string `json:"language"`
-	Theme          string `json:"theme"`
 	Autostart      bool   `json:"autostart"`
-	CloseToTray    bool   `json:"close_to_tray"`
 	StartMinimized bool   `json:"start_minimized"`
 }
 
 // TUN holds the TUN-mode adapter parameters.
 type TUN struct {
-	IPv4CIDR string   `json:"ipv4_cidr"`
-	MTU      int      `json:"mtu"`
-	DNS      []string `json:"dns"`
+	IPv4CIDR string `json:"ipv4_cidr"`
+	MTU      int    `json:"mtu"`
 }
 
 // SysProxy holds the System Proxy ports.
@@ -34,6 +31,27 @@ type Network struct {
 	Mode     string   `json:"mode"`
 	TUN      TUN      `json:"tun"`
 	SysProxy SysProxy `json:"sysproxy"`
+	AllowLAN bool     `json:"allow_lan"`
+	IPv6Mode string   `json:"ipv6_mode"` // "prefer-v4" | "prefer-v6" | "disabled"
+	DNS      DNS      `json:"dns"`
+}
+
+// EffectiveMode returns the user-facing Mode, normalizing the legacy
+// pre-Tier-2a "auto" sentinel to "tun" so the camelCase frontend shape
+// (whether emitted via SettingsView or via the vpn:status hub payload)
+// stays consistent. Today only "tun" and "sysproxy" are valid modes;
+// "auto" is treated as a synonym for "tun" until next save normalizes it.
+func (n Network) EffectiveMode() string {
+	if n.Mode == "auto" {
+		return "tun"
+	}
+	return n.Mode
+}
+
+// DNS holds resolver overrides that apply across both TUN and SysProxy modes.
+type DNS struct {
+	Mode    string   `json:"mode"`    // "auto" | "custom"
+	Servers []string `json:"servers"` // populated when Mode == "custom"
 }
 
 // KillSwitch toggles the soft killswitch and always-on mode.
@@ -42,18 +60,18 @@ type KillSwitch struct {
 	AlwaysOn bool `json:"always_on"`
 }
 
-// Updates configures the auto-update check policy.
-type Updates struct {
-	AutoCheck bool   `json:"auto_check"`
-	Channel   string `json:"channel"`
-}
-
 // Notifications enables/disables event-driven OS toasts.
 type Notifications struct {
 	Connected    bool `json:"connected"`
 	Disconnected bool `json:"disconnected"`
 	QuotaLow     bool `json:"quota_low"`
 	SubUpdated   bool `json:"sub_updated"`
+	Sound        bool `json:"sound"`
+}
+
+// Debug captures developer-facing toggles persisted to config.json.
+type Debug struct {
+	LogLevel string `json:"log_level"` // "error" | "info" | "debug" | "trace"
 }
 
 // Config is the top-level application configuration persisted as config.json.
@@ -62,24 +80,33 @@ type Config struct {
 	General       General       `json:"general"`
 	Network       Network       `json:"network"`
 	KillSwitch    KillSwitch    `json:"killswitch"`
-	Updates       Updates       `json:"updates"`
 	Notifications Notifications `json:"notifications"`
+	Debug         Debug         `json:"debug"`
 }
 
 func defaults() Config {
 	return Config{
 		Version: 1,
-		General: General{Language: "en", Theme: "dark", CloseToTray: true},
+		General: General{Language: "en"},
 		Network: Network{
 			Mode:     "tun",
-			TUN:      TUN{IPv4CIDR: "198.18.0.1/15", MTU: 1500, DNS: []string{"1.1.1.1", "8.8.8.8"}},
+			TUN:      TUN{IPv4CIDR: "198.18.0.1/15", MTU: 1500},
 			SysProxy: SysProxy{HTTPPort: 8888, SOCKSPort: 1080},
+			AllowLAN: false,
+			IPv6Mode: "prefer-v4",
+			DNS:      DNS{Mode: "auto", Servers: nil},
 		},
 		KillSwitch:    KillSwitch{Enabled: true},
-		Updates:       Updates{AutoCheck: true, Channel: "stable"},
-		Notifications: Notifications{Connected: true, Disconnected: true, QuotaLow: true, SubUpdated: true},
+		Notifications: Notifications{Connected: true, Disconnected: true, QuotaLow: true, SubUpdated: true, Sound: true},
+		Debug:         Debug{LogLevel: "info"},
 	}
 }
+
+// Defaults returns the default Config — same shape callers get when
+// config.Load encounters a missing or empty config.json. Exported so
+// non-package consumers (chainctl, tests) can build fallback Network
+// values without reaching for the unexported defaults().
+func Defaults() Config { return defaults() }
 
 // Load reads config.json and overlays its values onto the defaults.
 // A missing file returns the defaults with no error.

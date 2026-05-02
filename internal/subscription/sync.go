@@ -21,12 +21,16 @@ type Subscription struct {
 	UpdateInterval time.Duration
 }
 
-// SyncMeta describes the outcome of a Sync call: timestamp, status string,
-// human-readable summary, and the parsed standard headers (quota/expiry/title).
+// SyncMeta describes the outcome of a Sync call.
+//
+// Status is a clean enum: "ok" or "error". Message carries human-readable
+// detail — on success, an "imported=N invalid=M skipped=K" summary; on
+// failure, the error string. Headers contains the parsed standard
+// subscription headers (quota/expiry/title) when Fetch succeeded.
 type SyncMeta struct {
 	LastUpdate time.Time
 	Status     string
-	Summary    string
+	Message    string
 	Headers    Headers
 }
 
@@ -34,10 +38,11 @@ type SyncMeta struct {
 // and reconciles the resulting servers against the existing list using
 // origin-aware merge.
 //
-// On success: returns (merged, meta, nil) with meta.Status == "OK".
+// On success: returns (merged, meta, nil) with meta.Status == "ok" and
+// meta.Message == "imported=N invalid=M skipped=K".
 // On failure: returns (nil, meta, err) — meta is still populated with
-// LastUpdate, Status="ERROR: <message>", and Headers if Fetch succeeded.
-// Callers should always persist meta regardless of err.
+// LastUpdate, Status="error", Message=err.Error(), and Headers if Fetch
+// succeeded. Callers should always persist meta regardless of err.
 func Sync(ctx context.Context, sub Subscription, existing []server.Server, timeout time.Duration) ([]server.Server, SyncMeta, error) { //nolint:gocritic // sub is a value type; caller convenience outweighs copy cost
 	meta := SyncMeta{LastUpdate: time.Now()}
 	ua := sub.UserAgent
@@ -46,14 +51,16 @@ func Sync(ctx context.Context, sub Subscription, existing []server.Server, timeo
 	}
 	res, err := Fetch(ctx, FetchOptions{URL: sub.URL, UserAgent: ua, Auth: sub.Auth, Timeout: timeout})
 	if err != nil {
-		meta.Status = fmt.Sprintf("ERROR: %v", err)
+		meta.Status = "error"
+		meta.Message = err.Error()
 		return nil, meta, err
 	}
 	meta.Headers = res.Headers
 
 	parsed, err := Parse(res.Body)
 	if err != nil {
-		meta.Status = fmt.Sprintf("ERROR: %v", err)
+		meta.Status = "error"
+		meta.Message = err.Error()
 		return nil, meta, err
 	}
 
@@ -63,8 +70,8 @@ func Sync(ctx context.Context, sub Subscription, existing []server.Server, timeo
 	}
 	merged := server.Merge(existing, incoming, sub.ID)
 
-	meta.Status = "OK"
-	meta.Summary = fmt.Sprintf("imported=%d invalid=%d skipped=%d", len(parsed.Configs), parsed.Invalid, sumSkipped(parsed.Skipped))
+	meta.Status = "ok"
+	meta.Message = fmt.Sprintf("imported=%d invalid=%d skipped=%d", len(parsed.Configs), parsed.Invalid, sumSkipped(parsed.Skipped))
 	return merged, meta, nil
 }
 

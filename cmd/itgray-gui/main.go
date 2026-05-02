@@ -9,6 +9,7 @@ import (
 
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/bindings"
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/chainctl"
+	"github.com/itg-team/itg-ray/internal/config"
 	"github.com/itg-team/itg-ray/internal/logging"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/subscription"
@@ -96,6 +97,21 @@ func main() {
 	helperBootCtx, cancelHelperBoot := context.WithCancel(context.Background())
 	helperClient := newHelperClient(helperBootCtx)
 	cancelHelperBoot()
+	// networkLoader reads the user's persisted config.json on every
+	// Connect cycle. The path mirrors bindings.NewConfigStore below so
+	// chainctl reads exactly what SettingsService.Update writes — no
+	// process restart required for Network edits to land on the next
+	// connection. config.Load overlays defaults onto missing/partial
+	// fields, so a fresh box (no config.json yet) yields the same
+	// Network values DefaultNetworkLoader used to.
+	configPath := filepath.Join(dataDir, "config.json")
+	networkLoader := func() (config.Network, error) {
+		c, err := config.Load(configPath)
+		if err != nil {
+			return config.Network{}, err
+		}
+		return c.Network, nil
+	}
 	chainCtrl := chainctl.New(&chainctl.Deps{
 		DataDir:      dataDir,
 		ServerStore:  serverStoreGetter{serverStore},
@@ -103,16 +119,13 @@ func main() {
 		Sysproxy:     sysproxy.New(),
 		Hub:          app.Hub(),
 		BuildConfigs: buildConfigs(dataDir),
-		SocksProxy:   "127.0.0.1:1080",
-		TunName:      defaultTunName,
-		TunCIDR:      defaultTunCIDR,
-		DNSServers:   []string{"1.1.1.1", "8.8.8.8"},
+		Network:      networkLoader,
 	})
 	runSvc := bindings.NewRunService(bindings.RunDeps{
 		Chain: chainCtrl,
 		Hub:   app.Hub(),
 	})
-	settingsStore := bindings.NewConfigStore(filepath.Join(dataDir, "config.json"), Version, BuildDate)
+	settingsStore := bindings.NewConfigStore(configPath, Version, BuildDate)
 	settingsSvc := bindings.NewSettingsService(bindings.SettingsDeps{
 		Store: settingsStore,
 		Hub:   app.Hub(),
@@ -149,22 +162,11 @@ func main() {
 			// rather than dropped into a closed hub.
 			chainCtrl.Reconcile(ctx)
 		},
-		OnBeforeClose: func(ctx context.Context) (prevent bool) {
-			// Close-to-tray: when General.CloseToTray is true, intercept
-			// the close, hide the window, and keep the process alive so
-			// the tray (or, for now, the headless event loop) continues
-			// driving the chain. Disk read on the close path is fine —
-			// it happens once per click.
-			view, err := settingsStore.View()
-			if err != nil {
-				return false // best-effort: a config read error should not block quit
-			}
-			if !view.General.CloseToTray {
-				return false
-			}
-			wailsruntime.WindowHide(ctx)
-			return true
-		},
+		// OnBeforeClose intentionally omitted: a system-tray adapter
+		// is a v0.2 task (see TrayService comment above) and Wails
+		// v2.11 has no first-party tray UI to drive a hide-to-tray
+		// flow. Until that ships, close = quit so users have a
+		// reachable exit.
 		OnShutdown: func(ctx context.Context) {
 			traySvc.Shutdown()
 			app.Shutdown(ctx)

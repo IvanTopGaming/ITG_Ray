@@ -17,9 +17,11 @@ import (
 
 // metaCapture stores all UpdateMeta calls.
 type metaCall struct {
-	ID     string
-	At     time.Time
-	Status string
+	ID      string
+	At      time.Time
+	Status  string
+	Message string
+	UI      *subscription.Userinfo
 }
 
 type metaCaptureStore struct {
@@ -30,10 +32,10 @@ type metaCaptureStore struct {
 
 func (m *metaCaptureStore) Load() ([]subscription.Stored, error) { return m.subs, nil }
 func (m *metaCaptureStore) Save(s []subscription.Stored) error   { m.subs = s; return nil }
-func (m *metaCaptureStore) UpdateMeta(id string, at time.Time, status string) error {
+func (m *metaCaptureStore) UpdateMeta(id string, at time.Time, status, message string, ui *subscription.Userinfo) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.log = append(m.log, metaCall{ID: id, At: at, Status: status})
+	m.log = append(m.log, metaCall{ID: id, At: at, Status: status, Message: message, UI: ui})
 	return nil
 }
 
@@ -65,8 +67,17 @@ func TestSyncOne_Success_WritesServersAndOKMeta(t *testing.T) {
 	st := &metaCaptureStore{}
 
 	merged := []server.Server{{ID: "srv1", Name: "X", Vless: vless.Config{Address: "a.test", Port: 443, UUID: "u"}}}
+	ui := &subscription.Userinfo{
+		Upload: 100, HasUpload: true,
+		Download: 200, HasDownload: true,
+		Total: 1000, HasTotal: true,
+	}
 	syncFn := func(_ context.Context, _ subscription.Subscription, _ []server.Server, _ time.Duration) ([]server.Server, subscription.SyncMeta, error) {
-		return merged, subscription.SyncMeta{Status: "OK", Summary: "imported=1 invalid=0 skipped=0"}, nil
+		return merged, subscription.SyncMeta{
+			Status:  "ok",
+			Message: "imported=1 invalid=0 skipped=0",
+			Headers: subscription.Headers{Userinfo: ui},
+		}, nil
 	}
 	d := mkDriver(t, st, serversPath, syncFn)
 
@@ -82,8 +93,17 @@ func TestSyncOne_Success_WritesServersAndOKMeta(t *testing.T) {
 	if len(st.log) != 1 {
 		t.Fatalf("UpdateMeta calls: %d, want 1", len(st.log))
 	}
-	if got := st.log[0].Status; got != "OK imported=1 invalid=0 skipped=0" {
-		t.Fatalf("status: %q", got)
+	if got := st.log[0].Status; got != "ok" {
+		t.Fatalf("status: %q, want %q", got, "ok")
+	}
+	if got := st.log[0].Message; got != "imported=1 invalid=0 skipped=0" {
+		t.Fatalf("message: %q", got)
+	}
+	if st.log[0].UI == nil {
+		t.Fatalf("UI: nil, want non-nil with Upload/Download/Total")
+	}
+	if st.log[0].UI.Upload != 100 || st.log[0].UI.Download != 200 || st.log[0].UI.Total != 1000 {
+		t.Fatalf("UI fields: %+v", st.log[0].UI)
 	}
 	if !st.log[0].At.Equal(time.Date(2026, 4, 26, 12, 0, 0, 0, time.UTC)) {
 		t.Fatalf("at: %v", st.log[0].At)
@@ -97,7 +117,7 @@ func TestSyncOne_Failure_DoesNotTouchServers_RecordsError(t *testing.T) {
 	st := &metaCaptureStore{}
 
 	syncFn := func(_ context.Context, _ subscription.Subscription, _ []server.Server, _ time.Duration) ([]server.Server, subscription.SyncMeta, error) {
-		return nil, subscription.SyncMeta{}, errors.New("network unreachable")
+		return nil, subscription.SyncMeta{Status: "error", Message: "network unreachable"}, errors.New("network unreachable")
 	}
 	d := mkDriver(t, st, serversPath, syncFn)
 
@@ -107,8 +127,17 @@ func TestSyncOne_Failure_DoesNotTouchServers_RecordsError(t *testing.T) {
 	if len(saved) != 1 || saved[0].ID != "preexisting" {
 		t.Fatalf("servers.json should be untouched on sync failure: %+v", saved)
 	}
-	if len(st.log) != 1 || st.log[0].Status != "ERROR: network unreachable" {
-		t.Fatalf("status capture: %+v", st.log)
+	if len(st.log) != 1 {
+		t.Fatalf("UpdateMeta calls: %d, want 1", len(st.log))
+	}
+	if got := st.log[0].Status; got != "error" {
+		t.Fatalf("status: %q, want %q", got, "error")
+	}
+	if got := st.log[0].Message; got != "network unreachable" {
+		t.Fatalf("message: %q", got)
+	}
+	if st.log[0].UI != nil {
+		t.Fatalf("UI: %+v, want nil on failure", st.log[0].UI)
 	}
 }
 
@@ -119,18 +148,20 @@ func TestSyncOne_FailureMessage_TruncatedTo120Chars(t *testing.T) {
 		long[i] = 'x'
 	}
 	syncFn := func(_ context.Context, _ subscription.Subscription, _ []server.Server, _ time.Duration) ([]server.Server, subscription.SyncMeta, error) {
-		return nil, subscription.SyncMeta{}, errors.New(string(long))
+		return nil, subscription.SyncMeta{Status: "error", Message: string(long)}, errors.New(string(long))
 	}
 	d := mkDriver(t, st, t.TempDir()+"/servers.json", syncFn)
 	d.syncOne(context.Background(), subscription.Stored{ID: "s1"})
 	if len(st.log) != 1 {
 		t.Fatalf("expected 1 update, got %d", len(st.log))
 	}
-	got := st.log[0].Status
-	// "ERROR: " + truncated body.  Truncation should keep the whole message ≤ 120+len("ERROR: ").
+	if got := st.log[0].Status; got != "error" {
+		t.Fatalf("status: %q, want %q", got, "error")
+	}
+	// Message should be truncated to ≤ 120 bytes on disk.
 	const maxBody = 120
-	if len(got) > len("ERROR: ")+maxBody {
-		t.Fatalf("status not truncated: len=%d, body=%q", len(got), got)
+	if got := st.log[0].Message; len(got) > maxBody {
+		t.Fatalf("message not truncated: len=%d, body=%q", len(got), got)
 	}
 }
 
@@ -159,7 +190,7 @@ func TestRunSub_FirstTickWithinJitterWindow(t *testing.T) {
 	syncCh := make(chan time.Time, 4)
 	syncFn := func(_ context.Context, _ subscription.Subscription, existing []server.Server, _ time.Duration) ([]server.Server, subscription.SyncMeta, error) {
 		syncCh <- time.Now()
-		return existing, subscription.SyncMeta{Status: "OK", Summary: "imported=0"}, nil
+		return existing, subscription.SyncMeta{Status: "ok", Message: "imported=0"}, nil
 	}
 	const testJitterMax = 50 * time.Millisecond
 	d := NewDriver(Config{
@@ -200,7 +231,7 @@ func TestRunSub_ZeroIntervalUsesDriverDefault(t *testing.T) {
 	syncCh := make(chan struct{}, 8)
 	syncFn := func(_ context.Context, _ subscription.Subscription, existing []server.Server, _ time.Duration) ([]server.Server, subscription.SyncMeta, error) {
 		syncCh <- struct{}{}
-		return existing, subscription.SyncMeta{Status: "OK", Summary: "imported=0"}, nil
+		return existing, subscription.SyncMeta{Status: "ok", Message: "imported=0"}, nil
 	}
 	d := NewDriver(Config{
 		Subs:               st,

@@ -37,20 +37,25 @@ type ServerView struct {
 
 // SubView is the read-only DTO for one subscription.
 type SubView struct {
-	ID              string    `json:"id"`
-	Name            string    `json:"name"`
-	URL             string    `json:"url"`            // raw — frontend masks
-	UpdateInterval  int       `json:"updateInterval"` // seconds
-	LastSyncAt      time.Time `json:"lastSyncAt"`     // zero = never synced
-	LastSyncStatus  string    `json:"lastSyncStatus"` // "OK" | "ERROR" | "PARTIAL" | ""
-	LastSyncMessage string    `json:"lastSyncMessage,omitempty"`
-	ServerCount     int       `json:"serverCount"`
+	ID              string     `json:"id"`
+	Name            string     `json:"name"`
+	URL             string     `json:"url"`            // raw — frontend masks
+	UpdateInterval  int        `json:"updateInterval"` // seconds
+	LastSyncAt      time.Time  `json:"lastSyncAt"`     // zero = never synced
+	LastSyncStatus  string     `json:"lastSyncStatus"` // "ok" | "error" | ""
+	LastSyncMessage string     `json:"lastSyncMessage,omitempty"`
+	ServerCount     int        `json:"serverCount"`
+	Upload          int64      `json:"upload,omitempty"`
+	Download        int64      `json:"download,omitempty"`
+	Total           int64      `json:"total,omitempty"`
+	Expire          *time.Time `json:"expire,omitempty"`
 }
 
 // SettingsView is the flat-by-section settings shape.
 type SettingsView struct {
 	General       GeneralSettings      `json:"general"`
 	Network       NetworkSettings      `json:"network"`
+	KillSwitch    KillSwitchSettings   `json:"killSwitch"`
 	Subscriptions SubscriptionSettings `json:"subscriptions"`
 	Notifications NotificationSettings `json:"notifications"`
 	Debug         DebugSettings        `json:"debug"`
@@ -61,19 +66,33 @@ type SettingsView struct {
 // GeneralSettings holds top-level UX preferences.
 type GeneralSettings struct {
 	Language       string `json:"language"` // "en" | "ru" | "auto"
-	Theme          string `json:"theme"`    // "dark" (only)
 	Autostart      bool   `json:"autostart"`
-	CloseToTray    bool   `json:"closeToTray"`
 	StartMinimized bool   `json:"startMinimized"`
 }
 
 // NetworkSettings holds proxy / TUN routing knobs.
 type NetworkSettings struct {
-	DefaultMode string `json:"defaultMode"` // "tun" | "sysproxy" | "auto"
-	TunCIDR     string `json:"tunCidr"`     // "198.18.0.1/15"
-	TunName     string `json:"tunName"`     // "ITGRay-TUN"
-	SocksPort   int    `json:"socksPort"`   // sysproxy mode local port
-	XrayPort    int    `json:"xrayPort"`    // internal xray socks port
+	DefaultMode string      `json:"defaultMode"` // "tun" | "sysproxy"
+	TunCIDR     string      `json:"tunCidr"`     // "198.18.0.1/15"
+	TunMtu      int         `json:"tunMtu"`      // TUN interface MTU
+	TunName     string      `json:"tunName"`     // "ITGRay-TUN"
+	SocksPort   int         `json:"socksPort"`   // sysproxy mode local port
+	HttpPort    int         `json:"httpPort"`    // sysproxy mode local HTTP port
+	AllowLAN    bool        `json:"allowLan"`    // expose proxy to LAN
+	IPv6Mode    string      `json:"ipv6Mode"`    // "prefer-v4" | "prefer-v6" | "disabled"
+	DNS         DNSSettings `json:"dns"`
+}
+
+// DNSSettings holds resolver overrides surfaced via SettingsView.
+type DNSSettings struct {
+	Mode    string   `json:"mode"`    // "auto" | "custom"
+	Servers []string `json:"servers"` // populated when Mode == "custom"
+}
+
+// KillSwitchSettings exposes the kill-switch toggles to the GUI.
+type KillSwitchSettings struct {
+	Enabled  bool `json:"enabled"`
+	AlwaysOn bool `json:"alwaysOn"`
 }
 
 // SubscriptionSettings holds per-app subscription defaults.
@@ -86,8 +105,9 @@ type SubscriptionSettings struct {
 type NotificationSettings struct {
 	OnConnected    bool `json:"onConnected"`
 	OnDisconnected bool `json:"onDisconnected"`
-	OnError        bool `json:"onError"`
+	QuotaLow       bool `json:"quotaLow"`
 	OnSubSynced    bool `json:"onSubSynced"`
+	Sound          bool `json:"sound"`
 }
 
 // DebugSettings holds developer-facing toggles. The "open logs folder" UI

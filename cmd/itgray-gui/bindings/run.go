@@ -25,7 +25,7 @@ type RunService struct{ d RunDeps }
 func NewRunService(d RunDeps) *RunService { return &RunService{d: d} }
 
 // Connect kicks off a connect attempt for the given server in the given
-// mode ("auto" | "tun" | "sysproxy"). The call is non-blocking — the
+// mode ("tun" | "sysproxy"). The call is non-blocking — the
 // frontend tracks progress via vpn:status / chain:error events.
 //
 // Wails v2.11 does not auto-inject ctx for service methods, so a fresh

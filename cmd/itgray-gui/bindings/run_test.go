@@ -9,6 +9,7 @@ import (
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/chainctl"
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
 	"github.com/itg-team/itg-ray/internal/server"
+	"github.com/itg-team/itg-ray/internal/sysproxy"
 	"github.com/itg-team/itg-ray/internal/vless"
 
 	"github.com/stretchr/testify/require"
@@ -62,9 +63,9 @@ func (s runMemStore) Get(id string) (*server.Server, error) { return s.m[id], ni
 // ErrUnsupported, which would fail the test with no real proxy hit).
 type runFakeSysproxy struct{}
 
-func (runFakeSysproxy) Set(string) error     { return nil }
-func (runFakeSysproxy) Clear() error         { return nil }
-func (runFakeSysproxy) IsSet() (bool, error) { return false, nil }
+func (runFakeSysproxy) Set(sysproxy.Settings) error { return nil }
+func (runFakeSysproxy) Clear() error                { return nil }
+func (runFakeSysproxy) IsSet() (bool, error)        { return false, nil }
 
 // setupRun wires a RunService against a fake helper + in-memory server
 // store. Returns the service plus the underlying Controller (in case the

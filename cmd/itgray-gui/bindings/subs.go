@@ -163,22 +163,27 @@ func (s *SubsService) SyncOne(id string) error {
 	}
 
 	merged, meta, syncErr := subscription.Sync(ctx, found.ToSyncInput(), existing, syncTimeout)
+	// Capture the upstream-fetch outcome before the Save branch may
+	// overwrite syncErr — Userinfo is meaningful exactly when the fetch
+	// itself succeeded, regardless of whether the disk write that follows
+	// it succeeds.
+	syncOK := syncErr == nil
 
-	status := "OK"
-	msg := ""
+	// Local override pattern: status/msg start from meta and are explicitly
+	// overridden only when ServerStore.Save fails after a successful Sync.
+	// Keeps a single UpdateMeta call site at the bottom.
+	status := meta.Status
+	msg := meta.Message
 	imported := 0
-	if syncErr != nil {
-		status = "ERROR"
-		msg = syncErr.Error()
-	} else {
+	if syncOK {
 		// Successful sync: persist merged servers + count post-merge entries
 		// belonging to this sub. importedCount is what the reducer uses to
 		// keep the badge fresh between snapshot refreshes.
 		if err := s.d.ServerStore.Save(merged); err != nil {
-			// Demote to ERROR so the frontend's red badge surfaces the
-			// disk failure; the user can retry. syncErr is reset below
-			// via the deferred event emit + return.
-			status = "ERROR"
+			// Demote to error so the frontend's red badge surfaces the
+			// disk failure; the user can retry. syncErr is set so the
+			// return value reflects the disk failure too.
+			status = "error"
 			msg = fmt.Sprintf("server.Save: %v", err)
 			syncErr = err
 		} else {
@@ -193,14 +198,15 @@ func (s *SubsService) SyncOne(id string) error {
 	// UpdateMeta is best-effort: a write failure here is intentionally
 	// swallowed so a transient meta-write hiccup does not mask the real
 	// fetch error in syncErr below. CLI truncates the message to 120
-	// bytes; mirror that so the on-disk status field stays manageable.
-	var storedStatus string
-	if status == "OK" {
-		storedStatus = "OK " + meta.Summary
-	} else {
-		storedStatus = "ERROR: " + truncate(msg, 120)
+	// bytes; mirror that so the on-disk LastMessage stays manageable.
+	// Attach Userinfo whenever the upstream fetch succeeded; the gate must
+	// be syncOK, not syncErr, since a post-fetch Save failure overwrites
+	// syncErr but does not invalidate the parsed quota.
+	var ui *subscription.Userinfo
+	if syncOK {
+		ui = meta.Headers.Userinfo
 	}
-	_ = s.d.SubStore.UpdateMeta(id, time.Now(), storedStatus)
+	_ = s.d.SubStore.UpdateMeta(id, time.Now(), status, truncate(msg, 120), ui)
 
 	s.d.Hub.Publish(hub.Event{
 		Name: hub.EventSubSynced,

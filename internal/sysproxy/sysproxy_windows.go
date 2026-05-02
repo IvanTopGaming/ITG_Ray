@@ -4,6 +4,7 @@ package sysproxy
 
 import (
 	"fmt"
+	"strings"
 	"syscall"
 
 	"golang.org/x/sys/windows"
@@ -21,10 +22,24 @@ type winManager struct{}
 
 func newManager() Manager { return winManager{} }
 
-// Set writes ProxyEnable=1, ProxyServer=addr, ProxyOverride="<local>" under
-// HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings and
-// notifies WinINet so running browsers pick up the change.
-func (winManager) Set(addr string) error {
+// Set writes ProxyEnable=1 and a tri-protocol ProxyServer string under
+// HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings, then
+// notifies WinINet. Empty fields are omitted from the string. Both empty
+// is equivalent to Clear().
+func (winManager) Set(s Settings) error {
+	if s.Socks == "" && s.HTTP == "" {
+		return winManager{}.Clear()
+	}
+	parts := make([]string, 0, 3)
+	if s.Socks != "" {
+		parts = append(parts, "socks="+s.Socks)
+	}
+	if s.HTTP != "" {
+		// Windows convention: HTTPS reuses the HTTP entry.
+		parts = append(parts, "http="+s.HTTP, "https="+s.HTTP)
+	}
+	value := strings.Join(parts, ";")
+
 	k, _, err := registry.CreateKey(registry.CURRENT_USER, regPath, registry.SET_VALUE|registry.QUERY_VALUE)
 	if err != nil {
 		return fmt.Errorf("sysproxy.Set: open: %w", err)
@@ -33,7 +48,7 @@ func (winManager) Set(addr string) error {
 	if err := k.SetDWordValue("ProxyEnable", 1); err != nil {
 		return fmt.Errorf("sysproxy.Set: ProxyEnable: %w", err)
 	}
-	if err := k.SetStringValue("ProxyServer", addr); err != nil {
+	if err := k.SetStringValue("ProxyServer", value); err != nil {
 		return fmt.Errorf("sysproxy.Set: ProxyServer: %w", err)
 	}
 	if err := k.SetStringValue("ProxyOverride", "<local>"); err != nil {

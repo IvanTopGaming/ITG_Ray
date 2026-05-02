@@ -10,18 +10,18 @@ import (
 	"path/filepath"
 
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/chainctl"
+	"github.com/itg-team/itg-ray/internal/config"
 	"github.com/itg-team/itg-ray/internal/configgen"
 	"github.com/itg-team/itg-ray/internal/rules"
 	"github.com/itg-team/itg-ray/internal/server"
 )
 
-// Default port assignments mirror cmd/itgray-cli/run.go's defaults so the
-// GUI and CLI run with identical inbound/outbound topology.
+// Default port assignments for non-user-configurable internal endpoints.
+// SOCKS/HTTP inbound ports are now sourced from config.Network.SysProxy
+// (Tier 2b); TUN CIDR is sourced from config.Network.TUN.IPv4CIDR.
 const (
-	defaultSocksPort = 1080 // sysproxy mode SOCKS5 inbound on sing-box
-	defaultXrayPort  = 1081 // internal SOCKS5 between sing-box and xray
-	defaultTunName   = "ITGRay-TUN"
-	defaultTunCIDR   = "198.18.0.1/15"
+	defaultXrayPort = 1081 // internal SOCKS5 between sing-box and xray
+	defaultTunName  = "ITGRay-TUN"
 )
 
 // resolveServerIPv4 resolves host to an IPv4 literal. Mirrors the CLI
@@ -76,35 +76,40 @@ func loadRulesFromDataDir(dataDir string) rules.Model {
 // buildConfigs is the chainctl.ConfigBuilder closure for the running GUI
 // process. It produces the (singboxJSON, xrayJSON) pair the Helper needs
 // to bring the chain up. Mode mapping:
-//   - chainctl.ModeTUN   → configgen.ModeTun (FakeIP, TunName/CIDR set)
-//   - chainctl.ModeAuto  → same as TUN; chainctl falls back to sysproxy
-//     post-TunCreate-failure but the configs were already generated for
-//     TUN mode at that point — that's fine because the helper's
-//     OpStartChain in sysproxy mode reads only the sing-box "mixed"
-//     inbound (which configgen does NOT add for TUN). Auto-fallback is
-//     therefore a v0.2 follow-up; for v0.1 Auto behaves exactly like
-//     TUN, matching the CLI's --use-helper default.
-//   - chainctl.ModeSysProxy → configgen.ModeSysProxy (mixed inbound)
+//   - chainctl.ModeTUN   → configgen.ModeTun (FakeIP, TunName/CIDR/MTU set)
+//   - chainctl.ModeSysProxy → configgen.ModeSysProxy (socks + http inbounds, or mixed fallback)
+//
+// Network values come from chainctl's per-Connect read of config.Network
+// (Tier 2b runtime wiring). chainctl.{ClampMTU,ResolveDNS,MapIPv6Strategy}
+// translate user-facing knobs into sing-box-compatible shapes.
 func buildConfigs(dataDir string) chainctl.ConfigBuilder {
-	return func(srv *server.Server, mode chainctl.Mode) (singboxJSON, xrayJSON []byte, err error) {
+	return func(srv *server.Server, mode chainctl.Mode, net config.Network) (singboxJSON, xrayJSON []byte, err error) {
 		var sbInput configgen.SingboxInput
 		switch mode {
-		case chainctl.ModeTUN, chainctl.ModeAuto:
+		case chainctl.ModeTUN:
 			sbInput = configgen.SingboxInput{
 				Mode:          configgen.ModeTun,
 				FakeIP:        true,
 				TunName:       defaultTunName,
-				TunIPv4:       defaultTunCIDR,
+				TunIPv4:       net.TUN.IPv4CIDR,
+				MTU:           chainctl.ClampMTU(net.TUN.MTU),
 				XraySOCKSHost: "127.0.0.1",
 				XraySOCKSPort: defaultXrayPort,
+				DNSUpstreams:  chainctl.ResolveDNS(net.DNS),
+				AllowLAN:      net.AllowLAN,
+				IPv6Strategy:  chainctl.MapIPv6Strategy(net.IPv6Mode),
 				Rules:         loadRulesFromDataDir(dataDir),
 			}
 		case chainctl.ModeSysProxy:
 			sbInput = configgen.SingboxInput{
 				Mode:             configgen.ModeSysProxy,
-				SocksInboundPort: defaultSocksPort,
+				SocksInboundPort: net.SysProxy.SOCKSPort,
+				HTTPInboundPort:  net.SysProxy.HTTPPort,
 				XraySOCKSHost:    "127.0.0.1",
 				XraySOCKSPort:    defaultXrayPort,
+				DNSUpstreams:     chainctl.ResolveDNS(net.DNS),
+				AllowLAN:         net.AllowLAN,
+				IPv6Strategy:     chainctl.MapIPv6Strategy(net.IPv6Mode),
 				Rules:            loadRulesFromDataDir(dataDir),
 			}
 		default:

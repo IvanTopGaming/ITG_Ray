@@ -3,6 +3,7 @@ package bindings
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
@@ -68,20 +69,35 @@ func (s *ConfigStore) UpdateSection(section string, patch map[string]any) (hub.S
 }
 
 func (s *ConfigStore) toView(c *config.Config) hub.SettingsView {
+	// Normalize legacy on-disk "auto" mode (pre-Tier-2a) to "tun" so the
+	// removed ModeAuto runtime branch is not silently exercised on
+	// upgrade — chainctl.bringUp would not match Auto post-F2 and the
+	// chain would fail to set up routing. Shared with chainctl's
+	// vpn:status projection via config.Network.EffectiveMode.
+	mode := c.Network.EffectiveMode()
 	return hub.SettingsView{
 		General: hub.GeneralSettings{
 			Language:       c.General.Language,
-			Theme:          c.General.Theme,
 			Autostart:      c.General.Autostart,
-			CloseToTray:    c.General.CloseToTray,
 			StartMinimized: c.General.StartMinimized,
 		},
 		Network: hub.NetworkSettings{
-			DefaultMode: c.Network.Mode,
+			DefaultMode: mode,
 			TunCIDR:     c.Network.TUN.IPv4CIDR,
+			TunMtu:      c.Network.TUN.MTU,
 			TunName:     "ITGRay-TUN",
 			SocksPort:   c.Network.SysProxy.SOCKSPort,
-			XrayPort:    c.Network.SysProxy.HTTPPort,
+			HttpPort:    c.Network.SysProxy.HTTPPort,
+			AllowLAN:    c.Network.AllowLAN,
+			IPv6Mode:    c.Network.IPv6Mode,
+			DNS: hub.DNSSettings{
+				Mode:    c.Network.DNS.Mode,
+				Servers: c.Network.DNS.Servers,
+			},
+		},
+		KillSwitch: hub.KillSwitchSettings{
+			Enabled:  c.KillSwitch.Enabled,
+			AlwaysOn: c.KillSwitch.AlwaysOn,
 		},
 		Subscriptions: hub.SubscriptionSettings{
 			DefaultUpdateInterval: 3600,
@@ -90,10 +106,11 @@ func (s *ConfigStore) toView(c *config.Config) hub.SettingsView {
 		Notifications: hub.NotificationSettings{
 			OnConnected:    c.Notifications.Connected,
 			OnDisconnected: c.Notifications.Disconnected,
-			OnError:        c.Notifications.QuotaLow,
+			QuotaLow:       c.Notifications.QuotaLow,
 			OnSubSynced:    c.Notifications.SubUpdated,
+			Sound:          c.Notifications.Sound,
 		},
-		Debug: hub.DebugSettings{LogLevel: "info"},
+		Debug: hub.DebugSettings{LogLevel: c.Debug.LogLevel},
 		About: hub.AboutSettings{
 			Version:   s.version,
 			BuildDate: s.buildDate,
@@ -117,14 +134,15 @@ func applyPatch(c *config.Config, section string, patch map[string]any) error {
 		applyGeneral(&c.General, patch)
 	case "network":
 		applyNetwork(&c.Network, patch)
+	case "killswitch":
+		applyKillSwitch(&c.KillSwitch, patch)
 	case "subscriptions":
 		// no persisted fields yet; accept the patch as a no-op so the
 		// frontend can wire forms without backend churn.
 	case "notifications":
 		applyNotifications(&c.Notifications, patch)
 	case "debug":
-		// log level is process-scoped (not persisted yet); accept the
-		// patch silently.
+		applyDebug(&c.Debug, patch)
 	default:
 		return errors.New("settings.Update: unknown section " + section)
 	}
@@ -135,14 +153,8 @@ func applyGeneral(g *config.General, p map[string]any) {
 	if v, ok := p["language"].(string); ok {
 		g.Language = v
 	}
-	if v, ok := p["theme"].(string); ok {
-		g.Theme = v
-	}
 	if v, ok := p["autostart"].(bool); ok {
 		g.Autostart = v
-	}
-	if v, ok := p["closeToTray"].(bool); ok {
-		g.CloseToTray = v
 	}
 	if v, ok := p["startMinimized"].(bool); ok {
 		g.StartMinimized = v
@@ -156,11 +168,54 @@ func applyNetwork(n *config.Network, p map[string]any) {
 	if v, ok := p["tunCidr"].(string); ok {
 		n.TUN.IPv4CIDR = v
 	}
-	if v, ok := p["socksPort"].(float64); ok {
-		n.SysProxy.SOCKSPort = int(v)
+	if v, ok := p["tunMtu"].(float64); ok {
+		if mtu := int(v); mtu >= 576 && mtu <= 9000 {
+			n.TUN.MTU = mtu
+		}
+		// Out-of-range silently dropped — frontend should clamp before sending.
 	}
-	if v, ok := p["xrayPort"].(float64); ok {
-		n.SysProxy.HTTPPort = int(v)
+	if v, ok := p["socksPort"].(float64); ok {
+		if port := int(v); port >= 1 && port <= 65535 {
+			n.SysProxy.SOCKSPort = port
+		}
+		// Out-of-range silently dropped (mirrors tunMtu) — frontend
+		// flags invalid via isPortValid; clearing the input must not
+		// persist port=0 to disk.
+	}
+	if v, ok := p["httpPort"].(float64); ok {
+		if port := int(v); port >= 1 && port <= 65535 {
+			n.SysProxy.HTTPPort = port
+		}
+	}
+	if v, ok := p["allowLan"].(bool); ok {
+		n.AllowLAN = v
+	}
+	if v, ok := p["ipv6Mode"].(string); ok {
+		n.IPv6Mode = v
+	}
+	if v, ok := p["dnsMode"].(string); ok {
+		n.DNS.Mode = v
+	}
+	if servers, ok := p["dnsServers"].([]any); ok {
+		out := make([]string, 0, len(servers))
+		for _, s := range servers {
+			if str, ok := s.(string); ok {
+				str = strings.TrimSpace(str)
+				if str != "" {
+					out = append(out, str)
+				}
+			}
+		}
+		n.DNS.Servers = out
+	}
+}
+
+func applyKillSwitch(k *config.KillSwitch, p map[string]any) {
+	if v, ok := p["enabled"].(bool); ok {
+		k.Enabled = v
+	}
+	if v, ok := p["alwaysOn"].(bool); ok {
+		k.AlwaysOn = v
 	}
 }
 
@@ -171,10 +226,19 @@ func applyNotifications(n *config.Notifications, p map[string]any) {
 	if v, ok := p["onDisconnected"].(bool); ok {
 		n.Disconnected = v
 	}
-	if v, ok := p["onError"].(bool); ok {
+	if v, ok := p["quotaLow"].(bool); ok {
 		n.QuotaLow = v
 	}
 	if v, ok := p["onSubSynced"].(bool); ok {
 		n.SubUpdated = v
+	}
+	if v, ok := p["sound"].(bool); ok {
+		n.Sound = v
+	}
+}
+
+func applyDebug(d *config.Debug, p map[string]any) {
+	if v, ok := p["logLevel"].(string); ok {
+		d.LogLevel = v
 	}
 }

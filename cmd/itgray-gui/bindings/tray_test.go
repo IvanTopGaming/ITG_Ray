@@ -2,6 +2,8 @@ package bindings
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -55,10 +57,11 @@ func (r *trayRecorder) lastMenu(t *testing.T) []TrayMenuItem {
 
 // setupTray builds a TrayService against a real (lightweight)
 // chainctl.Controller — same fakes as run_test.go — plus a recorder for
-// the icon / menu setters.
-func setupTray(t *testing.T) (*TrayService, *trayRecorder, *hub.Hub, *chainctl.Controller) {
+// the icon / menu setters. Returns the controller's DataDir so tests
+// can seed session records (last-session.json) directly.
+func setupTray(t *testing.T) (ts *TrayService, rec *trayRecorder, h *hub.Hub, ctrl *chainctl.Controller, dir string) {
 	t.Helper()
-	dir := t.TempDir()
+	dir = t.TempDir()
 	srv := &server.Server{
 		ID:     "a",
 		Origin: server.OriginManual,
@@ -72,17 +75,17 @@ func setupTray(t *testing.T) (*TrayService, *trayRecorder, *hub.Hub, *chainctl.C
 		},
 	}
 	store := runMemStore{m: map[string]*server.Server{"a": srv}}
-	h := hub.New()
+	h = hub.New()
 	t.Cleanup(h.Close)
-	ctrl := chainctl.New(&chainctl.Deps{
+	ctrl = chainctl.New(&chainctl.Deps{
 		DataDir:     dir,
 		ServerStore: store,
 		Helper:      &runFakeHelper{},
 		Sysproxy:    runFakeSysproxy{},
 		Hub:         h,
 	})
-	rec := &trayRecorder{}
-	ts := NewTrayService(TrayDeps{
+	rec = &trayRecorder{}
+	ts = NewTrayService(TrayDeps{
 		Hub:     h,
 		Chain:   ctrl,
 		OnShow:  func() {},
@@ -91,7 +94,7 @@ func setupTray(t *testing.T) (*TrayService, *trayRecorder, *hub.Hub, *chainctl.C
 		SetMenu: rec.setMenu,
 	})
 	t.Cleanup(ts.Shutdown)
-	return ts, rec, h, ctrl
+	return ts, rec, h, ctrl, dir
 }
 
 // labels extracts the Label / Separator marker for each item; useful
@@ -111,7 +114,7 @@ func labels(items []TrayMenuItem) []string {
 // TestTray_InitSeedsIdle asserts Init publishes an idle icon + the
 // "Disconnected" header even before the first hub event arrives.
 func TestTray_InitSeedsIdle(t *testing.T) {
-	ts, rec, _, _ := setupTray(t)
+	ts, rec, _, _, _ := setupTray(t)
 	ts.Init(context.Background())
 
 	require.Equal(t, TrayIconIdle, rec.lastIcon(t))
@@ -139,7 +142,7 @@ func TestTray_MenuPerStatus(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.status, func(t *testing.T) {
-			ts, _, _, _ := setupTray(t)
+			ts, _, _, _, _ := setupTray(t)
 			ts.refresh(tc.status)
 
 			gotIcon, gotItems := ts.Snapshot()
@@ -156,7 +159,7 @@ func TestTray_MenuPerStatus(t *testing.T) {
 // exists — the click would no-op anyway, but disabling surfaces the
 // state to the user.
 func TestTray_ConnectLastDisabledWithoutSession(t *testing.T) {
-	ts, _, _, _ := setupTray(t)
+	ts, _, _, _, _ := setupTray(t)
 	ts.refresh(string(hub.StatusIdle))
 
 	_, items := ts.Snapshot()
@@ -172,7 +175,7 @@ func TestTray_ConnectLastDisabledWithoutSession(t *testing.T) {
 // enabled). Stop() clears the session record by design, so we cannot
 // assert against the post-disconnect state.
 func TestTray_ConnectLastEnabledAfterStart(t *testing.T) {
-	ts, _, _, ctrl := setupTray(t)
+	ts, _, _, ctrl, _ := setupTray(t)
 	require.NoError(t, ctrl.Start(context.Background(), "a", chainctl.ModeSysProxy))
 	require.Eventually(t, func() bool {
 		id, _ := ctrl.LastSession()
@@ -185,10 +188,32 @@ func TestTray_ConnectLastEnabledAfterStart(t *testing.T) {
 	require.False(t, items[1].Disabled, "expected enabled connect after Start persisted session")
 }
 
+// TestTray_ConnectLast_NormalizesLegacyAutoMode asserts a session
+// record persisted by a pre-ModeAuto-removal build (mode="auto") is
+// normalized to TUN before being passed to Chain.Start. Without this,
+// chainctl.Start receives an unknown Mode and the click is a no-op.
+func TestTray_ConnectLast_NormalizesLegacyAutoMode(t *testing.T) {
+	ts, _, _, ctrl, dir := setupTray(t)
+
+	sessJSON := `{"serverId":"a","mode":"auto","at":"2026-04-01T00:00:00Z"}`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "last-session.json"), []byte(sessJSON), 0o600))
+
+	id, mode := ctrl.LastSession()
+	require.Equal(t, "a", id)
+	require.Equal(t, "auto", mode, "sanity: legacy mode persisted")
+
+	ts.actionConnectLast()
+
+	require.Eventually(t, func() bool {
+		s, _, m := ctrl.Status()
+		return s == hub.StatusConnected && m == "tun"
+	}, time.Second, 10*time.Millisecond, "legacy auto must normalize to TUN")
+}
+
 // TestTray_HubDrivesRefresh asserts a published vpn:status event flows
 // through the subscriber and rebuilds the menu.
 func TestTray_HubDrivesRefresh(t *testing.T) {
-	ts, rec, h, _ := setupTray(t)
+	ts, rec, h, _, _ := setupTray(t)
 	ts.Init(context.Background())
 
 	h.Publish(hub.Event{
@@ -234,7 +259,7 @@ func TestTray_ShowAndQuitInvokeCallbacks(t *testing.T) {
 // hub event with an unrecognised status renders as the raw value (so
 // the desync is visible) but still picks the idle icon.
 func TestTray_UnknownStatusFallsBackToIdle(t *testing.T) {
-	ts, _, _, _ := setupTray(t)
+	ts, _, _, _, _ := setupTray(t)
 	ts.refresh("future-state")
 
 	icon, items := ts.Snapshot()
