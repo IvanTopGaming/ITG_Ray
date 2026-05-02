@@ -73,3 +73,9 @@ func TestGet_CacheWriteFails_StillReturnsValue(t *testing.T) {
 	require.Error(t, err, "should surface write error")
 	require.Len(t, v, expectedHexLen, "but still return a usable hex value")
 }
+
+func TestInfo_NonEmptyOSOnCurrentPlatform(t *testing.T) {
+	info := Info()
+	require.NotEmpty(t, info.OS, "OS should be non-empty on a known platform")
+	// Version and Model may legitimately be empty in CI/VM environments.
+}
