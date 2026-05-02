@@ -440,3 +440,27 @@ describe("subsStore.edit", () => {
     expect(result.current.state.inFlight.editing.has("s1")).toBe(false);
   });
 });
+
+describe("humanizeError", () => {
+  it("maps invalid url errors to a user-friendly message", async () => {
+    const { humanizeError } = await import("./subsStore");
+    expect(humanizeError(new Error("subscription URL must be http or https"))).toMatch(/http\(s\)/);
+    expect(humanizeError("invalid url")).toMatch(/http\(s\)/);
+  });
+
+  it("maps not-found to a user-friendly message", async () => {
+    const { humanizeError } = await import("./subsStore");
+    expect(humanizeError("subscription not found")).toMatch(/no longer exists/);
+  });
+
+  it("maps disk save failures", async () => {
+    const { humanizeError } = await import("./subsStore");
+    expect(humanizeError("sub.Save: open /tmp/x: permission denied")).toMatch(/save subscription file/);
+    expect(humanizeError("server.Save: i/o error")).toMatch(/save server list/);
+  });
+
+  it("falls back to the raw string with the 'Error: ' prefix stripped", async () => {
+    const { humanizeError } = await import("./subsStore");
+    expect(humanizeError(new Error("Error: weird thing"))).toBe("weird thing");
+  });
+});

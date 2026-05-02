@@ -267,3 +267,22 @@ export function __resetForTests(): void {
     pendingRefetch = null;
   }
 }
+
+/**
+ * Convert a backend error (`Error` or string from a rejected Wails RPC) into
+ * a user-friendly UI message. Sentinels checked here mirror the Go bindings
+ * in `cmd/itgray-gui/bindings/subs.go`: `errInvalidURL`, `errSubNotFound`,
+ * and disk-save failures wrapped via `fmt.Errorf("sub.Save: %w", ...)` /
+ * `fmt.Errorf("server.Save: %w", ...)`. Unknown errors fall back to the
+ * raw message with any leading `Error: ` prefix stripped.
+ */
+export function humanizeError(err: unknown): string {
+  const s = err instanceof Error ? err.message : String(err);
+  if (/invalid url|must be http or https/i.test(s)) {
+    return "URL must be a valid http(s) address";
+  }
+  if (/not found/i.test(s))    return "Subscription no longer exists";
+  if (/sub\.Save/.test(s))     return "Failed to save subscription file";
+  if (/server\.Save/.test(s))  return "Failed to save server list";
+  return s.replace(/^Error:\s*/, "");
+}
