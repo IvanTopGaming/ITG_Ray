@@ -160,3 +160,54 @@ describe("subsStore — refresh coalescing", () => {
     expect(mockList).toHaveBeenCalledTimes(3);
   });
 });
+
+describe("subsStore.add", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const mod = await import("./subsStore");
+    mod.__resetForTests();
+  });
+
+  it("optimistically inserts a row with status=syncing on success", async () => {
+    mockList.mockResolvedValueOnce([]);
+    mockAdd.mockResolvedValueOnce({
+      id: "s-new", name: "new", url: "https://x",
+      lastSyncAt: "0001-01-01T00:00:00Z", lastSyncStatus: "",
+      serverCount: 0, updateInterval: 3600,
+    });
+    const { useSubs } = await import("./subsStore");
+    const { result } = renderHook(() => useSubs());
+    await act(async () => { await Promise.resolve(); });
+
+    await act(async () => {
+      await result.current.actions.add("new", "https://x");
+    });
+
+    expect(mockAdd).toHaveBeenCalledWith("https://x", "new");
+    expect(result.current.state.inFlight.adding).toBe(false);
+    if (result.current.state.load.kind === "ready") {
+      expect(result.current.state.load.subs).toHaveLength(1);
+      expect(result.current.state.load.subs[0].id).toBe("s-new");
+      expect(result.current.state.load.subs[0].status).toBe("syncing");
+    }
+  });
+
+  it("rethrows on backend error and leaves state unchanged", async () => {
+    mockList.mockResolvedValueOnce([]);
+    mockAdd.mockRejectedValueOnce(new Error("invalid url"));
+    const { useSubs } = await import("./subsStore");
+    const { result } = renderHook(() => useSubs());
+    await act(async () => { await Promise.resolve(); });
+
+    await act(async () => {
+      await expect(
+        result.current.actions.add("bad", "ftp://x"),
+      ).rejects.toThrow(/invalid url/);
+    });
+
+    expect(result.current.state.inFlight.adding).toBe(false);
+    if (result.current.state.load.kind === "ready") {
+      expect(result.current.state.load.subs).toHaveLength(0);
+    }
+  });
+});

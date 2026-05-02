@@ -124,8 +124,25 @@ export type SubsActions = {
 };
 
 // Module-scope action implementations. Tasks 6-9 replace the throwing stubs.
-async function addAction(_name: string, _url: string): Promise<void> {
-  throw new Error("add not implemented");
+async function addAction(name: string, url: string): Promise<void> {
+  setState({ ...state, inFlight: { ...state.inFlight, adding: true } });
+  try {
+    const view = await AddSub(url, name);
+    const newSub = backendToFrontend(view);
+    // Backend kicks off background SyncOne — reflect that optimistically
+    // by setting status to "syncing" before the sub:synced event lands.
+    newSub.status = "syncing";
+    setState({
+      ...state,
+      load: state.load.kind === "ready"
+        ? { kind: "ready", subs: [...state.load.subs, newSub] }
+        : state.load,
+      inFlight: { ...state.inFlight, adding: false },
+    });
+  } catch (err) {
+    setState({ ...state, inFlight: { ...state.inFlight, adding: false } });
+    throw err;
+  }
 }
 async function editAction(_id: string, _name: string, _url: string): Promise<void> {
   throw new Error("edit not implemented");
@@ -155,10 +172,9 @@ export function useSubs(): { state: SubsState; actions: SubsActions } {
   return { state: snap, actions };
 }
 
-// Module scope — re-exported for Tasks 6-9 to wire into the action bodies.
+// Module scope — re-exported for Tasks 7-9 to wire into the action bodies.
 // TS would warn 'imported but unused' otherwise; the void expressions are
 // no-ops kept until the next tasks reference each binding directly.
-void AddSub;
 void EditSub;
 void RemoveSub;
 void SyncOneSub;
