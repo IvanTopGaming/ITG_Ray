@@ -99,6 +99,14 @@ type KillSwitchSettings struct {
 type SubscriptionSettings struct {
 	DefaultUpdateInterval int    `json:"defaultUpdateInterval"` // seconds
 	UserAgent             string `json:"userAgent"`
+
+	// Identity headers (Remnawave x-hwid contract). New in Tier 3.5.
+	// HWIDEnabled gates the entire identity-header set; the 3 metadata
+	// flags only fire when HWIDEnabled is true.
+	HWIDEnabled     bool `json:"hwidEnabled"`
+	SendDeviceOS    bool `json:"sendDeviceOS"`
+	SendOSVersion   bool `json:"sendOSVersion"`
+	SendDeviceModel bool `json:"sendDeviceModel"`
 }
 
 // NotificationSettings toggles desktop notification triggers.
