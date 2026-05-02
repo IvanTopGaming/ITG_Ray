@@ -539,7 +539,7 @@ function SubModal({
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => { setName(e.target.value); setSubmitError(null); }}
               placeholder="e.g. Main provider"
               className="w-full rounded-lg border border-white/15 bg-white/[0.04] px-3 py-2 text-[13px] text-white placeholder:text-white/35 focus:border-accent-start/50 focus:bg-white/[0.06] focus:outline-none"
             />
@@ -551,6 +551,7 @@ function SubModal({
               onChange={(e) => {
                 setUrl(e.target.value);
                 setUrlError(null);
+                setSubmitError(null);
               }}
               placeholder="https://provider.example/sub/your-token"
               className={cn(
