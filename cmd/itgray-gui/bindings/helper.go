@@ -101,17 +101,9 @@ func (h *HelperService) Start() error { return h.ops.Start(helperServiceName) }
 // Stop asks SCM to stop the helper.
 func (h *HelperService) Stop() error { return h.ops.Stop(helperServiceName) }
 
-// isNotInstalled inspects the wrapped svcmgr error for the Windows
-// "service does not exist" condition. svcmgr does not expose a typed
-// sentinel today, so we substring-match the wrapped errno description
-// emitted by golang.org/x/sys/windows/svc/mgr.
-func isNotInstalled(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "does not exist") || strings.Contains(msg, "service does not exist")
-}
+// isNotInstalled is a thin wrapper kept for backwards-compatible call
+// sites; the real logic lives in svcmgr.IsNotInstalled.
+func isNotInstalled(err error) bool { return svcmgr.IsNotInstalled(err) }
 
 // defaultHelperExePath resolves the helper binary alongside the running
 // GUI executable. Falls back to the literal name if os.Executable fails.
