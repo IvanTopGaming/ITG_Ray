@@ -166,7 +166,10 @@ func (s *SubsService) Edit(id, rawURL, name string) (hub.SubView, error) {
 		return hub.SubView{}, fmt.Errorf("sub.Save: %w", err)
 	}
 
-	servers, _ := s.d.ServerStore.Load()
+	servers, err := s.d.ServerStore.Load()
+	if err != nil {
+		return hub.SubView{}, fmt.Errorf("server.Load: %w", err)
+	}
 	return toSubViews([]subscription.Stored{subs[idx]}, serverCountBySource(servers))[0], nil
 }
 
