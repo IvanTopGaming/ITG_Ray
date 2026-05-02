@@ -78,7 +78,6 @@ type AppDeps struct {
 	DataDir      string
 	Hub          *hub.Hub
 	Version      string
-	BuildDate    string // set at link time via -ldflags -X (or "" for dev builds)
 	ServerStore  ServerStore
 	SubStore     SubStore
 	HelperProber HelperProber // closure that returns helper state ("running"|"stopped"|"missing")
@@ -86,15 +85,18 @@ type AppDeps struct {
 	// by Quit, which must call runtime.Quit with the app's ctx — passing
 	// context.Background() makes the runtime no-op. Nil is tolerated and
 	// causes Quit to fall back to context.Background() (test code path).
-	AppCtx        AppCtxFunc
-	Chain         ChainStatuser // NEW: source of live status/server/mode for GetSnapshot
+	AppCtx AppCtxFunc
+	// Chain is the source of live status/server/mode for GetSnapshot. Nil
+	// is tolerated (yields StatusIdle / Mode("tun")); production wiring
+	// guarantees non-nil.
+	Chain         ChainStatuser
 	ConfigViewer  ConfigViewer  // NEW: source of SettingsView (replaces hardcoded collectSettings)
 	NetworkLoader NetworkLoader // NEW: source of Network for GetPublicIP sysproxy dialer
 }
 
 // publicIPCache is fleshed out in publicip.go (Task 2). Defined here so
 // AppService compiles after Task 1 lands.
-type publicIPCache struct{} //nolint:unused // populated in Task 2 (publicip.go)
+type publicIPCache struct{} //nolint:unused // populated in Task 2 (publicip.go); the field-level nolint on AppService.ipCache means staticcheck still treats this type as unreferenced
 
 // AppService implements the App.* bindings (GetSnapshot, GetVersion, Quit).
 type AppService struct {
@@ -154,6 +156,9 @@ func (a *AppService) GetSnapshot() (hub.Snapshot, error) {
 	if a.d.Chain != nil {
 		var srv *server.Server
 		st, srv, mode = a.d.Chain.Status()
+		if mode == "" {
+			mode = chainctl.ModeTUN
+		}
 		if srv != nil {
 			views := toServerViews([]server.Server{*srv}, subOriginByID(subs))
 			view := views[0]

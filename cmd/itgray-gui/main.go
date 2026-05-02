@@ -142,7 +142,6 @@ func main() {
 		DataDir:      dataDir,
 		Hub:          app.Hub(),
 		Version:      Version,
-		BuildDate:    BuildDate,
 		ServerStore:  serverStore,
 		SubStore:     subStore,
 		HelperProber: helperProber,

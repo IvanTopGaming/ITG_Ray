@@ -35,7 +35,9 @@ func (f fakeConfigViewer) View() (hub.SettingsView, error) { //nolint:gocritic /
 // errConfigViewer returns an error; used in TestGetSnapshot_ConfigViewerError.
 type errConfigViewer struct{ err error }
 
-func (e errConfigViewer) View() (hub.SettingsView, error) { return hub.SettingsView{}, e.err }
+func (e errConfigViewer) View() (hub.SettingsView, error) { //nolint:gocritic // hugeParam: hub.SettingsView is large but copying is fine in test fakes
+	return hub.SettingsView{}, e.err
+}
 
 // fakeChain is a test-only ChainStatuser.
 type fakeChain struct {
