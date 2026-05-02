@@ -127,11 +127,11 @@ export type SubsActions = {
 async function addAction(name: string, url: string): Promise<void> {
   setState({ ...state, inFlight: { ...state.inFlight, adding: true } });
   try {
+    // Note: public action takes (name, url); Go binding takes (url, name).
     const view = await AddSub(url, name);
-    const newSub = backendToFrontend(view);
     // Backend kicks off background SyncOne — reflect that optimistically
-    // by setting status to "syncing" before the sub:synced event lands.
-    newSub.status = "syncing";
+    // with status "syncing" before the sub:synced event lands.
+    const newSub: Sub = { ...backendToFrontend(view), status: "syncing" };
     setState({
       ...state,
       load: state.load.kind === "ready"
