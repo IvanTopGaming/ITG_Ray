@@ -451,14 +451,15 @@ function SubModal({
 }: {
   modal: Exclude<ModalState, { kind: "closed" }>;
   onClose: () => void;
-  onAdd: (name: string, url: string) => Promise<void>;
-  onEditSave: (id: string, name: string, url: string) => Promise<void>;
+  onAdd: (name: string, url: string, userAgent: string) => Promise<void>;
+  onEditSave: (id: string, name: string, url: string, userAgent: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }) {
   const isAdd = modal.kind === "add";
   const sub = !isAdd ? modal.sub : null;
   const [name, setName] = useState(sub?.name ?? "");
   const [url, setUrl] = useState(sub?.url ?? "");
+  const [userAgent, setUserAgent] = useState(sub?.userAgent ?? "");
   const [urlError, setUrlError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -483,8 +484,8 @@ function SubModal({
     setSubmitError(null);
     setBusy(true);
     try {
-      if (isAdd) await onAdd(name.trim(), url.trim());
-      else if (sub) await onEditSave(sub.id, name.trim(), url.trim());
+      if (isAdd) await onAdd(name.trim(), url.trim(), userAgent.trim());
+      else if (sub) await onEditSave(sub.id, name.trim(), url.trim(), userAgent.trim());
       onClose();
     } catch (err) {
       setSubmitError(humanizeError(err));
@@ -564,6 +565,15 @@ function SubModal({
                   ? "border-danger/40 focus:border-danger/60"
                   : "border-white/15 focus:border-accent-start/50",
               )}
+            />
+          </Field>
+          <Field label="User-Agent (optional)">
+            <input
+              type="text"
+              value={userAgent}
+              onChange={(e) => { setUserAgent(e.target.value); setSubmitError(null); }}
+              placeholder="Leave blank to use Settings default"
+              className="w-full rounded-lg border border-white/15 bg-white/[0.04] px-3 py-2 font-mono text-[11px] text-white placeholder:text-white/35 focus:border-accent-start/50 focus:bg-white/[0.06] focus:outline-none"
             />
           </Field>
           <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3 text-[11px] text-white/55">
