@@ -151,7 +151,7 @@ func main() {
 		Height:           800,
 		MinWidth:         1024,
 		MinHeight:        640,
-		Frameless:        true, // drag region + window controls land in C.T4
+		Frameless:        true,
 		BackgroundColour: &options.RGBA{R: 10, G: 13, B: 23, A: 1},
 		AssetServer:      &assetserver.Options{Assets: assets},
 		OnStartup: func(ctx context.Context) {

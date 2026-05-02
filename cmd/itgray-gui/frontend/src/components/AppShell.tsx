@@ -1,5 +1,6 @@
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
+import { TitleBar } from "./TitleBar";
 import { useNetworkChangedSinceConnect, getConnectSnapshot } from "@/lib/settings";
 import { Connect, Disconnect } from "../../wailsjs/go/bindings/RunService";
 
@@ -18,7 +19,8 @@ export function AppShell() {
   };
 
   return (
-    <div className="relative flex h-screen w-screen overflow-hidden">
+    <div className="relative flex h-screen w-screen flex-col overflow-hidden">
+      <TitleBar />
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 overflow-hidden"
@@ -33,7 +35,7 @@ export function AppShell() {
         />
       </div>
 
-      <div className="relative z-10 flex h-full w-full">
+      <div className="relative z-10 flex w-full min-h-0 flex-1">
         <Sidebar />
         <main className="relative flex-1 overflow-y-auto px-8 py-8">
           {networkChanged && (
