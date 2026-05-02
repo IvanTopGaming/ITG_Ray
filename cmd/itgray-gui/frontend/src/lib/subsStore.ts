@@ -281,7 +281,7 @@ export function humanizeError(err: unknown): string {
   if (/invalid url|must be http or https/i.test(s)) {
     return "URL must be a valid http(s) address";
   }
-  if (/not found/i.test(s))    return "Subscription no longer exists";
+  if (/subscription not found/i.test(s)) return "Subscription no longer exists";
   if (/sub\.Save/.test(s))     return "Failed to save subscription file";
   if (/server\.Save/.test(s))  return "Failed to save server list";
   return s.replace(/^Error:\s*/, "");
