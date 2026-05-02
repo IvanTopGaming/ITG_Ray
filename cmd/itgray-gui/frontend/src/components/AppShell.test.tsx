@@ -21,6 +21,10 @@ vi.mock('../../wailsjs/go/bindings/SettingsService', () => ({
 vi.mock('../../wailsjs/runtime/runtime', () => ({
   EventsOn: vi.fn(),
   EventsOff: vi.fn(),
+  WindowMinimise: vi.fn(),
+  WindowToggleMaximise: vi.fn(),
+  WindowIsMaximised: vi.fn().mockResolvedValue(false),
+  Quit: vi.fn(),
 }));
 
 import { AppShell } from './AppShell';

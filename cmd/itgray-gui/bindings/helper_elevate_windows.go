@@ -54,10 +54,23 @@ func elevateCLI(args ...string) error {
 	}
 	argList := strings.Join(quoted, ", ")
 
+	// `-ErrorAction Stop` + try/catch is required so a UAC dismissal
+	// becomes a terminating error and surfaces as a non-zero exit. Without
+	// it, Start-Process emits a non-terminating error, $p stays $null, and
+	// `exit $p.ExitCode` evaluates to `exit $null` → 0 — Go would see the
+	// op as successful and the GUI would never show the inline-error block.
+	//
+	// The two `OutputEncoding` lines force stdout/stderr to UTF-8 so the
+	// localized Windows error message (e.g. Russian under ru-RU locale)
+	// reaches Go as valid UTF-8 instead of OEM/CP866 bytes that render as
+	// mojibake in the React inline-error block.
 	psCmd := fmt.Sprintf(
-		"$p = Start-Process -FilePath '%s' -ArgumentList @(%s) "+
-			"-Verb RunAs -Wait -PassThru -WindowStyle Hidden; "+
-			"exit $p.ExitCode",
+		"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "+
+			"$OutputEncoding = [System.Text.Encoding]::UTF8; "+
+			"try { $p = Start-Process -FilePath '%s' -ArgumentList @(%s) "+
+			"-Verb RunAs -Wait -PassThru -WindowStyle Hidden -ErrorAction Stop; "+
+			"exit $p.ExitCode } "+
+			"catch { Write-Host $_.Exception.Message; exit 1 }",
 		strings.ReplaceAll(cliPath, "'", "''"),
 		argList,
 	)

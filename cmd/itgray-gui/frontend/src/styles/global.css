@@ -30,4 +30,15 @@
     -moz-appearance: textfield;
     appearance: textfield;
   }
+  /* Hide native scrollbars across all overflow containers — the dark glassy
+     theme has no place for a default Chromium WebView2 track. Functionality
+     (mouse wheel, touch, keyboard) is preserved; only the visual indicator
+     is removed. */
+  * {
+    scrollbar-width: none;          /* Firefox / standard */
+    -ms-overflow-style: none;       /* legacy IE/Edge */
+  }
+  *::-webkit-scrollbar {
+    display: none;                  /* WebKit / Chromium / WebView2 */
+  }
 }

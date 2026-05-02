@@ -21,4 +21,9 @@ describe('StatusPill', () => {
     render(<StatusPill status="running" label="Active" />);
     expect(screen.getByText('Active')).toBeInTheDocument();
   });
+
+  it('renders Not installed label for missing state', () => {
+    render(<StatusPill status="missing" />);
+    expect(screen.getByText('Not installed')).toBeInTheDocument();
+  });
 });

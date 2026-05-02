@@ -23,6 +23,8 @@ type svcOps interface {
 	Install(name, binPath, desc string) error
 	Start(name string) error
 	Stop(name string) error
+	Restart(name string) error
+	Reinstall(name string) error
 }
 
 // realSvcOps is the production implementation. Status is a read-only SCM
@@ -52,6 +54,18 @@ func (realSvcOps) Start(_ string) error {
 // Stop asks SCM to stop the helper via the elevated CLI (UAC prompt).
 func (realSvcOps) Stop(_ string) error {
 	return elevateCLI("helper", "stop")
+}
+
+// Restart asks the elevated CLI to stop+start the helper in a single
+// process so the user sees one UAC prompt for the whole operation.
+func (realSvcOps) Restart(_ string) error {
+	return elevateCLI("helper", "restart")
+}
+
+// Reinstall asks the elevated CLI to stop+uninstall+install+start the
+// helper in a single process. Single UAC prompt.
+func (realSvcOps) Reinstall(_ string) error {
+	return elevateCLI("helper", "reinstall")
 }
 
 // HelperService implements the Helper.* Wails bindings (Status / Install /
@@ -101,17 +115,16 @@ func (h *HelperService) Start() error { return h.ops.Start(helperServiceName) }
 // Stop asks SCM to stop the helper.
 func (h *HelperService) Stop() error { return h.ops.Stop(helperServiceName) }
 
-// isNotInstalled inspects the wrapped svcmgr error for the Windows
-// "service does not exist" condition. svcmgr does not expose a typed
-// sentinel today, so we substring-match the wrapped errno description
-// emitted by golang.org/x/sys/windows/svc/mgr.
-func isNotInstalled(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "does not exist") || strings.Contains(msg, "service does not exist")
-}
+// Restart asks SCM to stop and then start the helper. One UAC prompt.
+func (h *HelperService) Restart() error { return h.ops.Restart(helperServiceName) }
+
+// Reinstall stops the helper, removes its SCM registration, re-registers
+// it with the canonical helper.exe path, and starts it. One UAC prompt.
+func (h *HelperService) Reinstall() error { return h.ops.Reinstall(helperServiceName) }
+
+// isNotInstalled is a thin wrapper kept for backwards-compatible call
+// sites; the real logic lives in svcmgr.IsNotInstalled.
+func isNotInstalled(err error) bool { return svcmgr.IsNotInstalled(err) }
 
 // defaultHelperExePath resolves the helper binary alongside the running
 // GUI executable. Falls back to the literal name if os.Executable fails.
