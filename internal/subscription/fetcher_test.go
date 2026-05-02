@@ -71,3 +71,44 @@ func TestFetch_ContextCancellation(t *testing.T) {
 	_, err := Fetch(ctx, FetchOptions{URL: ts.URL, Timeout: time.Second})
 	require.Error(t, err)
 }
+
+func TestFetch_SendsAllIdentityHeaders(t *testing.T) {
+	var got http.Header
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Clone()
+		_, _ = w.Write([]byte("vmess://test"))
+	}))
+	defer srv.Close()
+
+	_, err := Fetch(context.Background(), FetchOptions{
+		URL:         srv.URL,
+		UserAgent:   "ITGRay/1.0",
+		HWID:        "abcd1234",
+		DeviceOS:    "Linux",
+		OSVersion:   "Ubuntu 24.04",
+		DeviceModel: "MacBookPro18,2",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "ITGRay/1.0", got.Get("User-Agent"))
+	require.Equal(t, "abcd1234", got.Get("X-Hwid"))
+	require.Equal(t, "Linux", got.Get("X-Device-Os"))
+	require.Equal(t, "Ubuntu 24.04", got.Get("X-Ver-Os"))
+	require.Equal(t, "MacBookPro18,2", got.Get("X-Device-Model"))
+}
+
+func TestFetch_OmitsEmptyIdentityHeaders(t *testing.T) {
+	var got http.Header
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Clone()
+		_, _ = w.Write([]byte("vmess://test"))
+	}))
+	defer srv.Close()
+
+	_, err := Fetch(context.Background(), FetchOptions{URL: srv.URL, UserAgent: "ITGRay/1.0"})
+	require.NoError(t, err)
+	require.Equal(t, "ITGRay/1.0", got.Get("User-Agent"))
+	require.Equal(t, "", got.Get("X-Hwid"))
+	require.Equal(t, "", got.Get("X-Device-Os"))
+	require.Equal(t, "", got.Get("X-Ver-Os"))
+	require.Equal(t, "", got.Get("X-Device-Model"))
+}
