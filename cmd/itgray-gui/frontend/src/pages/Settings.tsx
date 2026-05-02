@@ -33,6 +33,7 @@ const SECTIONS = [
   { id: 'general', label: 'General' },
   { id: 'connection', label: 'Connection' },
   { id: 'killswitch', label: 'Kill switch' },
+  { id: 'subscriptions', label: 'Subscriptions' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'helper', label: 'Helper' },
   { id: 'logs', label: 'Logs' },
@@ -396,6 +397,91 @@ export function Settings() {
             onChange={(v) => update({ killSwitchAlwaysOn: v })}
           />
         </SettingRow>
+      </motion.div>
+
+      {/* Subscriptions */}
+      <motion.div id="subscriptions" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
+        <SectionHeader title="Subscriptions" />
+        <SettingRow
+          label="Default update interval"
+          hint="How often subscriptions auto-sync, in seconds. Per-sub overrides take precedence."
+        >
+          <input
+            type="text"
+            inputMode="numeric"
+            value={s.defaultUpdateInterval}
+            onChange={(e) => {
+              const n = Number(e.target.value);
+              if (Number.isFinite(n) && n > 0) update({ defaultUpdateInterval: n });
+            }}
+            className="w-24 rounded-[10px] border border-white/[0.10] bg-white/[0.04] px-3 py-1.5 text-[13px] text-white/[0.92] tabular-nums focus:border-accent/40 focus:bg-white/[0.06] focus:outline-none"
+          />
+        </SettingRow>
+
+        <div className="pt-2 pb-1">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/[0.45]">
+            Subscription Identity
+          </span>
+        </div>
+
+        <SettingRow
+          label="User-Agent"
+          hint="Sent with every subscription fetch. Most provider panels inspect this to choose the response format. Empty falls back to the built-in default."
+          stacked
+        >
+          <input
+            type="text"
+            aria-label="User-Agent"
+            value={s.userAgent}
+            placeholder="ITGRay/0.1"
+            onChange={(e) => update({ userAgent: e.target.value })}
+            className="w-full rounded-[10px] border border-white/[0.10] bg-white/[0.04] px-3 py-1.5 text-[13px] text-white/[0.92] placeholder:text-white/[0.35] focus:border-accent/40 focus:bg-white/[0.06] focus:outline-none"
+          />
+        </SettingRow>
+
+        <SettingRow
+          label="Send HWID"
+          hint="Send a stable per-device identifier on every subscription fetch. Required by Remnawave-style providers with device limits."
+        >
+          <Toggle
+            value={s.hwidEnabled}
+            onChange={(v) => update({ hwidEnabled: v })}
+            aria-label="Send HWID"
+          />
+        </SettingRow>
+        <SettingRow
+          label="Send device OS"
+          hint="Include the OS family (e.g. Windows) alongside HWID."
+        >
+          <Toggle
+            value={s.sendDeviceOS}
+            onChange={(v) => update({ sendDeviceOS: v })}
+            aria-label="Send device OS"
+          />
+        </SettingRow>
+        <SettingRow
+          label="Send OS version"
+          hint="Include the OS build (e.g. 10.0.22631) alongside HWID."
+        >
+          <Toggle
+            value={s.sendOSVersion}
+            onChange={(v) => update({ sendOSVersion: v })}
+            aria-label="Send OS version"
+          />
+        </SettingRow>
+        <SettingRow
+          label="Send device model"
+          hint="Include the hardware model (e.g. MSI Stealth 16) alongside HWID."
+        >
+          <Toggle
+            value={s.sendDeviceModel}
+            onChange={(v) => update({ sendDeviceModel: v })}
+            aria-label="Send device model"
+          />
+        </SettingRow>
+        <p className="pt-3 text-[11.5px] italic leading-snug text-white/[0.45]">
+          Metadata sub-toggles are honored only when HWID is on.
+        </p>
       </motion.div>
 
       {/* Notifications */}

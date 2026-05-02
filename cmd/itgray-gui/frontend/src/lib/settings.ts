@@ -53,6 +53,13 @@ export type Settings = {
   // killswitch
   killSwitchEnabled: boolean;
   killSwitchAlwaysOn: boolean;
+  // subscriptions
+  defaultUpdateInterval: number;
+  userAgent: string;
+  hwidEnabled: boolean;
+  sendDeviceOS: boolean;
+  sendOSVersion: boolean;
+  sendDeviceModel: boolean;
   // notifications
   onConnected: boolean;
   onDisconnected: boolean;
@@ -78,6 +85,12 @@ export const DEFAULTS = {
   tunMtu: 1500,
   killSwitchEnabled: true,
   killSwitchAlwaysOn: false,
+  defaultUpdateInterval: 3600,
+  userAgent: '',
+  hwidEnabled: true,
+  sendDeviceOS: true,
+  sendOSVersion: true,
+  sendDeviceModel: true,
   onConnected: true,
   onDisconnected: true,
   onQuotaLow: true,

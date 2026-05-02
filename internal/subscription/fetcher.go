@@ -32,6 +32,14 @@ type FetchOptions struct {
 	UserAgent string
 	Auth      AuthFunc
 	Timeout   time.Duration
+
+	// Identity headers (Remnawave x-hwid contract). Empty values are not
+	// sent; resolver in cmd/itgray-gui/bindings/identity.go decides which
+	// to populate from settings + per-sub override + hwid package.
+	HWID        string // → x-hwid
+	DeviceOS    string // → x-device-os
+	OSVersion   string // → x-ver-os
+	DeviceModel string // → x-device-model
 }
 
 // FetchResult is the parsed outcome of a successful fetch.
@@ -56,6 +64,18 @@ func Fetch(ctx context.Context, opt FetchOptions) (FetchResult, error) {
 	}
 	if opt.UserAgent != "" {
 		req.Header.Set("User-Agent", opt.UserAgent)
+	}
+	if opt.HWID != "" {
+		req.Header.Set("x-hwid", opt.HWID)
+	}
+	if opt.DeviceOS != "" {
+		req.Header.Set("x-device-os", opt.DeviceOS)
+	}
+	if opt.OSVersion != "" {
+		req.Header.Set("x-ver-os", opt.OSVersion)
+	}
+	if opt.DeviceModel != "" {
+		req.Header.Set("x-device-model", opt.DeviceModel)
 	}
 	if opt.Auth != nil {
 		opt.Auth(req)

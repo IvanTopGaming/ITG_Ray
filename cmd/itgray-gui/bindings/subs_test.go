@@ -87,7 +87,7 @@ func TestSubsService_List(t *testing.T) {
 func TestSubsService_Add_GeneratesIDAndPersists(t *testing.T) {
 	svc, store := newSubsServiceForTest(t, t.TempDir())
 
-	view, err := svc.Add("https://example.com/sub", "test")
+	view, err := svc.Add("https://example.com/sub", "test", "")
 	require.NoError(t, err)
 	require.NotEmpty(t, view.ID)
 	require.Equal(t, "test", view.Name)
@@ -107,7 +107,7 @@ func TestSubsService_Add_GeneratesIDAndPersists(t *testing.T) {
 func TestSubsService_Add_RejectsInvalidURL(t *testing.T) {
 	svc, store := newSubsServiceForTest(t, t.TempDir())
 
-	_, err := svc.Add("not-a-url", "")
+	_, err := svc.Add("not-a-url", "", "")
 	require.Error(t, err)
 
 	all, err := store.Load()
@@ -173,4 +173,151 @@ func TestSubsService_SyncOne_PreservesUserinfoOnSaveFailure(t *testing.T) {
 	require.EqualValues(t, 800, got[0].Download, "fresh Download persists despite Save failure")
 	require.EqualValues(t, 1024, got[0].Total, "fresh Total persists despite Save failure")
 	require.Equal(t, "error", got[0].LastStatus, "status reflects disk failure")
+}
+
+func TestSubsService_Edit_RenameOnly_PreservesServersAndLastSync(t *testing.T) {
+	dir := t.TempDir()
+	svc, subStore := newSubsServiceForTest(t, dir)
+	srvPath := filepath.Join(dir, "servers.json")
+
+	syncedAt := time.Now().Add(-1 * time.Hour).UTC().Truncate(time.Second)
+	require.NoError(t, subStore.Save([]subscription.Stored{{
+		ID:         "s1",
+		Name:       "old name",
+		URL:        "https://provider.example/sub",
+		LastSyncAt: syncedAt,
+		LastStatus: "OK",
+	}}))
+	require.NoError(t, server.Save(srvPath, []server.Server{{
+		ID:       "srv1",
+		Origin:   server.OriginSubscription,
+		SourceID: "s1",
+		Name:     "DE",
+		Vless: vless.Config{
+			Address: "h", Port: 443,
+			UUID:      "00000000-0000-0000-0000-000000000000",
+			Transport: vless.TransportTCP,
+			Security:  vless.SecurityNone,
+		},
+	}}))
+
+	view, err := svc.Edit("s1", "https://provider.example/sub", "new name", "")
+	require.NoError(t, err)
+	require.Equal(t, "new name", view.Name)
+	require.Equal(t, "OK", view.LastSyncStatus)
+	require.True(t, view.LastSyncAt.Equal(syncedAt), "LastSyncAt must be preserved on rename")
+	require.Equal(t, 1, view.ServerCount, "servers must not be cascaded on rename")
+
+	loaded, err := subStore.Load()
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	require.Equal(t, "new name", loaded[0].Name)
+	require.True(t, loaded[0].LastSyncAt.Equal(syncedAt))
+
+	srvs, err := server.Load(srvPath)
+	require.NoError(t, err)
+	require.Len(t, srvs, 1, "server with this SourceID must survive rename")
+}
+
+func TestSubsService_Edit_URLChange_CascadesServersAndResetsMeta(t *testing.T) {
+	dir := t.TempDir()
+	svc, subStore := newSubsServiceForTest(t, dir)
+	srvPath := filepath.Join(dir, "servers.json")
+
+	require.NoError(t, subStore.Save([]subscription.Stored{{
+		ID:          "s1",
+		Name:        "renamed",
+		URL:         "https://old.example/sub",
+		LastSyncAt:  time.Now().Add(-1 * time.Hour),
+		LastStatus:  "OK",
+		LastMessage: "fetched 5 servers",
+		Upload:      100,
+		Download:    200,
+		Total:       1024,
+	}}))
+	mkSrv := func(id, src string) server.Server {
+		return server.Server{
+			ID: id, Origin: server.OriginSubscription, SourceID: src, Name: id,
+			Vless: vless.Config{
+				Address: "h", Port: 443,
+				UUID:      "00000000-0000-0000-0000-000000000000",
+				Transport: vless.TransportTCP,
+				Security:  vless.SecurityNone,
+			},
+		}
+	}
+	require.NoError(t, server.Save(srvPath, []server.Server{
+		mkSrv("a", "s1"),
+		mkSrv("b", "s1"),
+		mkSrv("c", "s2"),    // belongs to a different sub — must survive
+		mkSrv("d", ""),       // manual entry — must survive
+	}))
+
+	view, err := svc.Edit("s1", "https://new.example/sub", "renamed", "")
+	require.NoError(t, err)
+	require.Equal(t, "https://new.example/sub", view.URL)
+	require.True(t, view.LastSyncAt.IsZero(), "LastSyncAt must reset on URL change")
+	require.Equal(t, "", view.LastSyncStatus, "LastSyncStatus must reset on URL change")
+	require.Equal(t, 0, view.ServerCount, "old servers must be cascaded")
+	require.Equal(t, int64(0), view.Upload)
+	require.Equal(t, int64(0), view.Download)
+	require.Equal(t, int64(0), view.Total)
+
+	// On-disk verification: only s1 servers cascaded, s2 + manual survive.
+	srvs, err := server.Load(srvPath)
+	require.NoError(t, err)
+	require.Len(t, srvs, 2)
+	gotIDs := []string{srvs[0].ID, srvs[1].ID}
+	require.Contains(t, gotIDs, "c")
+	require.Contains(t, gotIDs, "d")
+}
+
+func TestSubsService_Edit_RejectsInvalidURL(t *testing.T) {
+	dir := t.TempDir()
+	svc, subStore := newSubsServiceForTest(t, dir)
+
+	require.NoError(t, subStore.Save([]subscription.Stored{{
+		ID: "s1", Name: "x", URL: "https://provider.example/sub",
+	}}))
+
+	_, err := svc.Edit("s1", "ftp://bad", "x", "")
+	require.ErrorIs(t, err, errInvalidURL)
+}
+
+func TestSubsService_Edit_ReturnsErrSubNotFound(t *testing.T) {
+	dir := t.TempDir()
+	svc, _ := newSubsServiceForTest(t, dir)
+
+	_, err := svc.Edit("missing-id", "https://provider.example/sub", "x", "")
+	require.ErrorIs(t, err, errSubNotFound)
+}
+
+func TestSubsService_Add_PersistsUserAgent(t *testing.T) {
+	dir := t.TempDir()
+	svc, subStore := newSubsServiceForTest(t, dir)
+
+	_, err := svc.Add("https://provider.example/sub", "n", "Custom/1.0")
+	require.NoError(t, err)
+
+	loaded, err := subStore.Load()
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	require.Equal(t, "Custom/1.0", loaded[0].UserAgent)
+}
+
+func TestSubsService_Edit_UpdatesUserAgent_IncludingClearToEmpty(t *testing.T) {
+	dir := t.TempDir()
+	svc, subStore := newSubsServiceForTest(t, dir)
+
+	require.NoError(t, subStore.Save([]subscription.Stored{{
+		ID: "s1", Name: "x", URL: "https://provider.example/sub", UserAgent: "old/1.0",
+	}}))
+
+	_, err := svc.Edit("s1", "https://provider.example/sub", "x", "")
+	require.NoError(t, err)
+
+	loaded, err := subStore.Load()
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	require.Empty(t, loaded[0].UserAgent, "explicit empty must clear")
 }

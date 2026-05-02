@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
+	"github.com/itg-team/itg-ray/internal/hwid"
 	"github.com/itg-team/itg-ray/internal/subscription"
 )
 
@@ -43,6 +44,13 @@ type SubsDeps struct {
 	SubStore    SubStore
 	ServerStore ServerStore
 	Hub         *hub.Hub
+
+	// Identity-header inputs for SyncOne. Resolved at startup and held;
+	// SettingsView is a function so toggle changes take effect on the
+	// next sync without restart.
+	SettingsView func() hub.SettingsView
+	HWID         string
+	DeviceInfo   hwid.DeviceInfo
 }
 
 // SubsService implements the Subs.* Wails bindings. C.T7 ships List + Add
@@ -79,7 +87,7 @@ func (s *SubsService) List() ([]hub.SubView, error) {
 //
 // Returns the SubView so the frontend can optimistically insert the new
 // row before the next snapshot refresh arrives.
-func (s *SubsService) Add(rawURL, name string) (hub.SubView, error) {
+func (s *SubsService) Add(rawURL, name, userAgent string) (hub.SubView, error) {
 	rawURL = strings.TrimSpace(rawURL)
 	if err := validateSubURL(rawURL); err != nil {
 		return hub.SubView{}, err
@@ -88,6 +96,7 @@ func (s *SubsService) Add(rawURL, name string) (hub.SubView, error) {
 		ID:             generateSubID(),
 		Name:           strings.TrimSpace(name),
 		URL:            rawURL,
+		UserAgent:      strings.TrimSpace(userAgent),
 		UpdateInterval: subscription.Duration(defaultUpdateInterval),
 	}
 	subs, err := s.d.SubStore.Load()
@@ -127,6 +136,78 @@ func (s *SubsService) Remove(id string) error {
 	return nil
 }
 
+// Edit updates name and/or URL of an existing subscription. When the URL
+// changes, all servers tagged with this sub's SourceID are removed from
+// servers.json before SubStore.Save persists the new metadata, so the
+// next SyncOne brings in a fresh, ghost-free server set. LastSyncAt and
+// quota fields are reset on URL change; rename-only edits preserve them.
+//
+// Returns the updated SubView for optimistic frontend reconciliation.
+func (s *SubsService) Edit(id, rawURL, name, userAgent string) (hub.SubView, error) {
+	rawURL = strings.TrimSpace(rawURL)
+	if err := validateSubURL(rawURL); err != nil {
+		return hub.SubView{}, err
+	}
+	subs, err := s.d.SubStore.Load()
+	if err != nil {
+		return hub.SubView{}, fmt.Errorf("sub.Load: %w", err)
+	}
+	idx := -1
+	for i := range subs {
+		if subs[i].ID == id {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return hub.SubView{}, errSubNotFound
+	}
+
+	urlChanged := subs[idx].URL != rawURL
+
+	if urlChanged {
+		// Save ordering: server.Save first, then sub.Save. If sub.Save
+		// fails after the cascade, the user keeps the old-URL sub
+		// pointing at empty server set; next SyncOne repopulates from
+		// the still-old URL. The reverse order would strand new-URL
+		// metadata against old-URL servers — harder to diagnose.
+		existing, err := s.d.ServerStore.Load()
+		if err != nil {
+			return hub.SubView{}, fmt.Errorf("server.Load: %w", err)
+		}
+		filtered := existing[:0]
+		for i := range existing {
+			if existing[i].SourceID != id {
+				filtered = append(filtered, existing[i])
+			}
+		}
+		if err := s.d.ServerStore.Save(filtered); err != nil {
+			return hub.SubView{}, fmt.Errorf("server.Save: %w", err)
+		}
+		// Reset sync metadata + quota (these belong to the old URL).
+		subs[idx].LastSyncAt = time.Time{}
+		subs[idx].LastStatus = ""
+		subs[idx].LastMessage = ""
+		subs[idx].Upload = 0
+		subs[idx].Download = 0
+		subs[idx].Total = 0
+		subs[idx].Expire = nil
+		subs[idx].URL = rawURL
+	}
+
+	subs[idx].Name = strings.TrimSpace(name)
+	subs[idx].UserAgent = strings.TrimSpace(userAgent)
+	if err := s.d.SubStore.Save(subs); err != nil {
+		return hub.SubView{}, fmt.Errorf("sub.Save: %w", err)
+	}
+
+	servers, err := s.d.ServerStore.Load()
+	if err != nil {
+		return hub.SubView{}, fmt.Errorf("server.Load: %w", err)
+	}
+	return toSubViews([]subscription.Stored{subs[idx]}, serverCountBySource(servers))[0], nil
+}
+
 // SyncOne fetches one subscription, merges its servers into servers.json,
 // updates the sub's LastSyncAt/LastStatus, and publishes a sub:synced
 // event so subscribers (the frontend store reducer, the tray) can refresh
@@ -162,7 +243,12 @@ func (s *SubsService) SyncOne(id string) error {
 		return fmt.Errorf("server.Load: %w", err)
 	}
 
-	merged, meta, syncErr := subscription.Sync(ctx, found.ToSyncInput(), existing, syncTimeout)
+	input := found.ToSyncInput()
+	if s.d.SettingsView != nil {
+		input.UserAgent, input.HWID, input.DeviceOS, input.OSVersion, input.DeviceModel =
+			resolveIdentity(s.d.SettingsView().Subscriptions, *found, s.d.HWID, s.d.DeviceInfo)
+	}
+	merged, meta, syncErr := subscription.Sync(ctx, input, existing, syncTimeout)
 	// Capture the upstream-fetch outcome before the Save branch may
 	// overwrite syncErr — Userinfo is meaningful exactly when the fetch
 	// itself succeeded, regardless of whether the disk write that follows

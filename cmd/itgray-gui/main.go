@@ -9,7 +9,9 @@ import (
 
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/bindings"
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/chainctl"
+	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
 	"github.com/itg-team/itg-ray/internal/config"
+	"github.com/itg-team/itg-ray/internal/hwid"
 	"github.com/itg-team/itg-ray/internal/logging"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/subscription"
@@ -82,10 +84,39 @@ func main() {
 		ServerStore: serverStore,
 		Hub:         app.Hub(),
 	})
+
+	// settingsStore is constructed early so SubsService can read live
+	// SubscriptionSettings (HWID toggles, default UA) on each SyncOne
+	// without restart — the closure resolves at call time, not init time.
+	configPath := filepath.Join(dataDir, "config.json")
+	settingsStore := bindings.NewConfigStore(configPath, Version, BuildDate)
+
+	// hwid.Get caches a stable per-machine identifier in dataDir; on
+	// machineid unavailability or cache-write failure it still returns a
+	// usable value (random fallback) alongside the error. Log and keep
+	// going — the Sync path tolerates an empty HWID by skipping the
+	// header.
+	hwidValue, err := hwid.Get(dataDir)
+	if err != nil {
+		slog.Warn("hwid.Get returned error; using fallback value", "err", err)
+	}
+	deviceInfo := hwid.Info()
+
 	subsSvc := bindings.NewSubsService(bindings.SubsDeps{
 		SubStore:    subStore,
 		ServerStore: serverStore,
 		Hub:         app.Hub(),
+		SettingsView: func() hub.SettingsView {
+			view, verr := settingsStore.View()
+			if verr != nil {
+				// Fall back to zero value: SyncOne will see HWIDEnabled=false
+				// and emit no identity headers, which is the safe default.
+				return hub.SettingsView{}
+			}
+			return view
+		},
+		HWID:       hwidValue,
+		DeviceInfo: deviceInfo,
 	})
 
 	// chainctl needs a Get-by-id surface; wrap the existing Load/Save
@@ -98,13 +129,13 @@ func main() {
 	helperClient := newHelperClient(helperBootCtx)
 	cancelHelperBoot()
 	// networkLoader reads the user's persisted config.json on every
-	// Connect cycle. The path mirrors bindings.NewConfigStore below so
-	// chainctl reads exactly what SettingsService.Update writes — no
-	// process restart required for Network edits to land on the next
-	// connection. config.Load overlays defaults onto missing/partial
-	// fields, so a fresh box (no config.json yet) yields the same
-	// Network values DefaultNetworkLoader used to.
-	configPath := filepath.Join(dataDir, "config.json")
+	// Connect cycle. The path mirrors bindings.NewConfigStore (declared
+	// above for SubsService) so chainctl reads exactly what
+	// SettingsService.Update writes — no process restart required for
+	// Network edits to land on the next connection. config.Load overlays
+	// defaults onto missing/partial fields, so a fresh box (no
+	// config.json yet) yields the same Network values
+	// DefaultNetworkLoader used to.
 	networkLoader := func() (config.Network, error) {
 		c, err := config.Load(configPath)
 		if err != nil {
@@ -125,7 +156,6 @@ func main() {
 		Chain: chainCtrl,
 		Hub:   app.Hub(),
 	})
-	settingsStore := bindings.NewConfigStore(configPath, Version, BuildDate)
 	settingsSvc := bindings.NewSettingsService(bindings.SettingsDeps{
 		Store: settingsStore,
 		Hub:   app.Hub(),
@@ -145,7 +175,7 @@ func main() {
 		OnQuit: func() { wailsruntime.Quit(app.ctx) },
 	})
 
-	err := wails.Run(&options.App{
+	err = wails.Run(&options.App{
 		Title:            "ITG Ray",
 		Width:            1280,
 		Height:           800,

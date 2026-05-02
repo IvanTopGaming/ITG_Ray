@@ -60,6 +60,17 @@ type KillSwitch struct {
 	AlwaysOn bool `json:"always_on"`
 }
 
+// Subscriptions holds per-app subscription defaults and identity-header
+// preferences (Tier 3.5).
+type Subscriptions struct {
+	DefaultUpdateInterval int    `json:"defaultUpdateInterval"`
+	UserAgent             string `json:"userAgent"`
+	HWIDEnabled           bool   `json:"hwidEnabled"`
+	SendDeviceOS          bool   `json:"sendDeviceOS"`
+	SendOSVersion         bool   `json:"sendOSVersion"`
+	SendDeviceModel       bool   `json:"sendDeviceModel"`
+}
+
 // Notifications enables/disables event-driven OS toasts.
 type Notifications struct {
 	Connected    bool `json:"connected"`
@@ -80,6 +91,7 @@ type Config struct {
 	General       General       `json:"general"`
 	Network       Network       `json:"network"`
 	KillSwitch    KillSwitch    `json:"killswitch"`
+	Subscriptions Subscriptions `json:"subscriptions"`
 	Notifications Notifications `json:"notifications"`
 	Debug         Debug         `json:"debug"`
 }
@@ -96,7 +108,15 @@ func defaults() Config {
 			IPv6Mode: "prefer-v4",
 			DNS:      DNS{Mode: "auto", Servers: nil},
 		},
-		KillSwitch:    KillSwitch{Enabled: true},
+		KillSwitch: KillSwitch{Enabled: true},
+		Subscriptions: Subscriptions{
+			DefaultUpdateInterval: 3600,
+			UserAgent:             "", // empty = inherits from version-injected default downstream
+			HWIDEnabled:           true,
+			SendDeviceOS:          true,
+			SendOSVersion:         true,
+			SendDeviceModel:       true,
+		},
 		Notifications: Notifications{Connected: true, Disconnected: true, QuotaLow: true, SubUpdated: true, Sound: true},
 		Debug:         Debug{LogLevel: "info"},
 	}

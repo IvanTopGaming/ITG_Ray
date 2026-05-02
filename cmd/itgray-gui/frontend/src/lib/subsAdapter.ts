@@ -14,6 +14,7 @@ export interface Sub {
   download?: number;
   total?: number;
   expire?: number;
+  userAgent?: string; // empty/undefined = inherit from global Settings
 }
 
 const ZERO_TIME = "0001-01-01T00:00:00Z";
@@ -54,5 +55,6 @@ export function backendToFrontend(view: hub.SubView): Sub {
     download: nonZero(view.download),
     total: nonZero(view.total),
     expire: expireMs ?? undefined,
+    userAgent: view.userAgent ? view.userAgent : undefined,
   };
 }

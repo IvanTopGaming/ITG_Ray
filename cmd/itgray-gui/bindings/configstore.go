@@ -100,8 +100,12 @@ func (s *ConfigStore) toView(c *config.Config) hub.SettingsView {
 			AlwaysOn: c.KillSwitch.AlwaysOn,
 		},
 		Subscriptions: hub.SubscriptionSettings{
-			DefaultUpdateInterval: 3600,
-			UserAgent:             "ITG-Ray/" + s.version,
+			DefaultUpdateInterval: c.Subscriptions.DefaultUpdateInterval,
+			UserAgent:             firstNonEmpty(c.Subscriptions.UserAgent, "ITGRay/"+s.version),
+			HWIDEnabled:           c.Subscriptions.HWIDEnabled,
+			SendDeviceOS:          c.Subscriptions.SendDeviceOS,
+			SendOSVersion:         c.Subscriptions.SendOSVersion,
+			SendDeviceModel:       c.Subscriptions.SendDeviceModel,
 		},
 		Notifications: hub.NotificationSettings{
 			OnConnected:    c.Notifications.Connected,
@@ -137,8 +141,7 @@ func applyPatch(c *config.Config, section string, patch map[string]any) error {
 	case "killswitch":
 		applyKillSwitch(&c.KillSwitch, patch)
 	case "subscriptions":
-		// no persisted fields yet; accept the patch as a no-op so the
-		// frontend can wire forms without backend churn.
+		applySubscriptions(&c.Subscriptions, patch)
 	case "notifications":
 		applyNotifications(&c.Notifications, patch)
 	case "debug":
@@ -219,6 +222,27 @@ func applyKillSwitch(k *config.KillSwitch, p map[string]any) {
 	}
 }
 
+func applySubscriptions(s *config.Subscriptions, p map[string]any) {
+	if v, ok := p["defaultUpdateInterval"].(float64); ok {
+		s.DefaultUpdateInterval = int(v)
+	}
+	if v, ok := p["userAgent"].(string); ok {
+		s.UserAgent = v
+	}
+	if v, ok := p["hwidEnabled"].(bool); ok {
+		s.HWIDEnabled = v
+	}
+	if v, ok := p["sendDeviceOS"].(bool); ok {
+		s.SendDeviceOS = v
+	}
+	if v, ok := p["sendOSVersion"].(bool); ok {
+		s.SendOSVersion = v
+	}
+	if v, ok := p["sendDeviceModel"].(bool); ok {
+		s.SendDeviceModel = v
+	}
+}
+
 func applyNotifications(n *config.Notifications, p map[string]any) {
 	if v, ok := p["onConnected"].(bool); ok {
 		n.Connected = v
@@ -241,4 +265,13 @@ func applyDebug(d *config.Debug, p map[string]any) {
 	if v, ok := p["logLevel"].(string); ok {
 		d.LogLevel = v
 	}
+}
+
+// firstNonEmpty returns a if non-empty, else b. Used for UserAgent fallback
+// where the version-injected default lives in the bindings layer.
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }

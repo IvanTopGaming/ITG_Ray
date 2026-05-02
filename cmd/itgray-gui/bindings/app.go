@@ -186,6 +186,7 @@ func toSubViews(in []subscription.Stored, serverCount map[string]int) []hub.SubV
 			Download:        s.Download,
 			Total:           s.Total,
 			Expire:          s.Expire,
+			UserAgent:       s.UserAgent,
 		})
 	}
 	return out
@@ -255,7 +256,17 @@ func (a *AppService) collectSettings() hub.SettingsView {
 			DNS:         hub.DNSSettings{Mode: "auto"},
 		},
 		KillSwitch:    hub.KillSwitchSettings{Enabled: true},
-		Subscriptions: hub.SubscriptionSettings{DefaultUpdateInterval: 3600, UserAgent: "ITG-Ray/0.1"},
+		// TODO(tier-4): replace with ConfigStore.View() once Dashboard consumes
+		// App.GetSnapshot. Hardcoded defaults must match config.defaults() so
+		// the Dashboard's first paint doesn't flicker stale HWID/metadata values.
+		Subscriptions: hub.SubscriptionSettings{
+			DefaultUpdateInterval: 3600,
+			UserAgent:             "ITGRay/0.1",
+			HWIDEnabled:           true,
+			SendDeviceOS:          true,
+			SendOSVersion:         true,
+			SendDeviceModel:       true,
+		},
 		Notifications: hub.NotificationSettings{OnConnected: true, OnDisconnected: true, QuotaLow: true, OnSubSynced: true, Sound: true},
 		Debug:         hub.DebugSettings{LogLevel: "info"},
 		About:         hub.AboutSettings{Version: a.d.Version, BuildDate: a.d.BuildDate},
