@@ -174,3 +174,47 @@ func TestSubsService_SyncOne_PreservesUserinfoOnSaveFailure(t *testing.T) {
 	require.EqualValues(t, 1024, got[0].Total, "fresh Total persists despite Save failure")
 	require.Equal(t, "error", got[0].LastStatus, "status reflects disk failure")
 }
+
+func TestSubsService_Edit_RenameOnly_PreservesServersAndLastSync(t *testing.T) {
+	dir := t.TempDir()
+	svc, subStore := newSubsServiceForTest(t, dir)
+	srvPath := filepath.Join(dir, "servers.json")
+
+	syncedAt := time.Now().Add(-1 * time.Hour).UTC().Truncate(time.Second)
+	require.NoError(t, subStore.Save([]subscription.Stored{{
+		ID:         "s1",
+		Name:       "old name",
+		URL:        "https://provider.example/sub",
+		LastSyncAt: syncedAt,
+		LastStatus: "OK",
+	}}))
+	require.NoError(t, server.Save(srvPath, []server.Server{{
+		ID:       "srv1",
+		Origin:   server.OriginSubscription,
+		SourceID: "s1",
+		Name:     "DE",
+		Vless: vless.Config{
+			Address: "h", Port: 443,
+			UUID:      "00000000-0000-0000-0000-000000000000",
+			Transport: vless.TransportTCP,
+			Security:  vless.SecurityNone,
+		},
+	}}))
+
+	view, err := svc.Edit("s1", "https://provider.example/sub", "new name")
+	require.NoError(t, err)
+	require.Equal(t, "new name", view.Name)
+	require.Equal(t, "OK", view.LastSyncStatus)
+	require.True(t, view.LastSyncAt.Equal(syncedAt), "LastSyncAt must be preserved on rename")
+	require.Equal(t, 1, view.ServerCount, "servers must not be cascaded on rename")
+
+	loaded, err := subStore.Load()
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	require.Equal(t, "new name", loaded[0].Name)
+	require.True(t, loaded[0].LastSyncAt.Equal(syncedAt))
+
+	srvs, err := server.Load(srvPath)
+	require.NoError(t, err)
+	require.Len(t, srvs, 1, "server with this SourceID must survive rename")
+}

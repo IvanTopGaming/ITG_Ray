@@ -127,6 +127,49 @@ func (s *SubsService) Remove(id string) error {
 	return nil
 }
 
+// Edit updates name and/or URL of an existing subscription. When the URL
+// changes, all servers tagged with this sub's SourceID are removed from
+// servers.json before SubStore.Save persists the new metadata, so the
+// next SyncOne brings in a fresh, ghost-free server set. LastSyncAt and
+// quota fields are reset on URL change; rename-only edits preserve them.
+//
+// Returns the updated SubView for optimistic frontend reconciliation.
+func (s *SubsService) Edit(id, rawURL, name string) (hub.SubView, error) {
+	rawURL = strings.TrimSpace(rawURL)
+	if err := validateSubURL(rawURL); err != nil {
+		return hub.SubView{}, err
+	}
+	subs, err := s.d.SubStore.Load()
+	if err != nil {
+		return hub.SubView{}, fmt.Errorf("sub.Load: %w", err)
+	}
+	idx := -1
+	for i := range subs {
+		if subs[i].ID == id {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return hub.SubView{}, errSubNotFound
+	}
+
+	urlChanged := subs[idx].URL != rawURL
+
+	if urlChanged {
+		// URL-change branch lands in Task 2.
+		return hub.SubView{}, fmt.Errorf("URL change not yet implemented")
+	}
+
+	subs[idx].Name = strings.TrimSpace(name)
+	if err := s.d.SubStore.Save(subs); err != nil {
+		return hub.SubView{}, fmt.Errorf("sub.Save: %w", err)
+	}
+
+	servers, _ := s.d.ServerStore.Load()
+	return toSubViews([]subscription.Stored{subs[idx]}, serverCountBySource(servers))[0], nil
+}
+
 // SyncOne fetches one subscription, merges its servers into servers.json,
 // updates the sub's LastSyncAt/LastStatus, and publishes a sub:synced
 // event so subscribers (the frontend store reducer, the tray) can refresh
