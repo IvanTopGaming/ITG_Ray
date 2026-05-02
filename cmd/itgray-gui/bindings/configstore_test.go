@@ -163,3 +163,28 @@ func TestConfigStore_FreshLoad_HWIDDefaults(t *testing.T) {
 	require.True(t, v.Subscriptions.SendDeviceModel, "SendDeviceModel default true")
 	require.Equal(t, "ITGRay/1.0", v.Subscriptions.UserAgent, "UA default uses ITGRay (no hyphen)")
 }
+
+// TestConfigStore_UpdateSubscriptions_Persists is the Tier 3.5 regression
+// guard: a Settings UI toggle of HWID/UA must survive disk round-trip.
+// Pre-fix the "subscriptions" applyPatch case was a documented no-op and
+// toView returned hardcoded defaults, so this test fails before Part 4/5.
+func TestConfigStore_UpdateSubscriptions_Persists(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json")
+	store := NewConfigStore(cfgPath, "1.0", "build1")
+
+	// Toggle HWID off, set custom UA.
+	_, err := store.UpdateSection("subscriptions", map[string]any{
+		"hwidEnabled": false,
+		"userAgent":   "Custom/9.9",
+	})
+	require.NoError(t, err)
+
+	// Re-read fresh from disk.
+	store2 := NewConfigStore(cfgPath, "1.0", "build1")
+	v, err := store2.View()
+	require.NoError(t, err)
+	require.False(t, v.Subscriptions.HWIDEnabled, "HWIDEnabled persists as false after UpdateSection")
+	require.Equal(t, "Custom/9.9", v.Subscriptions.UserAgent, "UserAgent persists across reload")
+	require.True(t, v.Subscriptions.SendDeviceOS, "untouched flag preserved")
+}
