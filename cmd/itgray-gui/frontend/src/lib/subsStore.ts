@@ -115,8 +115,8 @@ function scheduleRefetch(): void {
 }
 
 export type SubsActions = {
-  add: (name: string, url: string) => Promise<void>;
-  edit: (id: string, name: string, url: string) => Promise<void>;
+  add: (name: string, url: string, userAgent?: string) => Promise<void>;
+  edit: (id: string, name: string, url: string, userAgent?: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
   syncOne: (id: string) => Promise<void>;
   syncAll: () => Promise<void>;
@@ -124,11 +124,11 @@ export type SubsActions = {
 };
 
 // Module-scope action implementations. Tasks 6-9 replace the throwing stubs.
-async function addAction(name: string, url: string): Promise<void> {
+async function addAction(name: string, url: string, userAgent?: string): Promise<void> {
   setState({ ...state, inFlight: { ...state.inFlight, adding: true } });
   try {
-    // Note: public action takes (name, url); Go binding takes (url, name).
-    const view = await AddSub(url, name);
+    // Note: public action takes (name, url, ua?); Go binding takes (url, name, userAgent).
+    const view = await AddSub(url, name, userAgent ?? "");
     // Backend kicks off background SyncOne — reflect that optimistically
     // with status "syncing" before the sub:synced event lands.
     const newSub: Sub = { ...backendToFrontend(view), status: "syncing" };
@@ -144,13 +144,13 @@ async function addAction(name: string, url: string): Promise<void> {
     throw err;
   }
 }
-async function editAction(id: string, name: string, url: string): Promise<void> {
+async function editAction(id: string, name: string, url: string, userAgent?: string): Promise<void> {
   const editingNext = new Set(state.inFlight.editing);
   editingNext.add(id);
   setState({ ...state, inFlight: { ...state.inFlight, editing: editingNext } });
   try {
-    // Note: public action takes (id, name, url); Go binding takes (id, url, name).
-    const view = await EditSub(id, url, name);
+    // Note: public action takes (id, name, url, ua?); Go binding takes (id, url, name, userAgent).
+    const view = await EditSub(id, url, name, userAgent ?? "");
     const updated = backendToFrontend(view);
     const editingDone = new Set(state.inFlight.editing);
     editingDone.delete(id);

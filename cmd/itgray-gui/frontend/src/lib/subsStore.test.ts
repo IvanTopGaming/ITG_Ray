@@ -183,7 +183,7 @@ describe("subsStore.add", () => {
       await result.current.actions.add("new", "https://x");
     });
 
-    expect(mockAdd).toHaveBeenCalledWith("https://x", "new");
+    expect(mockAdd).toHaveBeenCalledWith("https://x", "new", "");
     expect(result.current.state.inFlight.adding).toBe(false);
     if (result.current.state.load.kind === "ready") {
       expect(result.current.state.load.subs).toHaveLength(1);
@@ -408,7 +408,7 @@ describe("subsStore.edit", () => {
       await result.current.actions.edit("s1", "renamed", "https://2");
     });
 
-    expect(mockEdit).toHaveBeenCalledWith("s1", "https://2", "renamed");
+    expect(mockEdit).toHaveBeenCalledWith("s1", "https://2", "renamed", "");
     expect(result.current.state.load.kind).toBe("ready");
     if (result.current.state.load.kind === "ready") {
       const row = result.current.state.load.subs.find(s => s.id === "s1");
@@ -438,6 +438,92 @@ describe("subsStore.edit", () => {
       expect(result.current.state.load.subs[0].url).toBe("https://1");
     }
     expect(result.current.state.inFlight.editing.has("s1")).toBe(false);
+  });
+});
+
+describe("subsStore.add — userAgent passthrough", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const mod = await import("./subsStore");
+    mod.__resetForTests();
+  });
+
+  it("passes userAgent (3rd arg) through to AddSub binding", async () => {
+    mockList.mockResolvedValueOnce([]);
+    mockAdd.mockResolvedValueOnce({
+      id: "s-new", name: "n", url: "https://x",
+      lastSyncAt: "0001-01-01T00:00:00Z", lastSyncStatus: "",
+      serverCount: 0, updateInterval: 3600, userAgent: "Custom/1.0",
+    });
+    const { useSubs } = await import("./subsStore");
+    const { result } = renderHook(() => useSubs());
+    await act(async () => { await Promise.resolve(); });
+
+    await act(async () => {
+      await result.current.actions.add("n", "https://x", "Custom/1.0");
+    });
+    expect(mockAdd).toHaveBeenCalledWith("https://x", "n", "Custom/1.0");
+  });
+
+  it("passes empty string when userAgent omitted", async () => {
+    mockList.mockResolvedValueOnce([]);
+    mockAdd.mockResolvedValueOnce({
+      id: "s-new", name: "n", url: "https://x",
+      lastSyncAt: "0001-01-01T00:00:00Z", lastSyncStatus: "",
+      serverCount: 0, updateInterval: 3600,
+    });
+    const { useSubs } = await import("./subsStore");
+    const { result } = renderHook(() => useSubs());
+    await act(async () => { await Promise.resolve(); });
+
+    await act(async () => { await result.current.actions.add("n", "https://x"); });
+    expect(mockAdd).toHaveBeenCalledWith("https://x", "n", "");
+  });
+});
+
+describe("subsStore.edit — userAgent passthrough", () => {
+  const seed = [
+    { id: "s1", name: "old", url: "https://1", lastSyncAt: "0001-01-01T00:00:00Z", lastSyncStatus: "", serverCount: 5, updateInterval: 3600, userAgent: "old/1.0" },
+  ];
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const mod = await import("./subsStore");
+    mod.__resetForTests();
+  });
+
+  it("passes userAgent (4th arg) through to EditSub binding", async () => {
+    mockList.mockResolvedValueOnce(seed);
+    mockEdit.mockResolvedValueOnce({
+      id: "s1", name: "new", url: "https://2",
+      lastSyncAt: "0001-01-01T00:00:00Z", lastSyncStatus: "",
+      serverCount: 0, updateInterval: 3600, userAgent: "Hiddify/1.0",
+    });
+    const { useSubs } = await import("./subsStore");
+    const { result } = renderHook(() => useSubs());
+    await act(async () => { await Promise.resolve(); });
+
+    await act(async () => {
+      await result.current.actions.edit("s1", "new", "https://2", "Hiddify/1.0");
+    });
+    expect(mockEdit).toHaveBeenCalledWith("s1", "https://2", "new", "Hiddify/1.0");
+  });
+
+  it("empty userAgent clears the per-sub override", async () => {
+    mockList.mockResolvedValueOnce(seed);
+    mockEdit.mockResolvedValueOnce({
+      id: "s1", name: "old", url: "https://1",
+      lastSyncAt: "0001-01-01T00:00:00Z", lastSyncStatus: "",
+      serverCount: 5, updateInterval: 3600,
+    });
+    const { useSubs } = await import("./subsStore");
+    const { result } = renderHook(() => useSubs());
+    await act(async () => { await Promise.resolve(); });
+
+    await act(async () => {
+      await result.current.actions.edit("s1", "old", "https://1", "");
+    });
+    expect(mockEdit).toHaveBeenCalledWith("s1", "https://1", "old", "");
   });
 });
 
