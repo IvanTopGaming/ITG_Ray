@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useState } from "react";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
   AlertTriangle,
@@ -10,13 +10,11 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { EventsOn } from "../../wailsjs/runtime/runtime";
-import { List as ListSubs } from "../../wailsjs/go/bindings/SubsService";
-import { backendToFrontend, type Sub } from "@/lib/subsAdapter";
+import { type Sub } from "@/lib/subsAdapter";
+import { useSubs } from "@/lib/subsStore";
 
 type SyncStatus = "ok" | "error" | "syncing" | "never";
 
-const GB = 1024 * 1024 * 1024;
 const DAY = 24 * 60 * 60 * 1000;
 
 const SNAP_EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
@@ -39,113 +37,10 @@ type ModalState =
   | { kind: "add" }
   | { kind: "edit"; sub: Sub };
 
-type LoadState =
-  | { kind: "loading" }
-  | { kind: "ready"; subs: Sub[] }
-  | { kind: "error"; message: string };
-
 export function Subscriptions() {
-  const [load, setLoad] = useState<LoadState>({ kind: "loading" });
+  const { state, actions } = useSubs();
   const [modal, setModal] = useState<ModalState>({ kind: "closed" });
-
-  const refresh = useCallback(async () => {
-    try {
-      const views = await ListSubs();
-      setLoad({ kind: "ready", subs: views.map(backendToFrontend) });
-    } catch (err) {
-      setLoad({ kind: "error", message: String(err) });
-    }
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-    // Capture the unsubscribe function returned by EventsOn (Wails v2.4+)
-    // so cleanup only removes our own listener — EventsOff(name) clears
-    // ALL listeners for the event, which would silently tear down any
-    // future co-subscribers (planned tray badge / cross-page toasts).
-    const off = EventsOn("sub:synced", () => {
-      void refresh();
-    });
-    return off;
-  }, [refresh]);
-
-  // Convenience accessors so the existing mock mutation handlers below
-  // (syncOne, syncAll, handleAdd, handleEditSave, handleDelete) keep
-  // their `(prev) => prev.map(...)` form. Tier 3 will replace them with
-  // real SubsService.SyncOne/Add/Remove calls.
-  const subs = load.kind === "ready" ? load.subs : [];
-  const setSubs = (next: Sub[] | ((prev: Sub[]) => Sub[])) => {
-    setLoad((cur) => {
-      if (cur.kind !== "ready") return cur;
-      const updated =
-        typeof next === "function" ? (next as (p: Sub[]) => Sub[])(cur.subs) : next;
-      return { kind: "ready", subs: updated };
-    });
-  };
-
-  function syncOne(id: string) {
-    setSubs((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, status: "syncing" } : s)),
-    );
-    const delay = 900 + Math.random() * 1500;
-    setTimeout(() => {
-      setSubs((prev) =>
-        prev.map((s) => {
-          if (s.id !== id) return s;
-          const success = Math.random() > 0.15;
-          if (success) {
-            return {
-              ...s,
-              status: "ok",
-              lastSyncAt: Date.now(),
-              serverCount: 6 + Math.floor(Math.random() * 8),
-              lastSyncMessage: undefined,
-              download:
-                (s.download ?? 0) + Math.random() * 0.6 * GB,
-              upload:
-                (s.upload ?? 0) + Math.random() * 0.04 * GB,
-            };
-          }
-          return {
-            ...s,
-            status: "error",
-            lastSyncAt: Date.now(),
-            lastSyncMessage: "Subscription endpoint not reachable",
-          };
-        }),
-      );
-    }, delay);
-  }
-
-  function syncAll() {
-    subs.forEach((s, i) => setTimeout(() => syncOne(s.id), i * 150));
-  }
-
-  function handleAdd(name: string, url: string) {
-    const sub: Sub = {
-      id: `sub-${Date.now()}`,
-      name,
-      url,
-      status: "never",
-      lastSyncAt: null,
-      serverCount: 0,
-    };
-    setSubs((prev) => [...prev, sub]);
-    setModal({ kind: "closed" });
-    setTimeout(() => syncOne(sub.id), 250);
-  }
-
-  function handleEditSave(id: string, name: string, url: string) {
-    setSubs((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, name, url } : s)),
-    );
-    setModal({ kind: "closed" });
-  }
-
-  function handleDelete(id: string) {
-    setSubs((prev) => prev.filter((s) => s.id !== id));
-    setModal({ kind: "closed" });
-  }
+  const subs = state.load.kind === "ready" ? state.load.subs : [];
 
   return (
     <>
@@ -164,14 +59,14 @@ export function Subscriptions() {
           </h1>
           <div className="flex items-center gap-2">
             <SyncAllButton
-              onClick={syncAll}
+              onClick={() => void actions.syncAll()}
               disabled={subs.length === 0}
             />
             <AddButton onClick={() => setModal({ kind: "add" })} />
           </div>
         </motion.div>
 
-        {load.kind === "loading" ? (
+        {state.load.kind === "loading" ? (
           <motion.div
             variants={itemVariants}
             className="flex flex-col gap-3"
@@ -183,7 +78,7 @@ export function Subscriptions() {
               />
             ))}
           </motion.div>
-        ) : load.kind === "error" ? (
+        ) : state.load.kind === "error" ? (
           <motion.div
             variants={itemVariants}
             className="glass-regular flex items-center justify-between gap-4 rounded-2xl p-5"
@@ -192,20 +87,17 @@ export function Subscriptions() {
               <div className="text-[14px] font-medium text-white">
                 Failed to load subscriptions
               </div>
-              <div className="text-[12px] text-white/60">{load.message}</div>
+              <div className="text-[12px] text-white/60">{state.load.message}</div>
             </div>
             <button
               type="button"
-              onClick={() => {
-                setLoad({ kind: "loading" });
-                void refresh();
-              }}
+              onClick={() => void actions.refresh()}
               className="glass-regular rounded-full px-4 py-1.5 text-[12px] text-white hover:bg-white/10"
             >
               Retry
             </button>
           </motion.div>
-        ) : load.subs.length === 0 ? (
+        ) : state.load.subs.length === 0 ? (
           <motion.div
             variants={itemVariants}
             className="glass-regular rounded-2xl p-10 text-center text-[13px] text-white/55"
@@ -214,7 +106,7 @@ export function Subscriptions() {
           </motion.div>
         ) : (
           <AnimatePresence mode="popLayout">
-            {load.subs.map((sub) => (
+            {state.load.subs.map((sub) => (
               <motion.div
                 key={sub.id}
                 layout
@@ -228,7 +120,7 @@ export function Subscriptions() {
               >
                 <SubCard
                   sub={sub}
-                  onSync={() => syncOne(sub.id)}
+                  onSync={() => void actions.syncOne(sub.id)}
                   onEdit={() => setModal({ kind: "edit", sub })}
                 />
               </motion.div>
@@ -242,9 +134,9 @@ export function Subscriptions() {
           <SubModal
             modal={modal}
             onClose={() => setModal({ kind: "closed" })}
-            onAdd={handleAdd}
-            onEditSave={handleEditSave}
-            onDelete={handleDelete}
+            onAdd={actions.add}
+            onEditSave={actions.edit}
+            onDelete={actions.remove}
           />
         )}
       </AnimatePresence>
@@ -555,9 +447,9 @@ function SubModal({
 }: {
   modal: Exclude<ModalState, { kind: "closed" }>;
   onClose: () => void;
-  onAdd: (name: string, url: string) => void;
-  onEditSave: (id: string, name: string, url: string) => void;
-  onDelete: (id: string) => void;
+  onAdd: (name: string, url: string) => Promise<void>;
+  onEditSave: (id: string, name: string, url: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
 }) {
   const isAdd = modal.kind === "add";
   const sub = !isAdd ? modal.sub : null;
