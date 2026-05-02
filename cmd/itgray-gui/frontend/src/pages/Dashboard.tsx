@@ -9,6 +9,7 @@ import {
 import { ArrowRight, Star } from "lucide-react";
 import { motion, type Variants } from "framer-motion";
 import { GlowOrb, type OrbStatus } from "@/components/GlowOrb";
+import { CountryFlag } from "@/components/controls/CountryFlag";
 import { cn } from "@/lib/cn";
 
 type Mode = "sysproxy" | "tun";
@@ -348,8 +349,12 @@ function ActiveRoute({
   }
   return (
     <div className="flex h-[48px] flex-col">
-      <div className="h-[28px] text-[24px] font-bold leading-[28px] tracking-tight">
-        {server.flag} {server.city}
+      <div className="flex h-[28px] items-center gap-2 text-[24px] font-bold leading-[28px] tracking-tight">
+        <CountryFlag
+          code={server.flag}
+          className="h-[18px] w-[27px] shrink-0 rounded-[2px] object-cover shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
+        />
+        <span>{server.city}</span>
       </div>
       <div className="mt-1 h-[16px] font-mono text-[12px] leading-[16px] tabular-nums text-white/55">
         {server.code} · {server.pingMs} ms · {mode}
@@ -490,9 +495,10 @@ function QuickSwitch({
                   transition={{ type: "spring", stiffness: 380, damping: 32 }}
                 />
               )}
-              <span className="relative z-10 text-[26px] leading-none">
-                {server.flag}
-              </span>
+              <CountryFlag
+                code={server.flag}
+                className="relative z-10 h-[20px] w-[30px] shrink-0 rounded-[2px] object-cover shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
+              />
               <div className="relative z-10 flex min-w-0 flex-1 flex-col gap-0.5">
                 <div className="flex items-center gap-1.5">
                   <span className="truncate text-[13px] font-semibold">
@@ -662,12 +668,26 @@ function ConnectionInfo({
     s2: "62.171.•••.21",
     s3: "92.118.•••.48",
   };
-  const rows: Array<{ label: string; value: string; accent?: string }> = [
+  const rows: Array<{
+    label: string;
+    value: React.ReactNode;
+    accent?: string;
+  }> = [
     { label: "Protocol", value: "VLESS · Reality" },
     { label: "Transport", value: "WebSocket" },
     {
       label: "Public IP",
-      value: live ? `${fakePublicIP[server.id] ?? dash} · ${server.flag}` : dash,
+      value: live ? (
+        <>
+          {fakePublicIP[server.id] ?? dash} ·{" "}
+          <CountryFlag
+            code={server.flag}
+            className="inline-block h-[10px] w-[15px] rounded-[2px] align-[-1px] shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
+          />
+        </>
+      ) : (
+        dash
+      ),
     },
     { label: "DNS", value: "1.1.1.1, 8.8.8.8" },
   ];
