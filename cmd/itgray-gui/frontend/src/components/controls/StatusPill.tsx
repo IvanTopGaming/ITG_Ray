@@ -1,6 +1,6 @@
 import { cn } from '@/lib/cn';
 
-export type StatusPillStatus = 'running' | 'stopped' | 'error' | 'pending';
+export type StatusPillStatus = 'running' | 'stopped' | 'error' | 'pending' | 'missing';
 
 export type StatusPillProps = {
   status: StatusPillStatus;
@@ -28,6 +28,11 @@ const STYLES: Record<StatusPillStatus, { container: string; dot: string; label: 
     container: 'bg-warn/[0.12] border-warn/30 text-warn',
     dot: 'bg-warn shadow-[0_0_6px_#ffb13c] animate-pulse',
     label: 'Pending',
+  },
+  missing: {
+    container: 'bg-danger/[0.12] border-danger/30 text-danger',
+    dot: 'bg-danger shadow-[0_0_6px_#ff5e5e]',
+    label: 'Not installed',
   },
 };
 
