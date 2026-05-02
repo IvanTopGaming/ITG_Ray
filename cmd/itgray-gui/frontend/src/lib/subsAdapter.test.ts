@@ -115,4 +115,11 @@ describe("backendToFrontend", () => {
     expect(sub.url).toBe("https://z");
     expect(sub.serverCount).toBe(7);
   });
+
+  it("maps userAgent through, treating empty as undefined", () => {
+    const a = backendToFrontend(makeView({ userAgent: "Custom/1.0" }));
+    expect(a.userAgent).toBe("Custom/1.0");
+    const b = backendToFrontend(makeView({ userAgent: "" }));
+    expect(b.userAgent).toBeUndefined();
+  });
 });
