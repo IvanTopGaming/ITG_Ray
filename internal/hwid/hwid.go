@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 
 	"github.com/denisbrodbeck/machineid"
+	"github.com/itg-team/itg-ray/internal/config"
 )
 
 const (
@@ -33,18 +34,26 @@ const (
 //
 // Step 3 ensures we always return SOMETHING usable. Persisted value lives
 // forever unless the user deletes hwid.dat manually.
+//
+// Returns a non-nil error in two non-fatal cases:
+//   - cache write failed (value still usable, will be recomputed next call)
+//   - machineid was unavailable (random fallback used; non-deterministic across
+//     re-installs). Callers should log the error but use the returned value.
 func Get(configDir string) (string, error) {
 	cachePath := filepath.Join(configDir, cacheFilename)
 	if v, err := readCache(cachePath); err == nil {
 		return v, nil
 	}
 
-	v, err := machineid.ProtectedID(appSalt)
-	if err != nil {
+	v, midErr := machineid.ProtectedID(appSalt)
+	if midErr != nil {
 		v = randomHex()
 	}
 	if writeErr := writeCache(cachePath, v); writeErr != nil {
 		return v, fmt.Errorf("hwid cache write: %w", writeErr)
+	}
+	if midErr != nil {
+		return v, fmt.Errorf("hwid machineid unavailable, used random fallback: %w", midErr)
 	}
 	return v, nil
 }
@@ -65,10 +74,7 @@ func readCache(path string) (string, error) {
 }
 
 func writeCache(path, v string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(path, []byte(v), 0o600)
+	return config.WriteAtomic(path, []byte(v), 0o600)
 }
 
 func randomHex() string {

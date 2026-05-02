@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -57,4 +58,18 @@ func TestRandomHex_ReturnsValidLengthHex(t *testing.T) {
 	require.Len(t, v, expectedHexLen)
 	_, err := hex.DecodeString(v)
 	require.NoError(t, err)
+}
+
+func TestGet_CacheWriteFails_StillReturnsValue(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod semantics differ on Windows")
+	}
+	dir := t.TempDir()
+	// Make configDir un-writable so writeCache cannot create the file.
+	require.NoError(t, os.Chmod(dir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+
+	v, err := Get(dir)
+	require.Error(t, err, "should surface write error")
+	require.Len(t, v, expectedHexLen, "but still return a usable hex value")
 }
