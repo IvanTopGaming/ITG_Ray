@@ -81,3 +81,82 @@ describe("subsStore — init + refresh + useSubs", () => {
     expect(mockEventsOn).toHaveBeenCalledWith("sub:synced", expect.any(Function));
   });
 });
+
+describe("subsStore — actions identity", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const mod = await import("./subsStore");
+    mod.__resetForTests();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("actions object identity is stable across re-renders", async () => {
+    mockList.mockResolvedValueOnce([]);
+    const { useSubs } = await import("./subsStore");
+    const { result, rerender } = renderHook(() => useSubs());
+    await act(async () => { await Promise.resolve(); });
+    const firstActions = result.current.actions;
+    rerender();
+    expect(result.current.actions).toBe(firstActions);
+  });
+});
+
+describe("subsStore — refresh coalescing", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    const mod = await import("./subsStore");
+    mod.__resetForTests();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("does NOT fan-out concurrent List calls when sub:synced arrives during in-flight refresh", async () => {
+    let registeredHandler: (() => void) | null = null;
+    mockEventsOn.mockImplementationOnce((_n: string, h: (...data: unknown[]) => void) => {
+      registeredHandler = h as () => void;
+      return () => {};
+    });
+    // Initial List for ensureInit; resolve immediately.
+    mockList.mockResolvedValueOnce([]);
+    const { useSubs } = await import("./subsStore");
+    renderHook(() => useSubs());
+    await act(async () => { await vi.runAllTimersAsync(); });
+    expect(mockList).toHaveBeenCalledTimes(1);
+
+    // Subsequent List takes time — set up a deferred resolve we control.
+    let resolveSecondList: ((v: unknown[]) => void) | null = null;
+    mockList.mockImplementationOnce(() => new Promise(resolve => { resolveSecondList = resolve as (v: unknown[]) => void; }));
+
+    // Trigger first event → debounce timer schedules refresh after 50ms.
+    act(() => { registeredHandler!(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(60); });
+    // List should have been called twice now (initial + first triggered).
+    expect(mockList).toHaveBeenCalledTimes(2);
+
+    // While the second List is in flight (not yet resolved), fire 5 more events.
+    act(() => {
+      registeredHandler!();
+      registeredHandler!();
+      registeredHandler!();
+      registeredHandler!();
+      registeredHandler!();
+    });
+    // No new List calls should happen yet — they're coalesced.
+    expect(mockList).toHaveBeenCalledTimes(2);
+
+    // Now resolve the in-flight List; trailing refresh schedules after 50ms.
+    mockList.mockResolvedValueOnce([]);  // for the trailing refresh
+    await act(async () => {
+      resolveSecondList!([]);
+      await vi.advanceTimersByTimeAsync(60);
+    });
+    // Exactly one trailing refresh, regardless of how many events fired.
+    expect(mockList).toHaveBeenCalledTimes(3);
+  });
+});

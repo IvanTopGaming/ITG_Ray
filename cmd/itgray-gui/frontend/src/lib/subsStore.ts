@@ -76,17 +76,37 @@ async function ensureInit(): Promise<void> {
   await refresh();
 }
 
+let refreshInFlight = false;
+let coalescedTrailing = false;
+
 async function refresh(): Promise<void> {
+  if (refreshInFlight) {
+    // Direct caller (e.g. manual reload) hit during another refresh —
+    // coalesce into a trailing refresh instead of running concurrently.
+    coalescedTrailing = true;
+    return;
+  }
+  refreshInFlight = true;
   try {
     const views = await ListSubs();
     setState({ ...state, load: { kind: "ready", subs: views.map(backendToFrontend) } });
   } catch (err) {
     setState({ ...state, load: { kind: "error", message: String(err) } });
+  } finally {
+    refreshInFlight = false;
+    if (coalescedTrailing) {
+      coalescedTrailing = false;
+      scheduleRefetch();
+    }
   }
 }
 
 let pendingRefetch: number | null = null;
 function scheduleRefetch(): void {
+  if (refreshInFlight) {
+    coalescedTrailing = true;
+    return;
+  }
   if (pendingRefetch !== null) return;
   pendingRefetch = window.setTimeout(() => {
     pendingRefetch = null;
@@ -94,34 +114,55 @@ function scheduleRefetch(): void {
   }, 50);
 }
 
-export function useSubs(): {
-  state: SubsState;
-  actions: {
-    add: (name: string, url: string) => Promise<void>;
-    edit: (id: string, name: string, url: string) => Promise<void>;
-    remove: (id: string) => Promise<void>;
-    syncOne: (id: string) => Promise<void>;
-    syncAll: () => Promise<void>;
-    refresh: () => Promise<void>;
-  };
-} {
-  void ensureInit();
-  const snap = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  return {
-    state: snap,
-    actions: {
-      add: async () => { throw new Error("add not implemented"); },
-      edit: async () => { throw new Error("edit not implemented"); },
-      remove: async () => { throw new Error("remove not implemented"); },
-      syncOne: async () => { throw new Error("syncOne not implemented"); },
-      syncAll: async () => { throw new Error("syncAll not implemented"); },
-      refresh,
-    },
-  };
+export type SubsActions = {
+  add: (name: string, url: string) => Promise<void>;
+  edit: (id: string, name: string, url: string) => Promise<void>;
+  remove: (id: string) => Promise<void>;
+  syncOne: (id: string) => Promise<void>;
+  syncAll: () => Promise<void>;
+  refresh: () => Promise<void>;
+};
+
+// Module-scope action implementations. Tasks 6-9 replace the throwing stubs.
+async function addAction(_name: string, _url: string): Promise<void> {
+  throw new Error("add not implemented");
+}
+async function editAction(_id: string, _name: string, _url: string): Promise<void> {
+  throw new Error("edit not implemented");
+}
+async function removeAction(_id: string): Promise<void> {
+  throw new Error("remove not implemented");
+}
+async function syncOneAction(_id: string): Promise<void> {
+  throw new Error("syncOne not implemented");
+}
+async function syncAllAction(): Promise<void> {
+  throw new Error("syncAll not implemented");
 }
 
-// Suppress unused-binding warnings until Tasks 6-9 wire these in.
-void AddSub; void EditSub; void RemoveSub; void SyncOneSub; void SyncAllSubs;
+const actions: SubsActions = {
+  add: addAction,
+  edit: editAction,
+  remove: removeAction,
+  syncOne: syncOneAction,
+  syncAll: syncAllAction,
+  refresh,
+};
+
+export function useSubs(): { state: SubsState; actions: SubsActions } {
+  void ensureInit();
+  const snap = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  return { state: snap, actions };
+}
+
+// Module scope — re-exported for Tasks 6-9 to wire into the action bodies.
+// TS would warn 'imported but unused' otherwise; the void expressions are
+// no-ops kept until the next tasks reference each binding directly.
+void AddSub;
+void EditSub;
+void RemoveSub;
+void SyncOneSub;
+void SyncAllSubs;
 
 // Test escape hatch — mirrors settings.ts.__resetForTests.
 export function __resetForTests(): void {
@@ -132,6 +173,8 @@ export function __resetForTests(): void {
   listeners.clear();
   initStarted = false;
   eventsRegistered = false;
+  refreshInFlight = false;
+  coalescedTrailing = false;
   if (pendingRefetch !== null) {
     window.clearTimeout(pendingRefetch);
     pendingRefetch = null;
