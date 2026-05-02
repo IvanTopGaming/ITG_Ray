@@ -71,10 +71,25 @@ describe("Subscriptions page", () => {
       fireEvent.click(screen.getByRole("button", { name: "Add" }));
       await Promise.resolve();
     });
-    expect(add).toHaveBeenCalledWith("new", "https://x.example");
+    expect(add).toHaveBeenCalledWith("new", "https://x.example", "");
     await waitFor(() => {
       expect(screen.queryByPlaceholderText(/Main provider/)).not.toBeInTheDocument();
     });
+  });
+
+  it("Add with custom UA dispatches actions.add with userAgent", async () => {
+    const add = vi.fn().mockResolvedValue(undefined);
+    mockUseSubs.mockReturnValue(makeStore({ add }));
+    render(<Subscriptions />);
+    fireEvent.click(screen.getByText(/Add subscription/));
+    fireEvent.change(screen.getByPlaceholderText(/Main provider/), { target: { value: "n" } });
+    fireEvent.change(screen.getByPlaceholderText(/provider\.example/), { target: { value: "https://x" } });
+    fireEvent.change(screen.getByPlaceholderText(/Settings default/), { target: { value: "Hiddify/1.0" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+      await Promise.resolve();
+    });
+    expect(add).toHaveBeenCalledWith("n", "https://x", "Hiddify/1.0");
   });
 
   it("Add backend error shows banner and keeps modal open", async () => {
