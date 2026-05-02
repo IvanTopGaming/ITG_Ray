@@ -19,6 +19,14 @@ type Subscription struct {
 	UserAgent      string
 	Auth           AuthFunc
 	UpdateInterval time.Duration
+
+	// Identity headers (Remnawave x-hwid contract). Pre-resolved by the
+	// bindings layer (resolveIdentity in cmd/itgray-gui/bindings/identity.go).
+	// Empty values cause Fetch to skip the corresponding header.
+	HWID        string
+	DeviceOS    string
+	OSVersion   string
+	DeviceModel string
 }
 
 // SyncMeta describes the outcome of a Sync call.
@@ -45,11 +53,16 @@ type SyncMeta struct {
 // succeeded. Callers should always persist meta regardless of err.
 func Sync(ctx context.Context, sub Subscription, existing []server.Server, timeout time.Duration) ([]server.Server, SyncMeta, error) { //nolint:gocritic // sub is a value type; caller convenience outweighs copy cost
 	meta := SyncMeta{LastUpdate: time.Now()}
-	ua := sub.UserAgent
-	if ua == "" {
-		ua = "ITG-Ray/0.1"
-	}
-	res, err := Fetch(ctx, FetchOptions{URL: sub.URL, UserAgent: ua, Auth: sub.Auth, Timeout: timeout})
+	res, err := Fetch(ctx, FetchOptions{
+		URL:         sub.URL,
+		UserAgent:   sub.UserAgent,
+		Auth:        sub.Auth,
+		Timeout:     timeout,
+		HWID:        sub.HWID,
+		DeviceOS:    sub.DeviceOS,
+		OSVersion:   sub.OSVersion,
+		DeviceModel: sub.DeviceModel,
+	})
 	if err != nil {
 		meta.Status = "error"
 		meta.Message = err.Error()
