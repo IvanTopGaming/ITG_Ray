@@ -4,6 +4,7 @@ go 1.26
 
 require (
 	github.com/Microsoft/go-winio v0.6.2
+	github.com/denisbrodbeck/machineid v1.0.1
 	github.com/sagernet/sing-box v1.13.11
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
