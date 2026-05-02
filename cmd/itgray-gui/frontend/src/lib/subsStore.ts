@@ -147,8 +147,31 @@ async function addAction(name: string, url: string): Promise<void> {
 async function editAction(_id: string, _name: string, _url: string): Promise<void> {
   throw new Error("edit not implemented");
 }
-async function removeAction(_id: string): Promise<void> {
-  throw new Error("remove not implemented");
+async function removeAction(id: string): Promise<void> {
+  if (state.load.kind !== "ready") return;
+  const before = state.load.subs;
+  const removingNext = new Set(state.inFlight.removing);
+  removingNext.add(id);
+  setState({
+    ...state,
+    load: { kind: "ready", subs: before.filter(s => s.id !== id) },
+    inFlight: { ...state.inFlight, removing: removingNext },
+  });
+  try {
+    await RemoveSub(id);
+    const removingDone = new Set(state.inFlight.removing);
+    removingDone.delete(id);
+    setState({ ...state, inFlight: { ...state.inFlight, removing: removingDone } });
+  } catch (err) {
+    const removingDone = new Set(state.inFlight.removing);
+    removingDone.delete(id);
+    setState({
+      ...state,
+      load: { kind: "ready", subs: before },
+      inFlight: { ...state.inFlight, removing: removingDone },
+    });
+    throw err;
+  }
 }
 async function syncOneAction(_id: string): Promise<void> {
   throw new Error("syncOne not implemented");
@@ -176,7 +199,6 @@ export function useSubs(): { state: SubsState; actions: SubsActions } {
 // TS would warn 'imported but unused' otherwise; the void expressions are
 // no-ops kept until the next tasks reference each binding directly.
 void EditSub;
-void RemoveSub;
 void SyncOneSub;
 void SyncAllSubs;
 

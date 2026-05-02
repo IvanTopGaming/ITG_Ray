@@ -211,3 +211,48 @@ describe("subsStore.add", () => {
     }
   });
 });
+
+describe("subsStore.remove", () => {
+  const seed = [
+    { id: "s1", name: "a", url: "https://1", lastSyncAt: "0001-01-01T00:00:00Z", lastSyncStatus: "", serverCount: 0, updateInterval: 3600 },
+    { id: "s2", name: "b", url: "https://2", lastSyncAt: "0001-01-01T00:00:00Z", lastSyncStatus: "", serverCount: 0, updateInterval: 3600 },
+  ];
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const mod = await import("./subsStore");
+    mod.__resetForTests();
+  });
+
+  it("optimistically removes the row on success", async () => {
+    mockList.mockResolvedValueOnce(seed);
+    mockRemove.mockResolvedValueOnce(undefined);
+    const { useSubs } = await import("./subsStore");
+    const { result } = renderHook(() => useSubs());
+    await act(async () => { await Promise.resolve(); });
+
+    await act(async () => {
+      await result.current.actions.remove("s1");
+    });
+    expect(mockRemove).toHaveBeenCalledWith("s1");
+    if (result.current.state.load.kind === "ready") {
+      expect(result.current.state.load.subs.map(s => s.id)).toEqual(["s2"]);
+    }
+  });
+
+  it("reverts the row and rethrows on backend error", async () => {
+    mockList.mockResolvedValueOnce(seed);
+    mockRemove.mockRejectedValueOnce(new Error("disk full"));
+    const { useSubs } = await import("./subsStore");
+    const { result } = renderHook(() => useSubs());
+    await act(async () => { await Promise.resolve(); });
+
+    await act(async () => {
+      await expect(result.current.actions.remove("s1")).rejects.toThrow(/disk full/);
+    });
+
+    if (result.current.state.load.kind === "ready") {
+      expect(result.current.state.load.subs.map(s => s.id).sort()).toEqual(["s1", "s2"]);
+    }
+  });
+});
