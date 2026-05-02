@@ -21,6 +21,11 @@ type fakeSvcOps struct {
 	stopName    string
 	startErr    error
 	stopErr     error
+
+	restartName   string
+	reinstallName string
+	restartErr    error
+	reinstallErr  error
 }
 
 func (f *fakeSvcOps) Status(string) (svcmgr.State, error) { return f.state, f.statusErr }
@@ -28,8 +33,10 @@ func (f *fakeSvcOps) Install(n, p, d string) error {
 	f.installArgs = [3]string{n, p, d}
 	return f.installErr
 }
-func (f *fakeSvcOps) Start(n string) error { f.startName = n; return f.startErr }
-func (f *fakeSvcOps) Stop(n string) error  { f.stopName = n; return f.stopErr }
+func (f *fakeSvcOps) Start(n string) error     { f.startName = n; return f.startErr }
+func (f *fakeSvcOps) Stop(n string) error      { f.stopName = n; return f.stopErr }
+func (f *fakeSvcOps) Restart(n string) error   { f.restartName = n; return f.restartErr }
+func (f *fakeSvcOps) Reinstall(n string) error { f.reinstallName = n; return f.reinstallErr }
 
 // TestHelperService_Status_Mapping covers all three status flavours: a
 // running service ("running"), a stopped service ("stopped"), and a
@@ -85,4 +92,41 @@ func TestHelperService_StartStop(t *testing.T) {
 	require.Equal(t, helperServiceName, ops.startName)
 	require.NoError(t, h.Stop())
 	require.Equal(t, helperServiceName, ops.stopName)
+}
+
+// TestHelperService_Restart confirms the service-name plumbing and that
+// errors from svcOps.Restart propagate verbatim.
+func TestHelperService_Restart(t *testing.T) {
+	t.Run("ok", func(t *testing.T) {
+		ops := &fakeSvcOps{}
+		h := newHelperServiceWithOps(ops)
+		require.NoError(t, h.Restart())
+		require.Equal(t, helperServiceName, ops.restartName)
+	})
+	t.Run("error propagates", func(t *testing.T) {
+		ops := &fakeSvcOps{restartErr: errors.New("user declined elevation")}
+		h := newHelperServiceWithOps(ops)
+		err := h.Restart()
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "user declined elevation")
+		require.Equal(t, helperServiceName, ops.restartName)
+	})
+}
+
+// TestHelperService_Reinstall mirrors TestHelperService_Restart for the
+// compound reinstall operation.
+func TestHelperService_Reinstall(t *testing.T) {
+	t.Run("ok", func(t *testing.T) {
+		ops := &fakeSvcOps{}
+		h := newHelperServiceWithOps(ops)
+		require.NoError(t, h.Reinstall())
+		require.Equal(t, helperServiceName, ops.reinstallName)
+	})
+	t.Run("error propagates", func(t *testing.T) {
+		ops := &fakeSvcOps{reinstallErr: errors.New("install: access denied")}
+		h := newHelperServiceWithOps(ops)
+		err := h.Reinstall()
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "access denied")
+	})
 }

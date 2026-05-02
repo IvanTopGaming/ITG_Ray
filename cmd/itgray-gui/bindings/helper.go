@@ -23,6 +23,8 @@ type svcOps interface {
 	Install(name, binPath, desc string) error
 	Start(name string) error
 	Stop(name string) error
+	Restart(name string) error
+	Reinstall(name string) error
 }
 
 // realSvcOps is the production implementation. Status is a read-only SCM
@@ -52,6 +54,18 @@ func (realSvcOps) Start(_ string) error {
 // Stop asks SCM to stop the helper via the elevated CLI (UAC prompt).
 func (realSvcOps) Stop(_ string) error {
 	return elevateCLI("helper", "stop")
+}
+
+// Restart asks the elevated CLI to stop+start the helper in a single
+// process so the user sees one UAC prompt for the whole operation.
+func (realSvcOps) Restart(_ string) error {
+	return elevateCLI("helper", "restart")
+}
+
+// Reinstall asks the elevated CLI to stop+uninstall+install+start the
+// helper in a single process. Single UAC prompt.
+func (realSvcOps) Reinstall(_ string) error {
+	return elevateCLI("helper", "reinstall")
 }
 
 // HelperService implements the Helper.* Wails bindings (Status / Install /
@@ -100,6 +114,13 @@ func (h *HelperService) Start() error { return h.ops.Start(helperServiceName) }
 
 // Stop asks SCM to stop the helper.
 func (h *HelperService) Stop() error { return h.ops.Stop(helperServiceName) }
+
+// Restart asks SCM to stop and then start the helper. One UAC prompt.
+func (h *HelperService) Restart() error { return h.ops.Restart(helperServiceName) }
+
+// Reinstall stops the helper, removes its SCM registration, re-registers
+// it with the canonical helper.exe path, and starts it. One UAC prompt.
+func (h *HelperService) Reinstall() error { return h.ops.Reinstall(helperServiceName) }
 
 // isNotInstalled is a thin wrapper kept for backwards-compatible call
 // sites; the real logic lives in svcmgr.IsNotInstalled.
