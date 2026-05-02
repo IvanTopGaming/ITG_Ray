@@ -85,6 +85,21 @@ func newHelperCmd() *cobra.Command {
 	})
 
 	h.AddCommand(&cobra.Command{
+		Use:   "restart",
+		Short: "stop and start the helper service in one elevated invocation",
+		RunE: func(*cobra.Command, []string) error {
+			if err := svcmgr.Stop(helperServiceName); err != nil && !svcmgr.IsNotRunning(err) {
+				return fmt.Errorf("stop: %w", err)
+			}
+			if err := svcmgr.Start(helperServiceName); err != nil {
+				return fmt.Errorf("start: %w", err)
+			}
+			fmt.Println("restarted:", helperServiceName)
+			return nil
+		},
+	})
+
+	h.AddCommand(&cobra.Command{
 		Use:   "status",
 		Short: "report current SCM state",
 		RunE: func(*cobra.Command, []string) error {
