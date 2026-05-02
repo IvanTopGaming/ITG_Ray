@@ -54,6 +54,8 @@ describe('backendToFrontend', () => {
       socksPort: 12345,
       tunCidr: '',
       httpPort: 0,
+      defaultUpdateInterval: 0,
+      userAgent: '',
       onConnected: false,
       onDisconnected: false,
       onQuotaLow: false,

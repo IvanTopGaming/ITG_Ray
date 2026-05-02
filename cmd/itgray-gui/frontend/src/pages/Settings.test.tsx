@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useEffect, useState } from 'react';
 
@@ -142,5 +142,216 @@ describe('numeric draft pattern (MTU input)', () => {
     await user.tab();
     expect(input.value).toBe('1500');
     expect(onCommit).not.toHaveBeenCalled();
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────
+//  Subscription Identity section integration tests
+// ──────────────────────────────────────────────────────────────────────
+//
+// These render the full <Settings /> page so the new section is exercised
+// alongside the rest of the settings store + adapter. Wails bindings,
+// runtime events, and IntersectionObserver are stubbed so the page mounts
+// in jsdom. Framer-motion logs an unrelated warning about
+// getComputedStyle in jsdom, which is harmless and matches the rest of
+// the suite.
+
+vi.mock('../../wailsjs/go/bindings/SettingsService', () => ({
+  Get: vi.fn().mockResolvedValue({
+    general: { language: 'en', autostart: false, startMinimized: false },
+    network: {
+      defaultMode: 'tun',
+      socksPort: 1080,
+      httpPort: 8888,
+      allowLan: false,
+      ipv6Mode: 'prefer-v4',
+      tunCidr: '198.18.0.1/15',
+      tunMtu: 1500,
+      dns: { mode: 'auto', servers: [] },
+    },
+    killSwitch: { enabled: true, alwaysOn: false },
+    subscriptions: {
+      defaultUpdateInterval: 3600,
+      userAgent: 'ITGRay/0.1',
+      hwidEnabled: true,
+      sendDeviceOS: true,
+      sendOSVersion: true,
+      sendDeviceModel: true,
+    },
+    notifications: {
+      onConnected: true,
+      onDisconnected: true,
+      quotaLow: true,
+      onSubSynced: true,
+      sound: true,
+    },
+    debug: { logLevel: 'info' },
+    about: { version: '0.1', gitRev: '', buildDate: '' },
+    security: { method: 'Unencrypted' },
+  }),
+  Update: vi.fn().mockResolvedValue({}),
+}));
+
+vi.mock('../../wailsjs/runtime/runtime', () => ({
+  EventsOn: vi.fn(),
+  EventsOff: vi.fn(),
+  Environment: vi.fn().mockResolvedValue({ platform: 'linux' }),
+  WindowMinimise: vi.fn(),
+  WindowToggleMaximise: vi.fn(),
+  WindowIsMaximised: vi.fn().mockResolvedValue(false),
+  Quit: vi.fn(),
+}));
+
+vi.mock('../../wailsjs/go/bindings/HelperService', () => ({
+  Status: vi.fn().mockResolvedValue({ state: 'unsupported' }),
+  Install: vi.fn(),
+  Start: vi.fn(),
+  Stop: vi.fn(),
+  Restart: vi.fn(),
+  Reinstall: vi.fn(),
+  IsWindows: vi.fn().mockResolvedValue(false),
+}));
+
+import { Settings as SettingsPage } from './Settings';
+import { __resetForTests } from '@/lib/settings';
+import * as SettingsService from '../../wailsjs/go/bindings/SettingsService';
+
+class MockIntersectionObserver {
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+  takeRecords = vi.fn().mockReturnValue([]);
+  root = null;
+  rootMargin = '';
+  thresholds: number[] = [];
+}
+
+const renderSettings = async () => {
+  const utils = render(<SettingsPage />);
+  // Drain GetSettings() promise + listener notify so post-mount state
+  // (with hwidEnabled=true etc. from the mock) is committed before
+  // assertions run. Two microtask drains mirror the AppShell test.
+  await act(async () => {
+    await new Promise<void>((r) => setTimeout(r, 0));
+    await new Promise<void>((r) => setTimeout(r, 0));
+  });
+  return utils;
+};
+
+describe('Settings — Subscription Identity', () => {
+  beforeEach(() => {
+    (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver =
+      MockIntersectionObserver as unknown as typeof IntersectionObserver;
+    // settings.ts gates loadFromBackend on `window.go` to skip the
+    // Wails RPC in pure-Node contexts. In jsdom we set a stub so the
+    // mocked GetSettings actually runs.
+    (window as unknown as { go: object }).go = {};
+    __resetForTests();
+    vi.clearAllMocks();
+    (SettingsService.Get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      general: { language: 'en', autostart: false, startMinimized: false },
+      network: {
+        defaultMode: 'tun',
+        socksPort: 1080,
+        httpPort: 8888,
+        allowLan: false,
+        ipv6Mode: 'prefer-v4',
+        tunCidr: '198.18.0.1/15',
+        tunMtu: 1500,
+        dns: { mode: 'auto', servers: [] },
+      },
+      killSwitch: { enabled: true, alwaysOn: false },
+      subscriptions: {
+        defaultUpdateInterval: 3600,
+        userAgent: 'ITGRay/0.1',
+        hwidEnabled: true,
+        sendDeviceOS: true,
+        sendOSVersion: true,
+        sendDeviceModel: true,
+      },
+      notifications: {
+        onConnected: true,
+        onDisconnected: true,
+        quotaLow: true,
+        onSubSynced: true,
+        sound: true,
+      },
+      debug: { logLevel: 'info' },
+      about: { version: '0.1', gitRev: '', buildDate: '' },
+      security: { method: 'Unencrypted' },
+    });
+  });
+
+  afterEach(() => {
+    __resetForTests();
+    delete (window as unknown as { go?: object }).go;
+  });
+
+  it('renders all 5 identity controls', async () => {
+    await renderSettings();
+    expect(screen.getByText('User-Agent')).toBeInTheDocument();
+    expect(screen.getByText('Send HWID')).toBeInTheDocument();
+    expect(screen.getByText('Send device OS')).toBeInTheDocument();
+    expect(screen.getByText('Send OS version')).toBeInTheDocument();
+    expect(screen.getByText('Send device model')).toBeInTheDocument();
+  });
+
+  it('shows the gating hint about HWID master', async () => {
+    await renderSettings();
+    expect(
+      screen.getByText(/honored only when HWID is on/i),
+    ).toBeInTheDocument();
+  });
+
+  it('toggling Send HWID dispatches an Update RPC', async () => {
+    await renderSettings();
+    const updateMock = SettingsService.Update as ReturnType<typeof vi.fn>;
+    updateMock.mockClear();
+    const toggle = screen.getByRole('switch', { name: 'Send HWID' });
+    await userEvent.click(toggle);
+    // Wait for the 200ms debounce + flush.
+    await act(async () => {
+      await new Promise<void>((r) => setTimeout(r, 250));
+    });
+    expect(updateMock).toHaveBeenCalled();
+    const sectionsCalled = updateMock.mock.calls.map((c) => c[0]);
+    expect(sectionsCalled).toContain('subscriptions');
+    const subsPatch = updateMock.mock.calls.find(
+      (c) => c[0] === 'subscriptions',
+    )?.[1];
+    expect(subsPatch).toMatchObject({ hwidEnabled: false });
+  });
+
+  it('editing User-Agent dispatches an Update RPC', async () => {
+    await renderSettings();
+    const updateMock = SettingsService.Update as ReturnType<typeof vi.fn>;
+    updateMock.mockClear();
+    const ua = screen.getByLabelText('User-Agent') as HTMLInputElement;
+    expect(ua.value).toBe('ITGRay/0.1');
+    fireEvent.change(ua, { target: { value: 'Custom/2.0' } });
+    await act(async () => {
+      await new Promise<void>((r) => setTimeout(r, 250));
+    });
+    expect(updateMock).toHaveBeenCalled();
+    const subsPatch = updateMock.mock.calls.find(
+      (c) => c[0] === 'subscriptions',
+    )?.[1];
+    expect(subsPatch).toMatchObject({ userAgent: 'Custom/2.0' });
+  });
+
+  it('persists empty User-Agent as empty string', async () => {
+    await renderSettings();
+    const updateMock = SettingsService.Update as ReturnType<typeof vi.fn>;
+    updateMock.mockClear();
+    const ua = screen.getByLabelText('User-Agent') as HTMLInputElement;
+    fireEvent.change(ua, { target: { value: '' } });
+    await act(async () => {
+      await new Promise<void>((r) => setTimeout(r, 250));
+    });
+    expect(updateMock).toHaveBeenCalled();
+    const subsPatch = updateMock.mock.calls.find(
+      (c) => c[0] === 'subscriptions',
+    )?.[1];
+    expect(subsPatch).toMatchObject({ userAgent: '' });
   });
 });

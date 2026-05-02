@@ -6,14 +6,16 @@ export type ToggleProps = {
   onChange: (v: boolean) => void;
   disabled?: boolean;
   className?: string;
+  'aria-label'?: string;
 };
 
-export function Toggle({ value, onChange, disabled, className }: ToggleProps) {
+export function Toggle({ value, onChange, disabled, className, 'aria-label': ariaLabel }: ToggleProps) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={value}
+      aria-label={ariaLabel}
       disabled={disabled}
       onClick={() => onChange(!value)}
       className={cn(

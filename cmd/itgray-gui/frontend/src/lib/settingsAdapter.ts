@@ -64,6 +64,25 @@ export function backendToFrontend(view: hub.SettingsView): Partial<Settings> {
     patch.killSwitchAlwaysOn = view.killSwitch.alwaysOn;
   }
 
+  if (typeof view.subscriptions?.defaultUpdateInterval === 'number') {
+    patch.defaultUpdateInterval = view.subscriptions.defaultUpdateInterval;
+  }
+  if (typeof view.subscriptions?.userAgent === 'string') {
+    patch.userAgent = view.subscriptions.userAgent;
+  }
+  if (typeof view.subscriptions?.hwidEnabled === 'boolean') {
+    patch.hwidEnabled = view.subscriptions.hwidEnabled;
+  }
+  if (typeof view.subscriptions?.sendDeviceOS === 'boolean') {
+    patch.sendDeviceOS = view.subscriptions.sendDeviceOS;
+  }
+  if (typeof view.subscriptions?.sendOSVersion === 'boolean') {
+    patch.sendOSVersion = view.subscriptions.sendOSVersion;
+  }
+  if (typeof view.subscriptions?.sendDeviceModel === 'boolean') {
+    patch.sendDeviceModel = view.subscriptions.sendDeviceModel;
+  }
+
   if (typeof view.notifications?.onConnected === 'boolean') {
     patch.onConnected = view.notifications.onConnected;
   }
@@ -137,6 +156,14 @@ export function frontendToBackend(
   // killswitch
   if (patch.killSwitchEnabled !== undefined) ensure('killswitch').enabled = patch.killSwitchEnabled;
   if (patch.killSwitchAlwaysOn !== undefined) ensure('killswitch').alwaysOn = patch.killSwitchAlwaysOn;
+
+  // subscriptions
+  if (patch.defaultUpdateInterval !== undefined) ensure('subscriptions').defaultUpdateInterval = patch.defaultUpdateInterval;
+  if (patch.userAgent !== undefined) ensure('subscriptions').userAgent = patch.userAgent;
+  if (patch.hwidEnabled !== undefined) ensure('subscriptions').hwidEnabled = patch.hwidEnabled;
+  if (patch.sendDeviceOS !== undefined) ensure('subscriptions').sendDeviceOS = patch.sendDeviceOS;
+  if (patch.sendOSVersion !== undefined) ensure('subscriptions').sendOSVersion = patch.sendOSVersion;
+  if (patch.sendDeviceModel !== undefined) ensure('subscriptions').sendDeviceModel = patch.sendDeviceModel;
 
   // notifications
   if (patch.onConnected !== undefined) ensure('notifications').onConnected = patch.onConnected;
