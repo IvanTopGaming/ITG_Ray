@@ -381,3 +381,62 @@ describe("subsStore.syncOne / syncAll + debounce", () => {
     expect(result.current.state.inFlight.syncing.size).toBe(0);
   });
 });
+
+describe("subsStore.edit", () => {
+  const seed = [
+    { id: "s1", name: "old", url: "https://1", lastSyncAt: "0001-01-01T00:00:00Z", lastSyncStatus: "", serverCount: 5, updateInterval: 3600 },
+  ];
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const mod = await import("./subsStore");
+    mod.__resetForTests();
+  });
+
+  it("replaces the row with the returned view on success", async () => {
+    mockList.mockResolvedValueOnce(seed);
+    mockEdit.mockResolvedValueOnce({
+      id: "s1", name: "renamed", url: "https://2",
+      lastSyncAt: "0001-01-01T00:00:00Z", lastSyncStatus: "",
+      serverCount: 0, updateInterval: 3600,
+    });
+    const { useSubs } = await import("./subsStore");
+    const { result } = renderHook(() => useSubs());
+    await act(async () => { await Promise.resolve(); });
+
+    await act(async () => {
+      await result.current.actions.edit("s1", "renamed", "https://2");
+    });
+
+    expect(mockEdit).toHaveBeenCalledWith("s1", "https://2", "renamed");
+    expect(result.current.state.load.kind).toBe("ready");
+    if (result.current.state.load.kind === "ready") {
+      const row = result.current.state.load.subs.find(s => s.id === "s1");
+      expect(row?.name).toBe("renamed");
+      expect(row?.url).toBe("https://2");
+      expect(row?.serverCount).toBe(0);
+    }
+    expect(result.current.state.inFlight.editing.has("s1")).toBe(false);
+  });
+
+  it("rethrows on error and leaves state unchanged, clears editing flag", async () => {
+    mockList.mockResolvedValueOnce(seed);
+    mockEdit.mockRejectedValueOnce(new Error("subscription not found"));
+    const { useSubs } = await import("./subsStore");
+    const { result } = renderHook(() => useSubs());
+    await act(async () => { await Promise.resolve(); });
+
+    await act(async () => {
+      await expect(
+        result.current.actions.edit("s1", "x", "https://y"),
+      ).rejects.toThrow(/not found/);
+    });
+
+    expect(result.current.state.load.kind).toBe("ready");
+    if (result.current.state.load.kind === "ready") {
+      expect(result.current.state.load.subs[0].name).toBe("old");
+      expect(result.current.state.load.subs[0].url).toBe("https://1");
+    }
+    expect(result.current.state.inFlight.editing.has("s1")).toBe(false);
+  });
+});

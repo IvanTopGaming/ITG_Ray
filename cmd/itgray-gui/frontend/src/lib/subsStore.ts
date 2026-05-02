@@ -144,8 +144,29 @@ async function addAction(name: string, url: string): Promise<void> {
     throw err;
   }
 }
-async function editAction(_id: string, _name: string, _url: string): Promise<void> {
-  throw new Error("edit not implemented");
+async function editAction(id: string, name: string, url: string): Promise<void> {
+  const editingNext = new Set(state.inFlight.editing);
+  editingNext.add(id);
+  setState({ ...state, inFlight: { ...state.inFlight, editing: editingNext } });
+  try {
+    // Note: public action takes (id, name, url); Go binding takes (id, url, name).
+    const view = await EditSub(id, url, name);
+    const updated = backendToFrontend(view);
+    const editingDone = new Set(state.inFlight.editing);
+    editingDone.delete(id);
+    setState({
+      ...state,
+      load: state.load.kind === "ready"
+        ? { kind: "ready", subs: state.load.subs.map(s => s.id === id ? updated : s) }
+        : state.load,
+      inFlight: { ...state.inFlight, editing: editingDone },
+    });
+  } catch (err) {
+    const editingDone = new Set(state.inFlight.editing);
+    editingDone.delete(id);
+    setState({ ...state, inFlight: { ...state.inFlight, editing: editingDone } });
+    throw err;
+  }
 }
 async function removeAction(id: string): Promise<void> {
   if (state.load.kind !== "ready") return;
@@ -229,11 +250,6 @@ export function useSubs(): { state: SubsState; actions: SubsActions } {
   const snap = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   return { state: snap, actions };
 }
-
-// Module scope — re-exported for Tasks 7-9 to wire into the action bodies.
-// TS would warn 'imported but unused' otherwise; the void expressions are
-// no-ops kept until the next tasks reference each binding directly.
-void EditSub;
 
 // Test escape hatch — mirrors settings.ts.__resetForTests.
 export function __resetForTests(): void {
