@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { GetSnapshot } from "../../wailsjs/go/bindings/AppService";
 import { Connect, Disconnect } from "../../wailsjs/go/bindings/RunService";
+import { TestLatency } from "../../wailsjs/go/bindings/ServersService";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
 import type { hub } from "../../wailsjs/go/models";
 
@@ -89,15 +90,17 @@ async function bootstrap(): Promise<void> {
 async function doBootstrap(): Promise<void> {
   try {
     const snap: Snapshot = await GetSnapshot();
+    const servers = snap.servers ?? [];
     setState({
       ...state,
       status: (snap.status as ChainStatus) || "idle",
       mode: (snap.mode as Mode) || "tun",
       currentServer: snap.currentServer ?? null,
       helperState: (snap.helperState as DashState["helperState"]) || "missing",
-      allServers: snap.servers ?? [],
+      allServers: servers,
       bootstrapped: true,
     });
+    maybeAutoProbe(servers);
   } catch (err: any) {
     setState({
       ...state,
@@ -191,12 +194,42 @@ function onSubSynced() {
   void bootstrap();
 }
 
+// onProbeResult patches latencies into allServers in place so QuickSwitch's
+// sort key updates without waiting for the next snapshot reload.
+function onProbeResult(payload: any) {
+  if (!payload || !Array.isArray(payload.results)) return;
+  const byId = new Map<string, number>();
+  for (const r of payload.results) {
+    if (r && typeof r.id === "string" && typeof r.latencyMs === "number" && !r.error) {
+      byId.set(r.id, r.latencyMs);
+    }
+  }
+  if (byId.size === 0) return;
+  const next = state.allServers.map((s) => {
+    const ms = byId.get(s.id);
+    return ms === undefined ? s : { ...s, latencyMs: ms };
+  });
+  setState({ ...state, allServers: next });
+}
+
 function registerEventHandlers() {
   EventsOn("vpn:status", onVpnStatus);
   EventsOn("vpn:speed", onVpnSpeed);
   EventsOn("chain:error", onChainError);
   EventsOn("helper:state", onHelperState);
   EventsOn("sub:synced", onSubSynced);
+  EventsOn("probe:result", onProbeResult);
+}
+
+// maybeAutoProbe fires a TestLatency batch when the snapshot contains servers
+// that have never been probed (latencyMs === 0). Fire-and-forget; results
+// arrive via the probe:result handler above.
+function maybeAutoProbe(servers: hub.ServerView[]) {
+  if (servers.length === 0) return;
+  if (servers.every((s) => s.latencyMs > 0)) return;
+  void TestLatency("").catch(() => {
+    /* probe failures are non-fatal; UI shows em-dash for unprobed servers */
+  });
 }
 
 export function useDash(): DashState {

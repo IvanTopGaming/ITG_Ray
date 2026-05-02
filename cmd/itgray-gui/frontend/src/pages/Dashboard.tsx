@@ -80,9 +80,15 @@ export function Dashboard() {
   const orbDisabled =
     dash.status === "connecting" || dash.status === "disconnecting";
 
+  // Selected server is what the orb will connect to. When connected it
+  // tracks currentServer; when idle/error the user picks via QuickSwitch.
+  const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
+  const highlightedId =
+    selectedServerId ?? dash.currentServer?.id ?? quickSwitchServers[0]?.id ?? null;
+
   async function handleOrbClick() {
     if (eff === "idle" || eff === "error") {
-      const target = dash.currentServer?.id ?? quickSwitchServers[0]?.id;
+      const target = highlightedId;
       if (!target) return;
       try {
         await dashConnect(target);
@@ -109,12 +115,14 @@ export function Dashboard() {
 
   async function handleQuickSwitch(serverId: string) {
     if (orbDisabled) return;
-    if (serverId === dash.currentServer?.id && dash.status === "connected")
-      return;
-    try {
-      await dashConnect(serverId);
-    } catch {
-      /* lastError set */
+    setSelectedServerId(serverId);
+    // When connected, swap; when idle/error, click only selects.
+    if (eff === "connected" && serverId !== dash.currentServer?.id) {
+      try {
+        await dashConnect(serverId);
+      } catch {
+        /* lastError set */
+      }
     }
   }
 
@@ -194,7 +202,7 @@ export function Dashboard() {
       <motion.div variants={itemVariants}>
         <QuickSwitch
           servers={quickSwitchServers}
-          activeServerId={dash.currentServer?.id ?? null}
+          highlightedId={highlightedId}
           status={eff}
           onPick={handleQuickSwitch}
         />
@@ -403,12 +411,12 @@ function ModeToggle({
 
 function QuickSwitch({
   servers,
-  activeServerId,
+  highlightedId,
   status,
   onPick,
 }: {
   servers: ServerView[];
-  activeServerId: string | null;
+  highlightedId: string | null;
   status: OrbStatus;
   onPick: (id: string) => void;
 }) {
@@ -440,8 +448,9 @@ function QuickSwitch({
       ) : (
         <div className={cn("grid gap-3", cols)}>
           {servers.map((server) => {
-            const active =
-              server.id === activeServerId && status === "connected";
+            const highlighted = server.id === highlightedId;
+            const active = highlighted && status === "connected";
+            const selected = highlighted && !active;
             return (
               <motion.button
                 key={server.id}
@@ -451,13 +460,18 @@ function QuickSwitch({
                 transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
                 className={cn(
                   "glass-regular relative flex items-center gap-3 rounded-xl px-4 py-3 text-left",
-                  !active && "hover:bg-white/[0.04]",
+                  !highlighted && "hover:bg-white/[0.04]",
                 )}
               >
-                {active && (
+                {highlighted && (
                   <motion.div
                     layoutId="quick-switch-active-ring"
-                    className="absolute -inset-px rounded-xl border-2 border-success/65 bg-success/[0.07] shadow-[0_0_22px_rgba(0,230,118,0.32),inset_0_0_18px_rgba(0,230,118,0.10)]"
+                    className={cn(
+                      "absolute -inset-px rounded-xl border-2",
+                      active &&
+                        "border-success/65 bg-success/[0.07] shadow-[0_0_22px_rgba(0,230,118,0.32),inset_0_0_18px_rgba(0,230,118,0.10)]",
+                      selected && "border-white/30 bg-white/[0.04]",
+                    )}
                     transition={{ type: "spring", stiffness: 380, damping: 32 }}
                   />
                 )}
@@ -511,6 +525,10 @@ function QuickSwitch({
                       <span className="h-1 w-1 rounded-full bg-success shadow-[0_0_4px_rgba(0,230,118,0.8)]" />
                       Active
                     </motion.span>
+                  ) : selected ? (
+                    <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/65">
+                      Selected
+                    </span>
                   ) : (
                     <span className="text-[9px] uppercase tracking-[0.14em] text-white/35">
                       Tap

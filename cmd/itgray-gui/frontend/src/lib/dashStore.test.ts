@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { eventHandlers, getSnapshotMock, runConnectMock, runDisconnectMock } = vi.hoisted(() => ({
+const { eventHandlers, getSnapshotMock, runConnectMock, runDisconnectMock, testLatencyMock } = vi.hoisted(() => ({
   eventHandlers: {} as Record<string, (...args: any[]) => void>,
   getSnapshotMock: vi.fn(),
   runConnectMock: vi.fn(),
   runDisconnectMock: vi.fn(),
+  testLatencyMock: vi.fn(),
 }));
 
 vi.mock("../../wailsjs/runtime/runtime", () => ({
@@ -21,6 +22,10 @@ vi.mock("../../wailsjs/go/bindings/AppService", () => ({
 vi.mock("../../wailsjs/go/bindings/RunService", () => ({
   Connect: (id: string, mode: string) => runConnectMock(id, mode),
   Disconnect: () => runDisconnectMock(),
+}));
+
+vi.mock("../../wailsjs/go/bindings/ServersService", () => ({
+  TestLatency: (id: string) => testLatencyMock(id),
 }));
 
 import {
@@ -59,6 +64,8 @@ beforeEach(() => {
   getSnapshotMock.mockReset();
   runConnectMock.mockReset();
   runDisconnectMock.mockReset();
+  testLatencyMock.mockReset();
+  testLatencyMock.mockResolvedValue(undefined);
   __resetForTest();
 });
 
@@ -204,6 +211,53 @@ describe("dashStore — sub:synced", () => {
     await Promise.resolve();
     expect(getDashState().allServers).toHaveLength(1);
     expect(getDashState().allServers[0].id).toBe("new1");
+  });
+});
+
+describe("dashStore — probe:result", () => {
+  it("auto-fires TestLatency on bootstrap when servers have latencyMs=0", async () => {
+    getSnapshotMock.mockResolvedValue({
+      ...baseSnapshot,
+      servers: [
+        { id: "a", name: "A", favorite: false, latencyMs: 0 },
+        { id: "b", name: "B", favorite: false, latencyMs: 50 },
+      ],
+    });
+    await __bootstrapForTest();
+    expect(testLatencyMock).toHaveBeenCalledWith("");
+  });
+
+  it("does NOT fire TestLatency when every server is already probed", async () => {
+    getSnapshotMock.mockResolvedValue({
+      ...baseSnapshot,
+      servers: [
+        { id: "a", name: "A", favorite: false, latencyMs: 25 },
+        { id: "b", name: "B", favorite: false, latencyMs: 50 },
+      ],
+    });
+    await __bootstrapForTest();
+    expect(testLatencyMock).not.toHaveBeenCalled();
+  });
+
+  it("patches latencyMs in allServers from probe:result payload", async () => {
+    getSnapshotMock.mockResolvedValue({
+      ...baseSnapshot,
+      servers: [
+        { id: "a", name: "A", favorite: false, latencyMs: 0 },
+        { id: "b", name: "B", favorite: false, latencyMs: 0 },
+      ],
+    });
+    await __bootstrapForTest();
+    fireEvent("probe:result", {
+      results: [
+        { id: "a", latencyMs: 17 },
+        { id: "b", latencyMs: 0, error: "timeout" },
+      ],
+    });
+    const servers = getDashState().allServers;
+    expect(servers.find((s) => s.id === "a")?.latencyMs).toBe(17);
+    // server "b" had an error → latencyMs stays at 0.
+    expect(servers.find((s) => s.id === "b")?.latencyMs).toBe(0);
   });
 });
 
