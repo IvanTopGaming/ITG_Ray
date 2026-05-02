@@ -101,7 +101,11 @@ func (s *ConfigStore) toView(c *config.Config) hub.SettingsView {
 		},
 		Subscriptions: hub.SubscriptionSettings{
 			DefaultUpdateInterval: 3600,
-			UserAgent:             "ITG-Ray/" + s.version,
+			UserAgent:             "ITGRay/" + s.version,
+			HWIDEnabled:           true,
+			SendDeviceOS:          true,
+			SendOSVersion:         true,
+			SendDeviceModel:       true,
 		},
 		Notifications: hub.NotificationSettings{
 			OnConnected:    c.Notifications.Connected,

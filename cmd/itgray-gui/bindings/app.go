@@ -255,7 +255,7 @@ func (a *AppService) collectSettings() hub.SettingsView {
 			DNS:         hub.DNSSettings{Mode: "auto"},
 		},
 		KillSwitch:    hub.KillSwitchSettings{Enabled: true},
-		Subscriptions: hub.SubscriptionSettings{DefaultUpdateInterval: 3600, UserAgent: "ITG-Ray/0.1"},
+		Subscriptions: hub.SubscriptionSettings{DefaultUpdateInterval: 3600, UserAgent: "ITGRay/0.1"},
 		Notifications: hub.NotificationSettings{OnConnected: true, OnDisconnected: true, QuotaLow: true, OnSubSynced: true, Sound: true},
 		Debug:         hub.DebugSettings{LogLevel: "info"},
 		About:         hub.AboutSettings{Version: a.d.Version, BuildDate: a.d.BuildDate},

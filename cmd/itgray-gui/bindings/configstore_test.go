@@ -144,3 +144,22 @@ func TestConfigStore_NormalizesLegacyAutoMode(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "tun", view.Network.DefaultMode)
 }
+
+// TestConfigStore_FreshLoad_HWIDDefaults pins the four new
+// SubscriptionSettings flags (HWIDEnabled, SendDeviceOS,
+// SendOSVersion, SendDeviceModel) to true on a fresh load and
+// asserts the UA default uses the normalized "ITGRay/" prefix
+// (no hyphen) so it matches Remnawave's extended-clients regex
+// convention.
+func TestConfigStore_FreshLoad_HWIDDefaults(t *testing.T) {
+	dir := t.TempDir()
+	store := NewConfigStore(filepath.Join(dir, "config.json"), "1.0", "build1")
+
+	v, err := store.View()
+	require.NoError(t, err)
+	require.True(t, v.Subscriptions.HWIDEnabled, "HWIDEnabled default true")
+	require.True(t, v.Subscriptions.SendDeviceOS, "SendDeviceOS default true")
+	require.True(t, v.Subscriptions.SendOSVersion, "SendOSVersion default true")
+	require.True(t, v.Subscriptions.SendDeviceModel, "SendDeviceModel default true")
+	require.Equal(t, "ITGRay/1.0", v.Subscriptions.UserAgent, "UA default uses ITGRay (no hyphen)")
+}
