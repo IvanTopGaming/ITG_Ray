@@ -1,11 +1,13 @@
 package bindings
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/itg-team/itg-ray/cmd/itgray-gui/chainctl"
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/subscription"
@@ -23,6 +25,29 @@ func (s fileServerStore) Save(list []server.Server) error {
 	return server.Save(s.path, list)
 }
 
+// fakeConfigViewer is a test-only ConfigViewer that returns a fixed view.
+type fakeConfigViewer struct{ view hub.SettingsView }
+
+func (f fakeConfigViewer) View() (hub.SettingsView, error) { //nolint:gocritic // hugeParam: hub.SettingsView is large but copying is fine in test fakes
+	return f.view, nil
+}
+
+// errConfigViewer returns an error; used in TestGetSnapshot_ConfigViewerError.
+type errConfigViewer struct{ err error }
+
+func (e errConfigViewer) View() (hub.SettingsView, error) { return hub.SettingsView{}, e.err }
+
+// fakeChain is a test-only ChainStatuser.
+type fakeChain struct {
+	status hub.ChainStatus
+	srv    *server.Server
+	mode   chainctl.Mode
+}
+
+func (f fakeChain) Status() (hub.ChainStatus, *server.Server, chainctl.Mode) {
+	return f.status, f.srv, f.mode
+}
+
 func TestAppService_GetSnapshot_Empty(t *testing.T) {
 	dir := t.TempDir()
 	srv := fileServerStore{path: filepath.Join(dir, "servers.json")}
@@ -34,6 +59,8 @@ func TestAppService_GetSnapshot_Empty(t *testing.T) {
 		ServerStore:  srv,
 		SubStore:     sub,
 		HelperProber: func() string { return "missing" },
+		ConfigViewer: fakeConfigViewer{view: hub.SettingsView{}},
+		// (Chain and NetworkLoader can be nil for this test.)
 	})
 
 	snap, err := app.GetSnapshot()
@@ -84,6 +111,7 @@ func TestAppService_GetSnapshot_WithSeededData(t *testing.T) {
 		ServerStore:  fileServerStore{path: serversPath},
 		SubStore:     subStore,
 		HelperProber: func() string { return "running" },
+		ConfigViewer: fakeConfigViewer{view: hub.SettingsView{}},
 	})
 
 	snap, err := app.GetSnapshot()
@@ -112,6 +140,7 @@ func TestAppService_GetSnapshot_OnboardedMarker(t *testing.T) {
 		ServerStore:  fileServerStore{path: filepath.Join(dir, "servers.json")},
 		SubStore:     subscription.FileStore{Path: filepath.Join(dir, "subscriptions.json")},
 		HelperProber: func() string { return "missing" },
+		ConfigViewer: fakeConfigViewer{view: hub.SettingsView{}},
 	})
 	snap, err := app.GetSnapshot()
 	require.NoError(t, err)
@@ -151,4 +180,96 @@ func writeFile(path string, b []byte) error {
 	_, err = f.Write(b)
 	_ = f.Close()
 	return err
+}
+
+func TestAppService_GetSnapshot_ReadsChainStatus(t *testing.T) {
+	dir := t.TempDir()
+	srvPath := filepath.Join(dir, "servers.json")
+	require.NoError(t, server.Save(srvPath, []server.Server{{
+		ID: "abc", Name: "DE_master", Origin: server.OriginManual,
+		Vless: vless.Config{Address: "1.2.3.4", Port: 443},
+	}}))
+
+	chainSrv := &server.Server{
+		ID: "abc", Name: "DE_master", Origin: server.OriginManual,
+		Vless: vless.Config{Address: "1.2.3.4", Port: 443},
+	}
+	app := NewAppService(&AppDeps{
+		DataDir:      dir,
+		Hub:          hub.New(),
+		Version:      "test",
+		ServerStore:  fileServerStore{path: srvPath},
+		SubStore:     subscription.FileStore{Path: filepath.Join(dir, "subs.json")},
+		HelperProber: func() string { return "running" },
+		ConfigViewer: fakeConfigViewer{},
+		Chain:        fakeChain{status: hub.StatusConnecting, srv: chainSrv, mode: chainctl.ModeTUN},
+	})
+
+	snap, err := app.GetSnapshot()
+	require.NoError(t, err)
+	require.Equal(t, hub.StatusConnecting, snap.Status)
+	require.Equal(t, "tun", snap.Mode)
+	require.NotNil(t, snap.CurrentServer)
+	require.Equal(t, "abc", snap.CurrentServer.ID)
+	require.Equal(t, "DE_master", snap.CurrentServer.Name)
+}
+
+func TestAppService_GetSnapshot_NilCurrentServer(t *testing.T) {
+	dir := t.TempDir()
+	app := NewAppService(&AppDeps{
+		DataDir:      dir,
+		Hub:          hub.New(),
+		Version:      "test",
+		ServerStore:  fileServerStore{path: filepath.Join(dir, "servers.json")},
+		SubStore:     subscription.FileStore{Path: filepath.Join(dir, "subs.json")},
+		HelperProber: func() string { return "missing" },
+		ConfigViewer: fakeConfigViewer{},
+		Chain:        fakeChain{status: hub.StatusIdle, srv: nil, mode: chainctl.ModeTUN},
+	})
+
+	snap, err := app.GetSnapshot()
+	require.NoError(t, err)
+	require.Nil(t, snap.CurrentServer)
+}
+
+func TestAppService_GetSnapshot_ReadsConfigViewer(t *testing.T) {
+	dir := t.TempDir()
+	customView := hub.SettingsView{
+		Subscriptions: hub.SubscriptionSettings{
+			DefaultUpdateInterval: 1800,
+			UserAgent:             "Custom/0.2",
+			HWIDEnabled:           false,
+		},
+	}
+	app := NewAppService(&AppDeps{
+		DataDir:      dir,
+		Hub:          hub.New(),
+		Version:      "test",
+		ServerStore:  fileServerStore{path: filepath.Join(dir, "servers.json")},
+		SubStore:     subscription.FileStore{Path: filepath.Join(dir, "subs.json")},
+		HelperProber: func() string { return "missing" },
+		ConfigViewer: fakeConfigViewer{view: customView},
+	})
+
+	snap, err := app.GetSnapshot()
+	require.NoError(t, err)
+	require.Equal(t, customView, snap.Settings)
+}
+
+func TestAppService_GetSnapshot_ConfigViewerError(t *testing.T) {
+	dir := t.TempDir()
+	app := NewAppService(&AppDeps{
+		DataDir:      dir,
+		Hub:          hub.New(),
+		Version:      "test",
+		ServerStore:  fileServerStore{path: filepath.Join(dir, "servers.json")},
+		SubStore:     subscription.FileStore{Path: filepath.Join(dir, "subs.json")},
+		HelperProber: func() string { return "missing" },
+		ConfigViewer: errConfigViewer{err: errors.New("disk read failed")},
+	})
+
+	_, err := app.GetSnapshot()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "settings.View")
+	require.Contains(t, err.Error(), "disk read failed")
 }

@@ -10,7 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/itg-team/itg-ray/cmd/itgray-gui/chainctl"
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
+	"github.com/itg-team/itg-ray/internal/config"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/subscription"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -54,6 +56,23 @@ type SubStore interface {
 // HelperProber returns the current helper-service state.
 type HelperProber func() (state string)
 
+// ChainStatuser is the surface AppService needs from chainctl.Controller.
+// chainctl.Controller satisfies it directly via its Status() method.
+type ChainStatuser interface {
+	Status() (hub.ChainStatus, *server.Server, chainctl.Mode)
+}
+
+// ConfigViewer is the surface AppService needs from ConfigStore.
+// bindings.ConfigStore satisfies it directly via its View() method.
+type ConfigViewer interface {
+	View() (hub.SettingsView, error)
+}
+
+// NetworkLoader is the closure AppService uses to read the persisted
+// Network section (for GetPublicIP's SOCKS5 dialer in sysproxy mode).
+// main.go provides a closure over config.Load(configPath); tests mock it.
+type NetworkLoader func() (config.Network, error)
+
 // AppDeps groups the dependencies passed in from main.go.
 type AppDeps struct {
 	DataDir      string
@@ -67,11 +86,21 @@ type AppDeps struct {
 	// by Quit, which must call runtime.Quit with the app's ctx — passing
 	// context.Background() makes the runtime no-op. Nil is tolerated and
 	// causes Quit to fall back to context.Background() (test code path).
-	AppCtx AppCtxFunc
+	AppCtx        AppCtxFunc
+	Chain         ChainStatuser // NEW: source of live status/server/mode for GetSnapshot
+	ConfigViewer  ConfigViewer  // NEW: source of SettingsView (replaces hardcoded collectSettings)
+	NetworkLoader NetworkLoader // NEW: source of Network for GetPublicIP sysproxy dialer
 }
 
+// publicIPCache is fleshed out in publicip.go (Task 2). Defined here so
+// AppService compiles after Task 1 lands.
+type publicIPCache struct{} //nolint:unused // populated in Task 2 (publicip.go)
+
 // AppService implements the App.* bindings (GetSnapshot, GetVersion, Quit).
-type AppService struct{ d *AppDeps }
+type AppService struct {
+	d       *AppDeps
+	ipCache publicIPCache //nolint:unused // populated in Task 2 (publicip.go)
+}
 
 // NewAppService constructs a new AppService. AppDeps is taken by pointer so
 // later tasks can grow it without re-introducing gocritic hugeParam
@@ -114,16 +143,35 @@ func (a *AppService) GetSnapshot() (hub.Snapshot, error) {
 	if err != nil {
 		return hub.Snapshot{}, fmt.Errorf("sub.Load: %w", err)
 	}
+	settings, err := a.d.ConfigViewer.View()
+	if err != nil {
+		return hub.Snapshot{}, fmt.Errorf("settings.View: %w", err)
+	}
+
+	st := hub.StatusIdle
+	mode := chainctl.Mode("tun")
+	var current *hub.ServerView
+	if a.d.Chain != nil {
+		var srv *server.Server
+		st, srv, mode = a.d.Chain.Status()
+		if srv != nil {
+			views := toServerViews([]server.Server{*srv}, subOriginByID(subs))
+			view := views[0]
+			current = &view
+		}
+	}
+
 	return hub.Snapshot{
-		Status:      hub.StatusIdle,
-		Mode:        "tun",
-		Speeds:      hub.SpeedSample{At: time.Now()},
-		HelperState: a.probeHelper(),
-		Servers:     toServerViews(servers, subOriginByID(subs)),
-		Subs:        toSubViews(subs, serverCountBySource(servers)),
-		Settings:    a.collectSettings(),
-		Onboarded:   a.isOnboarded(),
-		Version:     a.d.Version,
+		Status:        st,
+		CurrentServer: current,
+		Mode:          string(mode),
+		Speeds:        hub.SpeedSample{At: time.Now()},
+		HelperState:   a.probeHelper(),
+		Servers:       toServerViews(servers, subOriginByID(subs)),
+		Subs:          toSubViews(subs, serverCountBySource(servers)),
+		Settings:      settings,
+		Onboarded:     a.isOnboarded(),
+		Version:       a.d.Version,
 	}, nil
 }
 
@@ -234,42 +282,4 @@ func hostPort(addr string, port uint16) string {
 		return fmt.Sprintf("[%s]:%d", addr, port)
 	}
 	return fmt.Sprintf("%s:%d", addr, port)
-}
-
-// collectSettings returns a settings snapshot that mirrors
-// internal/config.defaults() so AppService.Snapshot stays consistent
-// with what SettingsService.Get returns. Frontend code uses
-// SettingsService.Get as the source of truth; this exists for late
-// hub-snapshot subscribers.
-func (a *AppService) collectSettings() hub.SettingsView {
-	return hub.SettingsView{
-		General: hub.GeneralSettings{Language: "en"},
-		Network: hub.NetworkSettings{
-			DefaultMode: "tun",
-			TunCIDR:     "198.18.0.1/15",
-			TunMtu:      1500,
-			TunName:     "ITGRay-TUN",
-			SocksPort:   1080,
-			HttpPort:    8888,
-			AllowLAN:    false,
-			IPv6Mode:    "prefer-v4",
-			DNS:         hub.DNSSettings{Mode: "auto"},
-		},
-		KillSwitch:    hub.KillSwitchSettings{Enabled: true},
-		// TODO(tier-4): replace with ConfigStore.View() once Dashboard consumes
-		// App.GetSnapshot. Hardcoded defaults must match config.defaults() so
-		// the Dashboard's first paint doesn't flicker stale HWID/metadata values.
-		Subscriptions: hub.SubscriptionSettings{
-			DefaultUpdateInterval: 3600,
-			UserAgent:             "ITGRay/0.1",
-			HWIDEnabled:           true,
-			SendDeviceOS:          true,
-			SendOSVersion:         true,
-			SendDeviceModel:       true,
-		},
-		Notifications: hub.NotificationSettings{OnConnected: true, OnDisconnected: true, QuotaLow: true, OnSubSynced: true, Sound: true},
-		Debug:         hub.DebugSettings{LogLevel: "info"},
-		About:         hub.AboutSettings{Version: a.d.Version, BuildDate: a.d.BuildDate},
-		Security:      hub.SecuritySettings{Method: "Unencrypted", Available: false, Warning: "secret protection detection not yet wired"},
-	}
 }
