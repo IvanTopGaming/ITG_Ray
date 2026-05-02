@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
+	"github.com/itg-team/itg-ray/internal/hwid"
 	"github.com/itg-team/itg-ray/internal/subscription"
 )
 
@@ -43,6 +44,13 @@ type SubsDeps struct {
 	SubStore    SubStore
 	ServerStore ServerStore
 	Hub         *hub.Hub
+
+	// Identity-header inputs for SyncOne. Resolved at startup and held;
+	// SettingsView is a function so toggle changes take effect on the
+	// next sync without restart.
+	SettingsView func() hub.SettingsView
+	HWID         string
+	DeviceInfo   hwid.DeviceInfo
 }
 
 // SubsService implements the Subs.* Wails bindings. C.T7 ships List + Add
@@ -235,7 +243,12 @@ func (s *SubsService) SyncOne(id string) error {
 		return fmt.Errorf("server.Load: %w", err)
 	}
 
-	merged, meta, syncErr := subscription.Sync(ctx, found.ToSyncInput(), existing, syncTimeout)
+	input := found.ToSyncInput()
+	if s.d.SettingsView != nil {
+		input.UserAgent, input.HWID, input.DeviceOS, input.OSVersion, input.DeviceModel =
+			resolveIdentity(s.d.SettingsView().Subscriptions, *found, s.d.HWID, s.d.DeviceInfo)
+	}
+	merged, meta, syncErr := subscription.Sync(ctx, input, existing, syncTimeout)
 	// Capture the upstream-fetch outcome before the Save branch may
 	// overwrite syncErr — Userinfo is meaningful exactly when the fetch
 	// itself succeeded, regardless of whether the disk write that follows
