@@ -60,7 +60,7 @@ export function Subscriptions() {
           <div className="flex items-center gap-2">
             <SyncAllButton
               onClick={() => void actions.syncAll()}
-              disabled={subs.length === 0}
+              disabled={subs.length === 0 || state.inFlight.syncing.size > 0}
             />
             <AddButton onClick={() => setModal({ kind: "add" })} />
           </div>
@@ -215,6 +215,7 @@ function SubCard({
         )}
         <button
           onClick={onEdit}
+          aria-label="Edit"
           className="rounded-lg border border-white/15 bg-white/[0.04] p-2 text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white"
           title="Edit"
         >
@@ -360,6 +361,7 @@ function SyncButton({
     <button
       onClick={onClick}
       disabled={disabled}
+      aria-label="Sync"
       className={cn(
         "flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.04] px-3 py-2 text-[12px] font-medium text-white transition-colors duration-instant ease-snap",
         disabled
@@ -386,6 +388,7 @@ function RetryButton({
     <button
       onClick={onClick}
       disabled={disabled}
+      aria-label="Retry sync"
       className={cn(
         "flex items-center gap-1.5 rounded-lg border border-danger/40 bg-danger/[0.10] px-3 py-2 text-[12px] font-semibold text-[#ff9a9a] transition-colors duration-instant ease-snap",
         disabled
@@ -410,6 +413,7 @@ function SyncAllButton({
     <button
       onClick={onClick}
       disabled={disabled}
+      aria-label="Sync all"
       className={cn(
         "flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.04] px-3 py-1.5 text-[11px] font-medium text-white transition-colors duration-instant ease-snap",
         disabled
