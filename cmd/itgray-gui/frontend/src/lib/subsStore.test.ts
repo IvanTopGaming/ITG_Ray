@@ -290,6 +290,7 @@ describe("subsStore.syncOne / syncAll + debounce", () => {
     });
 
     expect(result.current.state.inFlight.syncing.has("s1")).toBe(true);
+    expect(result.current.state.load.kind).toBe("ready");
     if (result.current.state.load.kind === "ready") {
       expect(result.current.state.load.subs.find(s => s.id === "s1")?.status).toBe("syncing");
     }
@@ -339,6 +340,7 @@ describe("subsStore.syncOne / syncAll + debounce", () => {
       await Promise.resolve();
     });
 
+    expect(result.current.state.load.kind).toBe("ready");
     if (result.current.state.load.kind === "ready") {
       expect(result.current.state.load.subs.every(s => s.status === "syncing")).toBe(true);
     }
@@ -350,6 +352,32 @@ describe("subsStore.syncOne / syncAll + debounce", () => {
       await syncPromise;
     });
 
+    expect(result.current.state.inFlight.syncing.size).toBe(0);
+  });
+
+  it("syncOne clears inFlight even if backend rejects, and rethrows", async () => {
+    mockList.mockResolvedValueOnce(seed);
+    mockSyncOne.mockRejectedValueOnce(new Error("network gone"));
+    const { useSubs } = await import("./subsStore");
+    const { result } = renderHook(() => useSubs());
+    await act(async () => { await vi.runAllTimersAsync(); });
+
+    await act(async () => {
+      await expect(result.current.actions.syncOne("s1")).rejects.toThrow(/network gone/);
+    });
+    expect(result.current.state.inFlight.syncing.has("s1")).toBe(false);
+  });
+
+  it("syncAll clears inFlight even if backend rejects, and rethrows", async () => {
+    mockList.mockResolvedValueOnce(seed);
+    mockSyncAll.mockRejectedValueOnce(new Error("disk on fire"));
+    const { useSubs } = await import("./subsStore");
+    const { result } = renderHook(() => useSubs());
+    await act(async () => { await vi.runAllTimersAsync(); });
+
+    await act(async () => {
+      await expect(result.current.actions.syncAll()).rejects.toThrow(/disk on fire/);
+    });
     expect(result.current.state.inFlight.syncing.size).toBe(0);
   });
 });
