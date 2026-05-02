@@ -11,6 +11,7 @@ import { motion, type Variants } from "framer-motion";
 import { Link } from "react-router-dom";
 import { GlowOrb, type OrbStatus } from "@/components/GlowOrb";
 import { CountryFlag } from "@/components/controls/CountryFlag";
+import { Reveal } from "@/components/controls/Reveal";
 import { cn } from "@/lib/cn";
 import {
   useDash,
@@ -18,6 +19,7 @@ import {
   dashConnect,
   dashDisconnect,
   dashSwitchMode,
+  clearLastError,
   type Mode,
   type SpeedPoint,
 } from "@/lib/dashStore";
@@ -134,6 +136,25 @@ export function Dashboard() {
           disabled={orbDisabled}
         />
       </motion.div>
+
+      <Reveal show={!!dash.lastError}>
+        <div className="mb-5 flex items-start gap-3 rounded-xl border border-[#ff9a9a]/30 bg-[#ff9a9a]/[0.06] px-4 py-3">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-[#ff9a9a]">
+              {dash.lastError?.kind ?? "error"}
+            </span>
+            <span className="break-words font-mono text-[12px] text-white/85">
+              {dash.lastError?.message ?? ""}
+            </span>
+          </div>
+          <button
+            onClick={clearLastError}
+            className="shrink-0 rounded-md px-2 py-1 text-[11px] font-medium text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white"
+          >
+            Dismiss
+          </button>
+        </div>
+      </Reveal>
 
       <motion.div
         variants={itemVariants}

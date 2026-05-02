@@ -13,6 +13,7 @@ vi.mock("@/lib/dashStore", () => ({
   dashConnect: (...a: any[]) => dashConnectMock(...a),
   dashDisconnect: (...a: any[]) => dashDisconnectMock(...a),
   dashSwitchMode: (...a: any[]) => dashSwitchModeMock(...a),
+  clearLastError: vi.fn(),
 }));
 
 const useIpMock = vi.fn();
