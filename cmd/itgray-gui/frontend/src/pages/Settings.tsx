@@ -491,7 +491,7 @@ export function Settings() {
                 </button>
               </div>
             </SettingRow>
-            {helper.opError && (
+            <Reveal show={!!helper.opError}>
               <div className="mt-2 flex items-start gap-2 rounded-[10px] border border-danger/30 bg-danger/[0.08] px-3 py-2 text-[12px] text-danger">
                 <span className="flex-1 leading-relaxed">⚠ {helper.opError}</span>
                 <button
@@ -503,7 +503,7 @@ export function Settings() {
                   ×
                 </button>
               </div>
-            )}
+            </Reveal>
           </>
         )}
       </motion.div>
