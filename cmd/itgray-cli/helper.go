@@ -18,7 +18,7 @@ func newHelperCmd() *cobra.Command {
 
 	install := &cobra.Command{
 		Use:   "install [path-to-helper.exe]",
-		Short: "register the helper service in SCM",
+		Short: "register the helper service in SCM and start it",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			binPath := defaultHelperPath()
@@ -42,7 +42,13 @@ func newHelperCmd() *cobra.Command {
 			if err := svcmgr.Install(helperServiceName, abs, "ITG Ray helper service"); err != nil {
 				return err
 			}
-			fmt.Println("installed:", helperServiceName, "->", abs, "sid:", sid)
+			// Auto-start so the GUI [Install] button takes the helper
+			// straight to 'running' instead of leaving it 'stopped' and
+			// requiring a second UAC for [Start]. Single-UAC contract.
+			if err := svcmgr.Start(helperServiceName); err != nil {
+				return fmt.Errorf("start: %w", err)
+			}
+			fmt.Println("installed and started:", helperServiceName, "->", abs, "sid:", sid)
 			return nil
 		},
 	}
