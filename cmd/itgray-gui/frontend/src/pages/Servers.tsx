@@ -12,6 +12,7 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { CountryFlag } from "@/components/controls/CountryFlag";
 import { Dropdown } from "@/components/controls/Dropdown";
 
 type Origin = "subscription" | "manual";
@@ -526,9 +527,10 @@ function ServerRow({
         />
       </span>
 
-      <span className="relative z-10 text-[20px] leading-none">
-        {server.flag}
-      </span>
+      <CountryFlag
+        code={server.flag}
+        className="relative z-10 h-[14px] w-[21px] shrink-0 rounded-[2px] object-cover shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
+      />
 
       <div className="relative z-10 flex min-w-0 flex-1 items-baseline gap-3">
         <span className="text-[13px] font-medium">{server.city}</span>
