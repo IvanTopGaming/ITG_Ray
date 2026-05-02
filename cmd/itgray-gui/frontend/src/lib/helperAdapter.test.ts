@@ -1,5 +1,34 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { mapHelperStatus, formatError, detectIsWindows, __resetIsWindowsCacheForTests } from './helperAdapter';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
+
+// Wails-binding mocks must be set up BEFORE importing the SUT module.
+const statusMock    = vi.fn();
+const installMock   = vi.fn();
+const startMock     = vi.fn();
+const stopMock      = vi.fn();
+const restartMock   = vi.fn();
+const reinstallMock = vi.fn();
+const envMock       = vi.fn();
+
+vi.mock('../../wailsjs/go/bindings/HelperService', () => ({
+  Status:    (...args: unknown[]) => statusMock(...args),
+  Install:   (...args: unknown[]) => installMock(...args),
+  Start:     (...args: unknown[]) => startMock(...args),
+  Stop:      (...args: unknown[]) => stopMock(...args),
+  Restart:   (...args: unknown[]) => restartMock(...args),
+  Reinstall: (...args: unknown[]) => reinstallMock(...args),
+}));
+vi.mock('../../wailsjs/runtime/runtime', () => ({
+  Environment: (...args: unknown[]) => envMock(...args),
+}));
+
+import {
+  mapHelperStatus,
+  formatError,
+  detectIsWindows,
+  __resetIsWindowsCacheForTests,
+  useHelperState,
+} from './helperAdapter';
 
 describe('mapHelperStatus', () => {
   it.each([
@@ -51,5 +80,145 @@ describe('detectIsWindows', () => {
     await detectIsWindows(env);
     await detectIsWindows(env);
     expect(env).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('useHelperState (hook)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    __resetIsWindowsCacheForTests();
+    statusMock.mockReset();
+    installMock.mockReset();
+    startMock.mockReset();
+    stopMock.mockReset();
+    restartMock.mockReset();
+    reinstallMock.mockReset();
+    envMock.mockReset();
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('non-Windows: sets state, never calls Status()', async () => {
+    envMock.mockResolvedValue({ platform: 'linux' });
+    const { result } = renderHook(() => useHelperState());
+
+    expect(result.current.state).toBe('pending');
+    expect(result.current.isWindows).toBe(null);
+
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current.isWindows).toBe(false);
+    expect(statusMock).not.toHaveBeenCalled();
+  });
+
+  it('Windows mount: calls Status() once and sets state from result', async () => {
+    envMock.mockResolvedValue({ platform: 'windows' });
+    statusMock.mockResolvedValue('running');
+
+    const { result } = renderHook(() => useHelperState());
+
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(result.current.isWindows).toBe(true);
+    expect(statusMock).toHaveBeenCalledTimes(1);
+    expect(result.current.state).toBe('running');
+  });
+
+  it('polls Status every 2 s and updates state when value changes', async () => {
+    envMock.mockResolvedValue({ platform: 'windows' });
+    statusMock.mockResolvedValueOnce('running');
+    statusMock.mockResolvedValueOnce('stopped');
+
+    const { result } = renderHook(() => useHelperState());
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(result.current.state).toBe('running');
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.state).toBe('stopped');
+    expect(statusMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('skips polling tick when document is hidden', async () => {
+    envMock.mockResolvedValue({ platform: 'windows' });
+    statusMock.mockResolvedValue('running');
+
+    const { result } = renderHook(() => useHelperState());
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(statusMock).toHaveBeenCalledTimes(1);
+
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    await act(async () => { vi.advanceTimersByTime(6_000); });
+    expect(statusMock).toHaveBeenCalledTimes(1); // still 1: ticks were skipped
+
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    await act(async () => { vi.advanceTimersByTime(2_000); await Promise.resolve(); });
+    expect(statusMock).toHaveBeenCalledTimes(2);
+    expect(result.current.state).toBe('running');
+  });
+
+  it('install action: pending mid-flight, refetches Status, clears pending', async () => {
+    envMock.mockResolvedValue({ platform: 'windows' });
+    statusMock.mockResolvedValueOnce('missing');
+    installMock.mockResolvedValue(undefined);
+    statusMock.mockResolvedValueOnce('stopped');
+
+    const { result } = renderHook(() => useHelperState());
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(result.current.state).toBe('missing');
+
+    let installPromise!: Promise<void>;
+    act(() => { installPromise = result.current.install(); });
+    expect(result.current.state).toBe('pending');
+
+    await act(async () => { await installPromise; });
+    expect(installMock).toHaveBeenCalledTimes(1);
+    expect(result.current.state).toBe('stopped');
+    expect(result.current.opError).toBe(null);
+  });
+
+  it('install action: on rejection sets opError and still refetches', async () => {
+    envMock.mockResolvedValue({ platform: 'windows' });
+    statusMock.mockResolvedValueOnce('missing');
+    installMock.mockRejectedValue(new Error('elevated cli [helper install] failed: exit status 1 (output: User declined)'));
+    statusMock.mockResolvedValueOnce('missing');
+
+    const { result } = renderHook(() => useHelperState());
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    await act(async () => { await result.current.install(); });
+    expect(result.current.state).toBe('missing');
+    expect(result.current.opError).toContain('User declined');
+  });
+
+  it('dismissError clears the inline error', async () => {
+    envMock.mockResolvedValue({ platform: 'windows' });
+    statusMock.mockResolvedValueOnce('running');
+    restartMock.mockRejectedValue(new Error('boom'));
+    statusMock.mockResolvedValueOnce('running');
+
+    const { result } = renderHook(() => useHelperState());
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => { await result.current.restart(); });
+    expect(result.current.opError).toBe('boom');
+
+    act(() => { result.current.dismissError(); });
+    expect(result.current.opError).toBe(null);
+  });
+
+  it('cleans up the polling interval on unmount', async () => {
+    envMock.mockResolvedValue({ platform: 'windows' });
+    statusMock.mockResolvedValue('running');
+
+    const { unmount } = renderHook(() => useHelperState());
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(statusMock).toHaveBeenCalledTimes(1);
+
+    unmount();
+    await act(async () => { vi.advanceTimersByTime(10_000); });
+    expect(statusMock).toHaveBeenCalledTimes(1); // no further calls after unmount
   });
 });

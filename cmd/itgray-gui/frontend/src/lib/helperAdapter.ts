@@ -1,3 +1,14 @@
+import { useEffect, useRef, useState } from 'react';
+import {
+  Status as HelperStatus,
+  Install as HelperInstall,
+  Start as HelperStart,
+  Stop as HelperStop,
+  Restart as HelperRestart,
+  Reinstall as HelperReinstall,
+} from '../../wailsjs/go/bindings/HelperService';
+import { Environment } from '../../wailsjs/runtime/runtime';
+
 export type HelperState = 'missing' | 'stopped' | 'running' | 'error' | 'pending';
 
 // mapHelperStatus translates the backend Status string ("running" |
@@ -45,4 +56,123 @@ export async function detectIsWindows(env: () => Promise<{ platform: string }>):
 // Test-only — the leading underscore convention matches lib/settings.ts.
 export function __resetIsWindowsCacheForTests(): void {
   cachedIsWindows = null;
+}
+
+export type UseHelperState = {
+  state: HelperState;
+  opError: string | null;
+  isWindows: boolean | null;
+
+  install: () => Promise<void>;
+  start: () => Promise<void>;
+  stop: () => Promise<void>;
+  restart: () => Promise<void>;
+  reinstall: () => Promise<void>;
+  dismissError: () => void;
+};
+
+const POLL_MS = 2_000;
+
+// useHelperState owns the Helper-section state machine: async platform
+// detection, 2 s polling (visibility-gated), and the action wrappers
+// that run the spec §6.4 pattern (set pending → IPC → finally refetch).
+export function useHelperState(): UseHelperState {
+  const [state, setState]     = useState<HelperState>('pending');
+  const [opError, setOpError] = useState<string | null>(null);
+  const [isWindows, setIsWin] = useState<boolean | null>(null);
+
+  // stateRef mirrors `state` so the polling tick can read the latest
+  // value without re-creating the interval on each setState.
+  const stateRef = useRef<HelperState>(state);
+  useEffect(() => { stateRef.current = state; }, [state]);
+
+  // Detect platform once on mount and, if Windows, immediately fetch
+  // the first Status() so the UI doesn't sit on 'pending' for the full
+  // poll interval. Sequencing both calls in a single async flow keeps
+  // the microtask chain short — important for renderHook tests where
+  // each `await Promise.resolve()` flushes only one microtask.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const info = await (Environment as unknown as () => Promise<{ platform: string }>)();
+      if (cancelled) return;
+      const isWin = info.platform === 'windows';
+      setIsWin(isWin);
+      if (!isWin) return;
+      try {
+        const raw = await HelperStatus();
+        if (!cancelled) setState(mapHelperStatus(raw));
+      } catch (e) {
+        if (!cancelled) {
+          setState('error');
+          setOpError(formatError(e));
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Polling loop — only registers once isWindows resolves true.
+  useEffect(() => {
+    if (isWindows !== true) return;
+
+    let cancelled = false;
+    let inFlight = false;
+
+    const tick = async () => {
+      if (cancelled) return;
+      if (document.visibilityState !== 'visible') return;
+      if (stateRef.current === 'pending') return;
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const raw = await HelperStatus();
+        if (!cancelled) setState(mapHelperStatus(raw));
+      } catch (e) {
+        if (!cancelled) {
+          setState('error');
+          setOpError(formatError(e));
+        }
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const id = window.setInterval(() => { void tick(); }, POLL_MS);
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, [isWindows]);
+
+  // Action wrappers: set pending, run IPC, capture op error, refetch
+  // Status regardless of result. The post-action Status overrides the
+  // 'pending' state with whatever ground truth reports.
+  const runOp = async (op: () => Promise<unknown>) => {
+    setState('pending');
+    setOpError(null);
+    let capturedError: string | null = null;
+    try {
+      await op();
+    } catch (e) {
+      capturedError = formatError(e);
+    }
+    try {
+      const raw = await HelperStatus();
+      setState(mapHelperStatus(raw));
+    } catch (e) {
+      setState('error');
+      if (capturedError === null) capturedError = formatError(e);
+    }
+    if (capturedError !== null) setOpError(capturedError);
+  };
+
+  return {
+    state,
+    opError,
+    isWindows,
+    install:   () => runOp(() => HelperInstall("")),
+    start:     () => runOp(() => HelperStart()),
+    stop:      () => runOp(() => HelperStop()),
+    restart:   () => runOp(() => HelperRestart()),
+    reinstall: () => runOp(() => HelperReinstall()),
+    dismissError: () => setOpError(null),
+  };
 }
