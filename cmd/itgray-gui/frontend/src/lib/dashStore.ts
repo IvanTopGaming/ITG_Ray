@@ -74,7 +74,19 @@ function resolveIdleAck() {
   pendingIdleAck = null;
 }
 
-async function bootstrap() {
+let bootstrapInFlight: Promise<void> | null = null;
+
+async function bootstrap(): Promise<void> {
+  if (bootstrapInFlight) return bootstrapInFlight;
+  bootstrapInFlight = doBootstrap();
+  try {
+    await bootstrapInFlight;
+  } finally {
+    bootstrapInFlight = null;
+  }
+}
+
+async function doBootstrap(): Promise<void> {
   try {
     const snap: Snapshot = await GetSnapshot();
     setState({
@@ -190,7 +202,23 @@ export function effectiveStatus(s: DashState): ChainStatus | "error" {
   return s.status;
 }
 
+let connectInFlight: Promise<void> | null = null;
+
 export async function dashConnect(serverId: string): Promise<void> {
+  if (connectInFlight) {
+    // Coalesce: silently absorb concurrent re-entry. Caller can still observe
+    // status via useDash(); the in-flight call will set state when it completes.
+    return connectInFlight;
+  }
+  connectInFlight = doConnect(serverId);
+  try {
+    await connectInFlight;
+  } finally {
+    connectInFlight = null;
+  }
+}
+
+async function doConnect(serverId: string): Promise<void> {
   try {
     if (state.status === "connected") {
       await Disconnect();
@@ -198,6 +226,7 @@ export async function dashConnect(serverId: string): Promise<void> {
     }
     await Connect(serverId, state.mode);
   } catch (err: any) {
+    if (err?.message === "superseded") return;
     setState({
       ...state,
       lastError: {
@@ -232,14 +261,25 @@ export async function dashSwitchMode(mode: Mode): Promise<void> {
     setState({ ...state, mode });
     return;
   }
+  if (connectInFlight) return connectInFlight;
   const targetId = state.currentServer?.id;
   if (!targetId) return;
+  connectInFlight = doSwitchMode(targetId, mode);
+  try {
+    await connectInFlight;
+  } finally {
+    connectInFlight = null;
+  }
+}
+
+async function doSwitchMode(targetId: string, mode: Mode): Promise<void> {
   try {
     await Disconnect();
     await waitForIdle();
     setState({ ...state, mode });
     await Connect(targetId, mode);
   } catch (err: any) {
+    if (err?.message === "superseded") return;
     setState({
       ...state,
       lastError: {
@@ -265,6 +305,8 @@ export function __resetForTest(): void {
     clearTimeout(pendingIdleAck.timer);
     pendingIdleAck = null;
   }
+  bootstrapInFlight = null;
+  connectInFlight = null;
   registerEventHandlers();
 }
 

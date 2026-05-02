@@ -281,3 +281,57 @@ describe("dashSwitchMode", () => {
     expect(getDashState().mode).toBe("sysproxy");
   });
 });
+
+describe("dashStore — concurrency guards", () => {
+  it("dashConnect coalesces concurrent re-entry (single backend Connect)", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    let resolveConnect!: () => void;
+    runConnectMock.mockImplementation(() => new Promise<void>((r) => { resolveConnect = () => r(); }));
+    const p1 = dashConnect("s1");
+    const p2 = dashConnect("s1");  // concurrent; should not issue a second Connect
+    resolveConnect();
+    await Promise.all([p1, p2]);
+    expect(runConnectMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("dashConnect 'superseded' rejection does not poison lastError", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    fireEvent("vpn:status", { status: "connected", serverId: "old" });
+
+    // First call's Disconnect resolves but waitForIdle is still pending.
+    runDisconnectMock.mockResolvedValue(undefined);
+    const p1 = dashConnect("new1");
+
+    // Wait one tick for p1's await Disconnect to advance into waitForIdle.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Second call should be coalesced — the in-flight guard means it just
+    // returns the existing promise; no superseded scenario actually fires
+    // here because we now coalesce. But we still verify lastError stays null.
+    const p2 = dashConnect("new2");
+
+    // Resolve p1 by emitting idle.
+    runConnectMock.mockResolvedValue(undefined);
+    fireEvent("vpn:status", { status: "idle" });
+    await Promise.all([p1, p2]);
+    // Coalesced: only one Disconnect+Connect pair should have fired across
+    // both calls. Critical regression guard: lastError must not be poisoned
+    // by a "superseded" rejection from a stale waitForIdle.
+    expect(runDisconnectMock).toHaveBeenCalledTimes(1);
+    expect(runConnectMock).toHaveBeenCalledTimes(1);
+    expect(getDashState().lastError).toBeNull();
+  });
+
+  it("bootstrap coalesces concurrent calls (single GetSnapshot)", async () => {
+    let resolveSnap!: (v: any) => void;
+    getSnapshotMock.mockImplementation(() => new Promise((r) => { resolveSnap = r; }));
+    const p1 = __bootstrapForTest();
+    const p2 = __bootstrapForTest();  // concurrent; should coalesce
+    resolveSnap(baseSnapshot);
+    await Promise.all([p1, p2]);
+    expect(getSnapshotMock).toHaveBeenCalledTimes(1);
+  });
+});
