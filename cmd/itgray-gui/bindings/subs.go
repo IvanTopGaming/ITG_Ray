@@ -157,8 +157,33 @@ func (s *SubsService) Edit(id, rawURL, name string) (hub.SubView, error) {
 	urlChanged := subs[idx].URL != rawURL
 
 	if urlChanged {
-		// URL-change branch lands in Task 2.
-		return hub.SubView{}, fmt.Errorf("URL change not yet implemented")
+		// Save ordering: server.Save first, then sub.Save. If sub.Save
+		// fails after the cascade, the user keeps the old-URL sub
+		// pointing at empty server set; next SyncOne repopulates from
+		// the still-old URL. The reverse order would strand new-URL
+		// metadata against old-URL servers — harder to diagnose.
+		existing, err := s.d.ServerStore.Load()
+		if err != nil {
+			return hub.SubView{}, fmt.Errorf("server.Load: %w", err)
+		}
+		filtered := existing[:0]
+		for i := range existing {
+			if existing[i].SourceID != id {
+				filtered = append(filtered, existing[i])
+			}
+		}
+		if err := s.d.ServerStore.Save(filtered); err != nil {
+			return hub.SubView{}, fmt.Errorf("server.Save: %w", err)
+		}
+		// Reset sync metadata + quota (these belong to the old URL).
+		subs[idx].LastSyncAt = time.Time{}
+		subs[idx].LastStatus = ""
+		subs[idx].LastMessage = ""
+		subs[idx].Upload = 0
+		subs[idx].Download = 0
+		subs[idx].Total = 0
+		subs[idx].Expire = nil
+		subs[idx].URL = rawURL
 	}
 
 	subs[idx].Name = strings.TrimSpace(name)

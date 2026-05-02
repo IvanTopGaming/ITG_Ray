@@ -218,3 +218,56 @@ func TestSubsService_Edit_RenameOnly_PreservesServersAndLastSync(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, srvs, 1, "server with this SourceID must survive rename")
 }
+
+func TestSubsService_Edit_URLChange_CascadesServersAndResetsMeta(t *testing.T) {
+	dir := t.TempDir()
+	svc, subStore := newSubsServiceForTest(t, dir)
+	srvPath := filepath.Join(dir, "servers.json")
+
+	require.NoError(t, subStore.Save([]subscription.Stored{{
+		ID:          "s1",
+		Name:        "renamed",
+		URL:         "https://old.example/sub",
+		LastSyncAt:  time.Now().Add(-1 * time.Hour),
+		LastStatus:  "OK",
+		LastMessage: "fetched 5 servers",
+		Upload:      100,
+		Download:    200,
+		Total:       1024,
+	}}))
+	mkSrv := func(id, src string) server.Server {
+		return server.Server{
+			ID: id, Origin: server.OriginSubscription, SourceID: src, Name: id,
+			Vless: vless.Config{
+				Address: "h", Port: 443,
+				UUID:      "00000000-0000-0000-0000-000000000000",
+				Transport: vless.TransportTCP,
+				Security:  vless.SecurityNone,
+			},
+		}
+	}
+	require.NoError(t, server.Save(srvPath, []server.Server{
+		mkSrv("a", "s1"),
+		mkSrv("b", "s1"),
+		mkSrv("c", "s2"),    // belongs to a different sub — must survive
+		mkSrv("d", ""),       // manual entry — must survive
+	}))
+
+	view, err := svc.Edit("s1", "https://new.example/sub", "renamed")
+	require.NoError(t, err)
+	require.Equal(t, "https://new.example/sub", view.URL)
+	require.True(t, view.LastSyncAt.IsZero(), "LastSyncAt must reset on URL change")
+	require.Equal(t, "", view.LastSyncStatus, "LastSyncStatus must reset on URL change")
+	require.Equal(t, 0, view.ServerCount, "old servers must be cascaded")
+	require.Equal(t, int64(0), view.Upload)
+	require.Equal(t, int64(0), view.Download)
+	require.Equal(t, int64(0), view.Total)
+
+	// On-disk verification: only s1 servers cascaded, s2 + manual survive.
+	srvs, err := server.Load(srvPath)
+	require.NoError(t, err)
+	require.Len(t, srvs, 2)
+	gotIDs := []string{srvs[0].ID, srvs[1].ID}
+	require.Contains(t, gotIDs, "c")
+	require.Contains(t, gotIDs, "d")
+}
