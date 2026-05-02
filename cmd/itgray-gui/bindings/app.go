@@ -186,6 +186,7 @@ func toSubViews(in []subscription.Stored, serverCount map[string]int) []hub.SubV
 			Download:        s.Download,
 			Total:           s.Total,
 			Expire:          s.Expire,
+			UserAgent:       s.UserAgent,
 		})
 	}
 	return out
