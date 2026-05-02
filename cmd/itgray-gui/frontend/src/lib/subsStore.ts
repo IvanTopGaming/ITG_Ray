@@ -173,11 +173,46 @@ async function removeAction(id: string): Promise<void> {
     throw err;
   }
 }
-async function syncOneAction(_id: string): Promise<void> {
-  throw new Error("syncOne not implemented");
+async function syncOneAction(id: string): Promise<void> {
+  if (state.load.kind !== "ready") return;
+  const syncingNext = new Set(state.inFlight.syncing);
+  syncingNext.add(id);
+  setState({
+    ...state,
+    load: {
+      kind: "ready",
+      subs: state.load.subs.map(s => s.id === id ? { ...s, status: "syncing" } : s),
+    },
+    inFlight: { ...state.inFlight, syncing: syncingNext },
+  });
+  try {
+    await SyncOneSub(id);
+  } finally {
+    const syncingDone = new Set(state.inFlight.syncing);
+    syncingDone.delete(id);
+    setState({ ...state, inFlight: { ...state.inFlight, syncing: syncingDone } });
+  }
 }
+
 async function syncAllAction(): Promise<void> {
-  throw new Error("syncAll not implemented");
+  if (state.load.kind !== "ready") return;
+  const ids = state.load.subs.map(s => s.id);
+  const syncingNext = new Set([...state.inFlight.syncing, ...ids]);
+  setState({
+    ...state,
+    load: {
+      kind: "ready",
+      subs: state.load.subs.map(s => ({ ...s, status: "syncing" })),
+    },
+    inFlight: { ...state.inFlight, syncing: syncingNext },
+  });
+  try {
+    await SyncAllSubs();
+  } finally {
+    const syncingDone = new Set(state.inFlight.syncing);
+    for (const id of ids) syncingDone.delete(id);
+    setState({ ...state, inFlight: { ...state.inFlight, syncing: syncingDone } });
+  }
 }
 
 const actions: SubsActions = {
@@ -199,8 +234,6 @@ export function useSubs(): { state: SubsState; actions: SubsActions } {
 // TS would warn 'imported but unused' otherwise; the void expressions are
 // no-ops kept until the next tasks reference each binding directly.
 void EditSub;
-void SyncOneSub;
-void SyncAllSubs;
 
 // Test escape hatch — mirrors settings.ts.__resetForTests.
 export function __resetForTests(): void {

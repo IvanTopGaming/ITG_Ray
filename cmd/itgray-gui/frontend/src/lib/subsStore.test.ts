@@ -256,3 +256,100 @@ describe("subsStore.remove", () => {
     }
   });
 });
+
+describe("subsStore.syncOne / syncAll + debounce", () => {
+  const seed = [
+    { id: "s1", name: "a", url: "https://1", lastSyncAt: "0001-01-01T00:00:00Z", lastSyncStatus: "", serverCount: 0, updateInterval: 3600 },
+    { id: "s2", name: "b", url: "https://2", lastSyncAt: "0001-01-01T00:00:00Z", lastSyncStatus: "", serverCount: 0, updateInterval: 3600 },
+  ];
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    const mod = await import("./subsStore");
+    mod.__resetForTests();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("syncOne marks the row 'syncing' during the call and clears it after", async () => {
+    mockList.mockResolvedValueOnce(seed);
+    const { useSubs } = await import("./subsStore");
+    const { result } = renderHook(() => useSubs());
+    await act(async () => { await vi.runAllTimersAsync(); });
+
+    let resolveSync: (() => void) | null = null;
+    mockSyncOne.mockImplementationOnce(() => new Promise<void>(res => { resolveSync = res; }));
+
+    let syncPromise!: Promise<void>;
+    await act(async () => {
+      syncPromise = result.current.actions.syncOne("s1");
+      await Promise.resolve();
+    });
+
+    expect(result.current.state.inFlight.syncing.has("s1")).toBe(true);
+    if (result.current.state.load.kind === "ready") {
+      expect(result.current.state.load.subs.find(s => s.id === "s1")?.status).toBe("syncing");
+    }
+
+    await act(async () => {
+      resolveSync!();
+      await syncPromise;
+    });
+
+    expect(result.current.state.inFlight.syncing.has("s1")).toBe(false);
+  });
+
+  it("sub:synced event triggers a debounced refresh that fires once for a burst", async () => {
+    let registeredHandler: (() => void) | null = null;
+    mockEventsOn.mockImplementationOnce((_n: string, h: () => void) => {
+      registeredHandler = h;
+      return () => {};
+    });
+    mockList.mockResolvedValueOnce(seed);
+    const { useSubs } = await import("./subsStore");
+    renderHook(() => useSubs());
+    await act(async () => { await vi.runAllTimersAsync(); });
+    expect(mockList).toHaveBeenCalledTimes(1);
+
+    mockList.mockResolvedValue(seed);
+    act(() => {
+      registeredHandler!();
+      registeredHandler!();
+      registeredHandler!();
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(60); });
+    expect(mockList).toHaveBeenCalledTimes(2);
+  });
+
+  it("syncAll marks all rows 'syncing' and calls the backend once", async () => {
+    mockList.mockResolvedValueOnce(seed);
+    const { useSubs } = await import("./subsStore");
+    const { result } = renderHook(() => useSubs());
+    await act(async () => { await vi.runAllTimersAsync(); });
+
+    let resolveSync: (() => void) | null = null;
+    mockSyncAll.mockImplementationOnce(() => new Promise<void>(res => { resolveSync = res; }));
+
+    let syncPromise!: Promise<void>;
+    await act(async () => {
+      syncPromise = result.current.actions.syncAll();
+      await Promise.resolve();
+    });
+
+    if (result.current.state.load.kind === "ready") {
+      expect(result.current.state.load.subs.every(s => s.status === "syncing")).toBe(true);
+    }
+    expect(result.current.state.inFlight.syncing.size).toBe(2);
+    expect(mockSyncAll).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveSync!();
+      await syncPromise;
+    });
+
+    expect(result.current.state.inFlight.syncing.size).toBe(0);
+  });
+});
