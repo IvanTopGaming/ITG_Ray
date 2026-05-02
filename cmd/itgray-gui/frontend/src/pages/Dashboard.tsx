@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -8,65 +8,27 @@ import {
 } from "recharts";
 import { ArrowRight, Star } from "lucide-react";
 import { motion, type Variants } from "framer-motion";
+import { Link } from "react-router-dom";
 import { GlowOrb, type OrbStatus } from "@/components/GlowOrb";
 import { CountryFlag } from "@/components/controls/CountryFlag";
+import { Reveal } from "@/components/controls/Reveal";
 import { cn } from "@/lib/cn";
+import {
+  useDash,
+  effectiveStatus,
+  dashConnect,
+  dashDisconnect,
+  dashSwitchMode,
+  clearLastError,
+  type Mode,
+  type SpeedPoint,
+} from "@/lib/dashStore";
+import { useIp, ipRefresh, ipReset } from "@/lib/ipStore";
+import { useSettings } from "@/lib/settings";
+import { pickQuickSwitch } from "@/lib/quickSwitch";
+import type { hub } from "../../wailsjs/go/models";
 
-type Mode = "sysproxy" | "tun";
-
-interface Speed {
-  downBps: number;
-  upBps: number;
-}
-
-interface Totals {
-  down: number;
-  up: number;
-}
-
-interface SpeedPoint {
-  t: number;
-  down: number;
-  up: number;
-}
-
-interface FakeServer {
-  id: string;
-  flag: string;
-  city: string;
-  code: string;
-  pingMs: number;
-  favorite: boolean;
-}
-
-const FAKE_SERVERS: FakeServer[] = [
-  {
-    id: "s1",
-    flag: "🇳🇱",
-    city: "Amsterdam",
-    code: "NL-AMS-03",
-    pingMs: 12,
-    favorite: true,
-  },
-  {
-    id: "s2",
-    flag: "🇩🇪",
-    city: "Frankfurt",
-    code: "DE-FRA-01",
-    pingMs: 28,
-    favorite: false,
-  },
-  {
-    id: "s3",
-    flag: "🇫🇮",
-    city: "Helsinki",
-    code: "FI-HEL-02",
-    pingMs: 34,
-    favorite: true,
-  },
-];
-
-const HISTORY_LENGTH = 60;
+type ServerView = hub.ServerView;
 
 const SNAP_EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -88,116 +50,79 @@ const itemVariants: Variants = {
 };
 
 export function Dashboard() {
-  const [status, setStatus] = useState<OrbStatus>("idle");
-  const [mode, setMode] = useState<Mode>("sysproxy");
-  const [activeServerId, setActiveServerId] = useState<string>("s1");
-  const [connectedAt, setConnectedAt] = useState<number | null>(null);
+  const dash = useDash();
+  const ip = useIp();
+  const [settings] = useSettings();
+  const eff = effectiveStatus(dash) as OrbStatus;
+
+  const quickSwitchServers = useMemo(
+    () => pickQuickSwitch(dash.allServers, 3),
+    [dash.allServers],
+  );
+
+  // Drive ipStore based on connection lifecycle.
+  useEffect(() => {
+    if (dash.status === "connected") void ipRefresh();
+    else ipReset();
+  }, [dash.status]);
+
+  // Tick second-resolution clock for uptime display while connected.
   const [now, setNow] = useState(Date.now());
-  const [speed, setSpeed] = useState<Speed>({ downBps: 0, upBps: 0 });
-  const [totals, setTotals] = useState<Totals>({ down: 0, up: 0 });
-  const [history, setHistory] = useState<SpeedPoint[]>([]);
-  const speedTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const tickTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const activeServer =
-    FAKE_SERVERS.find((s) => s.id === activeServerId) ?? FAKE_SERVERS[0];
-
   useEffect(() => {
-    if (status === "connecting") {
-      const t = setTimeout(() => {
-        setStatus("connected");
-        setConnectedAt(Date.now());
-      }, 900);
-      return () => clearTimeout(t);
-    }
-    if (status === "disconnecting") {
-      const t = setTimeout(() => {
-        setStatus("idle");
-        setConnectedAt(null);
-        setSpeed({ downBps: 0, upBps: 0 });
-        setTotals({ down: 0, up: 0 });
-        setHistory([]);
-      }, 450);
-      return () => clearTimeout(t);
-    }
-  }, [status]);
+    if (dash.status !== "connected") return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [dash.status]);
 
-  useEffect(() => {
-    if (status !== "connected") {
-      if (speedTimer.current) clearInterval(speedTimer.current);
-      if (tickTimer.current) clearInterval(tickTimer.current);
-      return;
-    }
-    speedTimer.current = setInterval(() => {
-      const next: Speed = {
-        downBps: 25_000_000 + Math.random() * 8_000_000,
-        upBps: 1_750_000 + Math.random() * 1_000_000,
-      };
-      setSpeed(next);
-      setTotals((prev) => ({
-        down: prev.down + next.downBps,
-        up: prev.up + next.upBps,
-      }));
-      setHistory((prev) => {
-        const point: SpeedPoint = {
-          t: Date.now(),
-          down: next.downBps / 125_000,
-          up: next.upBps / 125_000,
-        };
-        const updated = [...prev, point];
-        return updated.length > HISTORY_LENGTH
-          ? updated.slice(updated.length - HISTORY_LENGTH)
-          : updated;
-      });
-    }, 1000);
-    tickTimer.current = setInterval(() => setNow(Date.now()), 1000);
-    setSpeed({ downBps: 26_500_000, upBps: 1_900_000 });
-    return () => {
-      if (speedTimer.current) clearInterval(speedTimer.current);
-      if (tickTimer.current) clearInterval(tickTimer.current);
-    };
-  }, [status]);
-
-  const sessionSeconds = connectedAt
-    ? Math.floor((now - connectedAt) / 1000)
+  const sessionSeconds = dash.connectedAt
+    ? Math.floor((now - dash.connectedAt) / 1000)
     : 0;
+  const orbDisabled =
+    dash.status === "connecting" || dash.status === "disconnecting";
 
-  const orbDisabled = status === "connecting" || status === "disconnecting";
+  // Selected server is what the orb will connect to. When connected it
+  // tracks currentServer; when idle/error the user picks via QuickSwitch.
+  const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
+  const highlightedId =
+    selectedServerId ?? dash.currentServer?.id ?? quickSwitchServers[0]?.id ?? null;
 
-  function handleOrbClick(e: React.MouseEvent<HTMLButtonElement>) {
-    if (e.shiftKey) {
-      setStatus("error");
-      return;
+  async function handleOrbClick() {
+    if (eff === "idle" || eff === "error") {
+      const target = highlightedId;
+      if (!target) return;
+      try {
+        await dashConnect(target);
+      } catch {
+        /* lastError set */
+      }
+    } else if (eff === "connected") {
+      try {
+        await dashDisconnect();
+      } catch {
+        /* lastError set */
+      }
     }
-    if (status === "idle" || status === "error") setStatus("connecting");
-    else if (status === "connected") setStatus("disconnecting");
   }
 
-  function handleModeChange(next: Mode) {
-    if (next === mode) return;
-    if (status === "connecting" || status === "disconnecting") return;
-    setMode(next);
-    if (status === "connected") {
-      setConnectedAt(null);
-      setSpeed({ downBps: 0, upBps: 0 });
-      setTotals({ down: 0, up: 0 });
-      setHistory([]);
-      setStatus("connecting");
+  async function handleModeChange(next: Mode) {
+    if (next === dash.mode || orbDisabled) return;
+    try {
+      await dashSwitchMode(next);
+    } catch {
+      /* lastError set */
     }
   }
 
-  function handleQuickSwitch(serverId: string) {
-    if (status === "connecting" || status === "disconnecting") return;
-    if (serverId === activeServerId && status === "connected") return;
-    setActiveServerId(serverId);
-    if (status === "connected") {
-      setConnectedAt(null);
-      setSpeed({ downBps: 0, upBps: 0 });
-      setTotals({ down: 0, up: 0 });
-      setHistory([]);
-      setStatus("connecting");
-    } else if (status === "idle" || status === "error") {
-      setStatus("connecting");
+  async function handleQuickSwitch(serverId: string) {
+    if (orbDisabled) return;
+    setSelectedServerId(serverId);
+    // When connected, swap; when idle/error, click only selects.
+    if (eff === "connected" && serverId !== dash.currentServer?.id) {
+      try {
+        await dashConnect(serverId);
+      } catch {
+        /* lastError set */
+      }
     }
   }
 
@@ -214,11 +139,30 @@ export function Dashboard() {
       >
         <h1 className="text-[22px] font-semibold tracking-tight">Dashboard</h1>
         <ModeToggle
-          value={mode}
+          value={dash.mode}
           onChange={handleModeChange}
-          disabled={status === "connecting" || status === "disconnecting"}
+          disabled={orbDisabled}
         />
       </motion.div>
+
+      <Reveal show={!!dash.lastError}>
+        <div className="mb-5 flex items-start gap-3 rounded-xl border border-[#ff9a9a]/30 bg-[#ff9a9a]/[0.06] px-4 py-3">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-[#ff9a9a]">
+              {dash.lastError?.kind ?? "error"}
+            </span>
+            <span className="break-words font-mono text-[12px] text-white/85">
+              {dash.lastError?.message ?? ""}
+            </span>
+          </div>
+          <button
+            onClick={clearLastError}
+            className="shrink-0 rounded-md px-2 py-1 text-[11px] font-medium text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white"
+          >
+            Dismiss
+          </button>
+        </div>
+      </Reveal>
 
       <motion.div
         variants={itemVariants}
@@ -227,25 +171,29 @@ export function Dashboard() {
         <div className="flex items-center gap-6">
           <div className="flex h-[140px] shrink-0 items-center">
             <GlowOrb
-              status={status}
+              status={eff}
               size={104}
               onClick={handleOrbClick}
               disabled={orbDisabled}
-              ariaLabel={ariaLabelFor(status)}
+              ariaLabel={ariaLabelFor(eff)}
             />
           </div>
 
           <div className="flex h-[140px] min-w-0 flex-1 flex-col gap-4">
-            <StatusLine status={status} />
-            <ActiveRoute status={status} mode={mode} server={activeServer} />
+            <StatusLine status={eff} />
+            <ActiveRoute
+              status={eff}
+              mode={dash.mode}
+              server={dash.currentServer}
+            />
           </div>
 
           <div className="h-[140px] w-px shrink-0 bg-white/10" />
 
           <Stats
-            status={status}
-            speed={speed}
-            totals={totals}
+            status={eff}
+            speed={dash.speed}
+            totals={dash.totals}
             sessionSeconds={sessionSeconds}
           />
         </div>
@@ -253,27 +201,34 @@ export function Dashboard() {
 
       <motion.div variants={itemVariants}>
         <QuickSwitch
-          servers={FAKE_SERVERS}
-          activeServerId={activeServerId}
-          status={status}
+          servers={quickSwitchServers}
+          highlightedId={highlightedId}
+          status={eff}
           onPick={handleQuickSwitch}
         />
       </motion.div>
 
       <motion.div variants={itemVariants} className="grid grid-cols-3 gap-4">
         <MetricChart
-          status={status}
-          speed={speed}
-          history={history}
+          status={eff}
+          speed={dash.speed}
+          history={dash.history}
           metric="down"
         />
         <MetricChart
-          status={status}
-          speed={speed}
-          history={history}
+          status={eff}
+          speed={dash.speed}
+          history={dash.history}
           metric="up"
         />
-        <ConnectionInfo status={status} server={activeServer} />
+        <ConnectionInfo
+          status={eff}
+          server={dash.currentServer}
+          publicIp={ip}
+          dnsMode={settings.dnsMode}
+          dnsCustom={settings.dnsCustom}
+          helperState={dash.helperState}
+        />
       </motion.div>
     </motion.section>
   );
@@ -331,9 +286,9 @@ function ActiveRoute({
 }: {
   status: OrbStatus;
   mode: Mode;
-  server: FakeServer;
+  server: ServerView | null;
 }) {
-  if (status === "idle" || status === "error") {
+  if (status === "idle" || status === "error" || !server) {
     return (
       <div className="flex h-[48px] flex-col">
         <div className="h-[28px] text-[24px] font-bold leading-[28px] tracking-tight">
@@ -350,14 +305,17 @@ function ActiveRoute({
   return (
     <div className="flex h-[48px] flex-col">
       <div className="flex h-[28px] items-center gap-2 text-[24px] font-bold leading-[28px] tracking-tight">
-        <CountryFlag
-          code={server.flag}
-          className="h-[18px] w-[27px] shrink-0 rounded-[2px] object-cover shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
-        />
-        <span>{server.city}</span>
+        {server.country && (
+          <CountryFlag
+            code={server.country}
+            className="h-[18px] w-[27px] shrink-0 rounded-[2px] object-cover shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
+          />
+        )}
+        <span>{server.name || server.id}</span>
       </div>
       <div className="mt-1 h-[16px] font-mono text-[12px] leading-[16px] tabular-nums text-white/55">
-        {server.code} · {server.pingMs} ms · {mode}
+        {server.address || "—"} ·{" "}
+        {server.latencyMs ? `${server.latencyMs} ms` : "— ms"} · {mode}
       </div>
     </div>
   );
@@ -370,8 +328,8 @@ function Stats({
   sessionSeconds,
 }: {
   status: OrbStatus;
-  speed: Speed;
-  totals: Totals;
+  speed: { downBps: number; upBps: number; at: number };
+  totals: { down: number; up: number };
   sessionSeconds: number;
 }) {
   const live = status === "connected";
@@ -453,103 +411,163 @@ function ModeToggle({
 
 function QuickSwitch({
   servers,
-  activeServerId,
+  highlightedId,
   status,
   onPick,
 }: {
-  servers: FakeServer[];
-  activeServerId: string;
+  servers: ServerView[];
+  highlightedId: string | null;
   status: OrbStatus;
   onPick: (id: string) => void;
 }) {
+  const cols =
+    servers.length === 0
+      ? null
+      : servers.length === 1
+        ? "grid-cols-1"
+        : servers.length === 2
+          ? "grid-cols-2"
+          : "grid-cols-3";
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between px-1">
         <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/45">
           Quick switch
         </span>
-        <button className="group flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-white/75 transition-colors duration-instant ease-snap hover:bg-white/[0.06] hover:text-white">
+        <Link
+          to="/servers"
+          className="group flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-white/75 transition-colors duration-instant ease-snap hover:bg-white/[0.06] hover:text-white"
+        >
           See all
           <ArrowRight className="h-3 w-3 transition-transform duration-instant ease-snap group-hover:translate-x-0.5" />
-        </button>
+        </Link>
       </div>
-      <div className="grid grid-cols-3 gap-3">
-        {servers.map((server) => {
-          const active = server.id === activeServerId && status === "connected";
-          return (
-            <motion.button
-              key={server.id}
-              onClick={() => onPick(server.id)}
-              whileHover={{ y: -2 }}
-              whileTap={{ scale: 0.97 }}
-              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-              className={cn(
-                "glass-regular relative flex items-center gap-3 rounded-xl px-4 py-3 text-left",
-                !active && "hover:bg-white/[0.04]",
-              )}
-            >
-              {active && (
-                <motion.div
-                  layoutId="quick-switch-active-ring"
-                  className="absolute -inset-px rounded-xl border-2 border-success/65 bg-success/[0.07] shadow-[0_0_22px_rgba(0,230,118,0.32),inset_0_0_18px_rgba(0,230,118,0.10)]"
-                  transition={{ type: "spring", stiffness: 380, damping: 32 }}
-                />
-              )}
-              <CountryFlag
-                code={server.flag}
-                className="relative z-10 h-[20px] w-[30px] shrink-0 rounded-[2px] object-cover shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
-              />
-              <div className="relative z-10 flex min-w-0 flex-1 flex-col gap-0.5">
-                <div className="flex items-center gap-1.5">
-                  <span className="truncate text-[13px] font-semibold">
-                    {server.city}
+      {cols === null ? (
+        <QuickSwitchEmpty />
+      ) : (
+        <div className={cn("grid gap-3", cols)}>
+          {servers.map((server) => {
+            const highlighted = server.id === highlightedId;
+            const active = highlighted && status === "connected";
+            const selected = highlighted && !active;
+            return (
+              <motion.button
+                key={server.id}
+                onClick={() => onPick(server.id)}
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.97 }}
+                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                className={cn(
+                  "glass-regular relative flex items-center gap-3 rounded-xl px-4 py-3 text-left",
+                  !highlighted && "hover:bg-white/[0.04]",
+                )}
+              >
+                {highlighted && (
+                  <motion.div
+                    layoutId="quick-switch-active-ring"
+                    className={cn(
+                      "absolute -inset-px rounded-xl border-2",
+                      active &&
+                        "border-success/65 bg-success/[0.07] shadow-[0_0_22px_rgba(0,230,118,0.32),inset_0_0_18px_rgba(0,230,118,0.10)]",
+                      selected && "border-white/30 bg-white/[0.04]",
+                    )}
+                    transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                  />
+                )}
+                {server.country && (
+                  <CountryFlag
+                    code={server.country}
+                    className="relative z-10 h-[20px] w-[30px] shrink-0 rounded-[2px] object-cover shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
+                  />
+                )}
+                <div className="relative z-10 flex min-w-0 flex-1 flex-col gap-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate text-[13px] font-semibold">
+                      {server.name || server.id}
+                    </span>
+                    {server.favorite && (
+                      <Star
+                        className="h-3 w-3 fill-warn stroke-warn"
+                        strokeWidth={2}
+                      />
+                    )}
+                  </div>
+                  <span className="font-mono text-[10px] tabular-nums text-white/45">
+                    {server.address}
                   </span>
-                  {server.favorite && (
-                    <Star
-                      className="h-3 w-3 fill-warn stroke-warn"
-                      strokeWidth={2}
-                    />
+                </div>
+                <div className="relative z-10 flex shrink-0 flex-col items-end gap-1">
+                  <span
+                    className={cn(
+                      "font-mono text-[11px] font-semibold tabular-nums",
+                      server.latencyMs === 0
+                        ? "text-white/45"
+                        : server.latencyMs < 25
+                          ? "text-success"
+                          : server.latencyMs < 60
+                            ? "text-warn"
+                            : "text-white/65",
+                    )}
+                  >
+                    {server.latencyMs ? `${server.latencyMs} ms` : "— ms"}
+                  </span>
+                  {active ? (
+                    <motion.span
+                      animate={{ opacity: [0.55, 1, 0.55] }}
+                      transition={{
+                        duration: 1.8,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                      className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-success"
+                    >
+                      <span className="h-1 w-1 rounded-full bg-success shadow-[0_0_4px_rgba(0,230,118,0.8)]" />
+                      Active
+                    </motion.span>
+                  ) : selected ? (
+                    <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/65">
+                      Selected
+                    </span>
+                  ) : (
+                    <span className="text-[9px] uppercase tracking-[0.14em] text-white/35">
+                      Tap
+                    </span>
                   )}
                 </div>
-                <span className="font-mono text-[10px] tabular-nums text-white/45">
-                  {server.code}
-                </span>
-              </div>
-              <div className="relative z-10 flex shrink-0 flex-col items-end gap-1">
-                <span
-                  className={cn(
-                    "font-mono text-[11px] font-semibold tabular-nums",
-                    server.pingMs < 25
-                      ? "text-success"
-                      : server.pingMs < 60
-                        ? "text-warn"
-                        : "text-white/65",
-                  )}
-                >
-                  {server.pingMs} ms
-                </span>
-                {active ? (
-                  <motion.span
-                    animate={{ opacity: [0.55, 1, 0.55] }}
-                    transition={{
-                      duration: 1.8,
-                      repeat: Infinity,
-                      ease: "easeInOut",
-                    }}
-                    className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-success"
-                  >
-                    <span className="h-1 w-1 rounded-full bg-success shadow-[0_0_4px_rgba(0,230,118,0.8)]" />
-                    Active
-                  </motion.span>
-                ) : (
-                  <span className="text-[9px] uppercase tracking-[0.14em] text-white/35">
-                    Tap
-                  </span>
-                )}
-              </div>
-            </motion.button>
-          );
-        })}
+              </motion.button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function QuickSwitchEmpty() {
+  return (
+    <div className="glass-regular flex items-center justify-between gap-4 rounded-xl px-5 py-4">
+      <div className="flex flex-col gap-1">
+        <span className="text-[13px] font-semibold text-white/85">
+          No servers added
+        </span>
+        <span className="text-[11px] text-white/55">
+          Add a subscription or browse servers to start connecting.
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <Link
+          to="/subscriptions"
+          className="rounded-md bg-white/[0.08] px-3 py-1.5 text-[11px] font-medium text-white/85 hover:bg-white/[0.12]"
+        >
+          Add subscription
+        </Link>
+        <Link
+          to="/servers"
+          className="rounded-md px-3 py-1.5 text-[11px] font-medium text-white/65 hover:bg-white/[0.06] hover:text-white"
+        >
+          Browse
+        </Link>
       </div>
     </div>
   );
@@ -562,7 +580,7 @@ function MetricChart({
   metric,
 }: {
   status: OrbStatus;
-  speed: Speed;
+  speed: { downBps: number; upBps: number; at: number };
   history: SpeedPoint[];
   metric: "down" | "up";
 }) {
@@ -570,12 +588,19 @@ function MetricChart({
   const currentMbps = live
     ? (metric === "down" ? speed.downBps : speed.upBps) / 125_000
     : 0;
+  const histKey = metric === "down" ? "downBps" : "upBps";
   const peakMbps = history.length
-    ? Math.max(0, ...history.map((p) => p[metric]))
+    ? Math.max(0, ...history.map((p) => p[histKey] / 125_000))
     : 0;
   const label = metric === "down" ? "↓ Download" : "↑ Upload";
   const color = metric === "down" ? "#00e892" : "#7ed4ff";
   const gradId = `grad-${metric}`;
+
+  // history needs a per-metric Mbps key for recharts dataKey
+  const data = useMemo(
+    () => history.map((p) => ({ t: p.t, value: p[histKey] / 125_000 })),
+    [history, histKey],
+  );
 
   return (
     <div className="glass-regular flex flex-col gap-3 rounded-2xl p-6">
@@ -602,10 +627,10 @@ function MetricChart({
         </div>
       </div>
       <div className="h-[140px]">
-        {live && history.length > 1 ? (
+        {live && data.length > 1 ? (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
-              data={history}
+              data={data}
               margin={{ top: 5, right: 6, bottom: 0, left: 0 }}
             >
               <defs>
@@ -634,7 +659,7 @@ function MetricChart({
               />
               <Area
                 type="monotone"
-                dataKey={metric}
+                dataKey="value"
                 stroke={color}
                 strokeWidth={2}
                 fill={`url(#${gradId})`}
@@ -657,40 +682,65 @@ function MetricChart({
 function ConnectionInfo({
   status,
   server,
+  publicIp,
+  dnsMode,
+  dnsCustom,
+  helperState,
 }: {
   status: OrbStatus;
-  server: FakeServer;
+  server: ServerView | null;
+  publicIp: { value: string | null; loading: boolean; error: string | null };
+  dnsMode: string;
+  dnsCustom: string;
+  helperState: "running" | "stopped" | "missing";
 }) {
   const live = status === "connected";
   const dash = "—";
-  const fakePublicIP: Record<string, string> = {
-    s1: "89.46.•••.62",
-    s2: "62.171.•••.21",
-    s3: "92.118.•••.48",
-  };
-  const rows: Array<{
-    label: string;
-    value: React.ReactNode;
-    accent?: string;
-  }> = [
-    { label: "Protocol", value: "VLESS · Reality" },
-    { label: "Transport", value: "WebSocket" },
-    {
-      label: "Public IP",
-      value: live ? (
-        <>
-          {fakePublicIP[server.id] ?? dash} ·{" "}
-          <CountryFlag
-            code={server.flag}
-            className="inline-block h-[10px] w-[15px] rounded-[2px] align-[-1px] shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
-          />
-        </>
-      ) : (
-        dash
-      ),
-    },
-    { label: "DNS", value: "1.1.1.1, 8.8.8.8" },
+
+  const protocol = server?.security
+    ? `VLESS · ${capitalizeFirst(server.security)}`
+    : dash;
+  const transport = server?.transport ?? dash;
+
+  const dns =
+    dnsMode === "custom" && dnsCustom.trim() ? dnsCustom : "Auto";
+
+  const helperColor = {
+    running: "bg-success",
+    stopped: "bg-warn",
+    missing: "bg-[#ff9a9a]",
+  }[helperState];
+
+  const ipNode: React.ReactNode = !live
+    ? dash
+    : publicIp.loading
+      ? <span className="opacity-55">Resolving…</span>
+      : publicIp.error
+        ? dash
+        : publicIp.value
+          ? (
+            <>
+              {publicIp.value}
+              {server?.country && (
+                <>
+                  {" · "}
+                  <CountryFlag
+                    code={server.country}
+                    className="inline-block h-[10px] w-[15px] rounded-[2px] align-[-1px] shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
+                  />
+                </>
+              )}
+            </>
+          )
+          : dash;
+
+  const rows: Array<{ label: string; value: React.ReactNode }> = [
+    { label: "Protocol", value: live ? protocol : dash },
+    { label: "Transport", value: live ? transport : dash },
+    { label: "Public IP", value: ipNode },
+    { label: "DNS", value: dns },
   ];
+
   return (
     <div className="glass-regular flex h-full flex-col gap-3 rounded-2xl p-6">
       <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/45">
@@ -716,13 +766,23 @@ function ConnectionInfo({
             Helper
           </span>
           <span className="flex items-center gap-1.5 font-mono text-[11px] text-white/85">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-success shadow-[0_0_6px_rgba(0,230,118,0.7)]" />
-            running
+            <span
+              className={cn(
+                "inline-block h-1.5 w-1.5 rounded-full",
+                helperColor,
+              )}
+            />
+            {helperState}
           </span>
         </div>
       </div>
     </div>
   );
+}
+
+function capitalizeFirst(s: string): string {
+  if (!s) return "";
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function formatDuration(s: number): string {

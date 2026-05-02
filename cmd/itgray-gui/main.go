@@ -66,20 +66,6 @@ func main() {
 		return state
 	}
 
-	appSvc := bindings.NewAppService(&bindings.AppDeps{
-		DataDir:      dataDir,
-		Hub:          app.Hub(),
-		Version:      Version,
-		BuildDate:    BuildDate,
-		ServerStore:  serverStore,
-		SubStore:     subStore,
-		HelperProber: helperProber,
-		// AppCtx returns the Wails app context as set by App.Startup. The
-		// closure indirects so AppService captures the *future* ctx (still
-		// nil at this point) — Quit dereferences only when invoked, by
-		// which time Startup has populated app.ctx.
-		AppCtx: func() context.Context { return app.ctx },
-	})
 	serversSvc := bindings.NewServersService(bindings.ServersDeps{
 		ServerStore: serverStore,
 		Hub:         app.Hub(),
@@ -151,6 +137,22 @@ func main() {
 		Hub:          app.Hub(),
 		BuildConfigs: buildConfigs(dataDir),
 		Network:      networkLoader,
+	})
+	appSvc := bindings.NewAppService(&bindings.AppDeps{
+		DataDir:      dataDir,
+		Hub:          app.Hub(),
+		Version:      Version,
+		ServerStore:  serverStore,
+		SubStore:     subStore,
+		HelperProber: helperProber,
+		// AppCtx returns the Wails app context as set by App.Startup. The
+		// closure indirects so AppService captures the *future* ctx (still
+		// nil at this point) — Quit dereferences only when invoked, by
+		// which time Startup has populated app.ctx.
+		AppCtx:        func() context.Context { return app.ctx },
+		Chain:         chainCtrl,
+		ConfigViewer:  settingsStore,
+		NetworkLoader: networkLoader,
 	})
 	runSvc := bindings.NewRunService(bindings.RunDeps{
 		Chain: chainCtrl,
