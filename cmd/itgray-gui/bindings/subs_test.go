@@ -271,3 +271,23 @@ func TestSubsService_Edit_URLChange_CascadesServersAndResetsMeta(t *testing.T) {
 	require.Contains(t, gotIDs, "c")
 	require.Contains(t, gotIDs, "d")
 }
+
+func TestSubsService_Edit_RejectsInvalidURL(t *testing.T) {
+	dir := t.TempDir()
+	svc, subStore := newSubsServiceForTest(t, dir)
+
+	require.NoError(t, subStore.Save([]subscription.Stored{{
+		ID: "s1", Name: "x", URL: "https://provider.example/sub",
+	}}))
+
+	_, err := svc.Edit("s1", "ftp://bad", "x")
+	require.ErrorIs(t, err, errInvalidURL)
+}
+
+func TestSubsService_Edit_ReturnsErrSubNotFound(t *testing.T) {
+	dir := t.TempDir()
+	svc, _ := newSubsServiceForTest(t, dir)
+
+	_, err := svc.Edit("missing-id", "https://provider.example/sub", "x")
+	require.ErrorIs(t, err, errSubNotFound)
+}
