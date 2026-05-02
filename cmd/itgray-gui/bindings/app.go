@@ -94,14 +94,10 @@ type AppDeps struct {
 	NetworkLoader NetworkLoader // NEW: source of Network for GetPublicIP sysproxy dialer
 }
 
-// publicIPCache is fleshed out in publicip.go (Task 2). Defined here so
-// AppService compiles after Task 1 lands.
-type publicIPCache struct{} //nolint:unused // populated in Task 2 (publicip.go); the field-level nolint on AppService.ipCache means staticcheck still treats this type as unreferenced
-
 // AppService implements the App.* bindings (GetSnapshot, GetVersion, Quit).
 type AppService struct {
 	d       *AppDeps
-	ipCache publicIPCache //nolint:unused // populated in Task 2 (publicip.go)
+	ipCache publicIPCache
 }
 
 // NewAppService constructs a new AppService. AppDeps is taken by pointer so
