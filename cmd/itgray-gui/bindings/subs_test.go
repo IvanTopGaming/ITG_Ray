@@ -87,7 +87,7 @@ func TestSubsService_List(t *testing.T) {
 func TestSubsService_Add_GeneratesIDAndPersists(t *testing.T) {
 	svc, store := newSubsServiceForTest(t, t.TempDir())
 
-	view, err := svc.Add("https://example.com/sub", "test")
+	view, err := svc.Add("https://example.com/sub", "test", "")
 	require.NoError(t, err)
 	require.NotEmpty(t, view.ID)
 	require.Equal(t, "test", view.Name)
@@ -107,7 +107,7 @@ func TestSubsService_Add_GeneratesIDAndPersists(t *testing.T) {
 func TestSubsService_Add_RejectsInvalidURL(t *testing.T) {
 	svc, store := newSubsServiceForTest(t, t.TempDir())
 
-	_, err := svc.Add("not-a-url", "")
+	_, err := svc.Add("not-a-url", "", "")
 	require.Error(t, err)
 
 	all, err := store.Load()
@@ -201,7 +201,7 @@ func TestSubsService_Edit_RenameOnly_PreservesServersAndLastSync(t *testing.T) {
 		},
 	}}))
 
-	view, err := svc.Edit("s1", "https://provider.example/sub", "new name")
+	view, err := svc.Edit("s1", "https://provider.example/sub", "new name", "")
 	require.NoError(t, err)
 	require.Equal(t, "new name", view.Name)
 	require.Equal(t, "OK", view.LastSyncStatus)
@@ -253,7 +253,7 @@ func TestSubsService_Edit_URLChange_CascadesServersAndResetsMeta(t *testing.T) {
 		mkSrv("d", ""),       // manual entry — must survive
 	}))
 
-	view, err := svc.Edit("s1", "https://new.example/sub", "renamed")
+	view, err := svc.Edit("s1", "https://new.example/sub", "renamed", "")
 	require.NoError(t, err)
 	require.Equal(t, "https://new.example/sub", view.URL)
 	require.True(t, view.LastSyncAt.IsZero(), "LastSyncAt must reset on URL change")
@@ -280,7 +280,7 @@ func TestSubsService_Edit_RejectsInvalidURL(t *testing.T) {
 		ID: "s1", Name: "x", URL: "https://provider.example/sub",
 	}}))
 
-	_, err := svc.Edit("s1", "ftp://bad", "x")
+	_, err := svc.Edit("s1", "ftp://bad", "x", "")
 	require.ErrorIs(t, err, errInvalidURL)
 }
 
@@ -288,6 +288,36 @@ func TestSubsService_Edit_ReturnsErrSubNotFound(t *testing.T) {
 	dir := t.TempDir()
 	svc, _ := newSubsServiceForTest(t, dir)
 
-	_, err := svc.Edit("missing-id", "https://provider.example/sub", "x")
+	_, err := svc.Edit("missing-id", "https://provider.example/sub", "x", "")
 	require.ErrorIs(t, err, errSubNotFound)
+}
+
+func TestSubsService_Add_PersistsUserAgent(t *testing.T) {
+	dir := t.TempDir()
+	svc, subStore := newSubsServiceForTest(t, dir)
+
+	_, err := svc.Add("https://provider.example/sub", "n", "Custom/1.0")
+	require.NoError(t, err)
+
+	loaded, err := subStore.Load()
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	require.Equal(t, "Custom/1.0", loaded[0].UserAgent)
+}
+
+func TestSubsService_Edit_UpdatesUserAgent_IncludingClearToEmpty(t *testing.T) {
+	dir := t.TempDir()
+	svc, subStore := newSubsServiceForTest(t, dir)
+
+	require.NoError(t, subStore.Save([]subscription.Stored{{
+		ID: "s1", Name: "x", URL: "https://provider.example/sub", UserAgent: "old/1.0",
+	}}))
+
+	_, err := svc.Edit("s1", "https://provider.example/sub", "x", "")
+	require.NoError(t, err)
+
+	loaded, err := subStore.Load()
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	require.Empty(t, loaded[0].UserAgent, "explicit empty must clear")
 }

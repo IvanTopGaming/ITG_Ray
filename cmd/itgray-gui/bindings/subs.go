@@ -79,7 +79,7 @@ func (s *SubsService) List() ([]hub.SubView, error) {
 //
 // Returns the SubView so the frontend can optimistically insert the new
 // row before the next snapshot refresh arrives.
-func (s *SubsService) Add(rawURL, name string) (hub.SubView, error) {
+func (s *SubsService) Add(rawURL, name, userAgent string) (hub.SubView, error) {
 	rawURL = strings.TrimSpace(rawURL)
 	if err := validateSubURL(rawURL); err != nil {
 		return hub.SubView{}, err
@@ -88,6 +88,7 @@ func (s *SubsService) Add(rawURL, name string) (hub.SubView, error) {
 		ID:             generateSubID(),
 		Name:           strings.TrimSpace(name),
 		URL:            rawURL,
+		UserAgent:      strings.TrimSpace(userAgent),
 		UpdateInterval: subscription.Duration(defaultUpdateInterval),
 	}
 	subs, err := s.d.SubStore.Load()
@@ -134,7 +135,7 @@ func (s *SubsService) Remove(id string) error {
 // quota fields are reset on URL change; rename-only edits preserve them.
 //
 // Returns the updated SubView for optimistic frontend reconciliation.
-func (s *SubsService) Edit(id, rawURL, name string) (hub.SubView, error) {
+func (s *SubsService) Edit(id, rawURL, name, userAgent string) (hub.SubView, error) {
 	rawURL = strings.TrimSpace(rawURL)
 	if err := validateSubURL(rawURL); err != nil {
 		return hub.SubView{}, err
@@ -187,6 +188,7 @@ func (s *SubsService) Edit(id, rawURL, name string) (hub.SubView, error) {
 	}
 
 	subs[idx].Name = strings.TrimSpace(name)
+	subs[idx].UserAgent = strings.TrimSpace(userAgent)
 	if err := s.d.SubStore.Save(subs); err != nil {
 		return hub.SubView{}, fmt.Errorf("sub.Save: %w", err)
 	}
