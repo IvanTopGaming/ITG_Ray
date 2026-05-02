@@ -9,7 +9,9 @@ import { Reveal } from '@/components/controls/Reveal';
 import { SettingRow, SectionHeader } from '@/components/controls/SettingRow';
 import { ConfirmButton } from '@/components/controls/ConfirmButton';
 import { ConfirmDialog } from '@/components/controls/ConfirmDialog';
-import { StatusPill, type StatusPillStatus } from '@/components/controls/StatusPill';
+import { StatusPill } from '@/components/controls/StatusPill';
+import { useHelperState } from '@/lib/helperAdapter';
+import type { HelperState } from '@/lib/helperAdapter';
 import { ScrollSpy, useScrollSpy, scrollToSection } from '@/components/controls/ScrollSpy';
 import { Get as GetSettings } from '../../wailsjs/go/bindings/SettingsService';
 import type { hub } from '../../wailsjs/go/models';
@@ -60,8 +62,6 @@ function isMtuValid(value: number): boolean {
 export function Settings() {
   const [s, update] = useSettings();
   const active = useScrollSpy(SECTION_IDS);
-  const [helperStatus, setHelperStatus] = useState<StatusPillStatus>('running');
-  const [reinstallOpen, setReinstallOpen] = useState(false);
   const [logFolderSize, setLogFolderSize] = useState(47); // MB
   const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'uptodate'>('idle');
   const [stuck, setStuck] = useState(false);
@@ -126,17 +126,12 @@ export function Settings() {
     return () => main.removeEventListener('scroll', onScroll);
   }, []);
 
-  const restartHelper = async () => {
-    setHelperStatus('pending');
-    await new Promise((r) => setTimeout(r, 800));
-    setHelperStatus('running');
-  };
+  const helper = useHelperState();
+  const [reinstallOpen, setReinstallOpen] = useState(false);
 
-  const reinstallHelper = async () => {
-    setHelperStatus('stopped');
-    await new Promise((r) => setTimeout(r, 2000));
-    setHelperStatus('running');
-  };
+  const helperPill: HelperState = helper.state;
+  const isWindowsHelper = helper.isWindows === true;
+  const isLoadingPlatform = helper.isWindows === null;
 
   const clearLogs = () => setLogFolderSize(0);
 
@@ -425,42 +420,105 @@ export function Settings() {
 
       {/* Helper */}
       <motion.div id="helper" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
-        <SectionHeader title="Helper service" right={<StatusPill status={helperStatus} />} />
-        <SettingRow
-          label="Status"
-          hint="Privileged background service that manages TUN and routing. v1.4.2"
-        >
-          <div className="flex gap-1.5">
-            <ConfirmButton onConfirm={restartHelper} variant="ghost">Restart</ConfirmButton>
-            <button
-              type="button"
-              onClick={() => console.log('[mock] view helper log')}
-              className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] border border-white/[0.10] text-white/[0.92] hover:bg-white/[0.05]"
+        <SectionHeader
+          title="Helper service"
+          right={isWindowsHelper ? <StatusPill status={helperPill} /> : undefined}
+        />
+        {isLoadingPlatform && null}
+        {!isLoadingPlatform && !isWindowsHelper && (
+          <p className="text-[13px] text-white/[0.55] leading-relaxed">
+            Helper service is only used on Windows builds. ITG Ray uses native APIs on this platform.
+          </p>
+        )}
+        {isWindowsHelper && (
+          <>
+            <SettingRow
+              label="Status"
+              hint="Privileged background service that manages TUN and routing."
             >
-              View log
-            </button>
-          </div>
-        </SettingRow>
-        <SettingRow label="Reinstall" hint="If something goes wrong with privileges or service registration.">
-          <button
-            type="button"
-            onClick={() => setReinstallOpen(true)}
-            className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] bg-white/[0.08] border border-white/[0.14] text-white/[0.92] hover:bg-white/[0.12]"
-          >
-            Reinstall helper
-          </button>
-        </SettingRow>
+              <div className="flex gap-1.5">
+                {helperPill === 'missing' && (
+                  <button
+                    type="button"
+                    onClick={helper.install}
+                    className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] bg-accent/[0.12] border border-accent/30 text-accent hover:bg-accent/[0.18]"
+                  >
+                    Install
+                  </button>
+                )}
+                {helperPill === 'stopped' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={helper.start}
+                      className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] bg-accent/[0.12] border border-accent/30 text-accent hover:bg-accent/[0.18]"
+                    >
+                      Start
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReinstallOpen(true)}
+                      className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] border border-white/[0.10] text-white/[0.92] hover:bg-white/[0.05]"
+                    >
+                      Reinstall
+                    </button>
+                  </>
+                )}
+                {helperPill === 'running' && (
+                  <>
+                    <ConfirmButton onConfirm={helper.restart} variant="ghost">Restart</ConfirmButton>
+                    <button
+                      type="button"
+                      onClick={() => setReinstallOpen(true)}
+                      className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] border border-white/[0.10] text-white/[0.92] hover:bg-white/[0.05]"
+                    >
+                      Reinstall
+                    </button>
+                  </>
+                )}
+                {helperPill === 'pending' && (
+                  <span className="px-3.5 py-1.5 text-xs text-white/[0.55]">Working…</span>
+                )}
+                {helperPill === 'error' && (
+                  <span className="px-3.5 py-1.5 text-xs text-white/[0.55]">Reading status…</span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => console.log('[mock] view helper log')}
+                  className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] border border-white/[0.10] text-white/[0.92] hover:bg-white/[0.05]"
+                >
+                  View log
+                </button>
+              </div>
+            </SettingRow>
+            {helper.opError && (
+              <div className="mt-2 flex items-start gap-2 rounded-[10px] border border-danger/30 bg-danger/[0.08] px-3 py-2 text-[12px] text-danger">
+                <span className="flex-1 leading-relaxed">⚠ {helper.opError}</span>
+                <button
+                  type="button"
+                  onClick={helper.dismissError}
+                  aria-label="Dismiss helper error"
+                  className="text-danger/70 hover:text-danger"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </motion.div>
 
-      <ConfirmDialog
-        open={reinstallOpen}
-        onClose={() => setReinstallOpen(false)}
-        title="Reinstall helper service?"
-        description="This will request elevated privileges and restart the service. Active connection will drop briefly."
-        confirmLabel="Reinstall"
-        confirmVariant="primary"
-        onConfirm={reinstallHelper}
-      />
+      {isWindowsHelper && (
+        <ConfirmDialog
+          open={reinstallOpen}
+          onClose={() => setReinstallOpen(false)}
+          title="Reinstall helper service?"
+          description="This will stop the running service, replace its registration, and start it again. The active connection will drop briefly."
+          confirmLabel="Reinstall"
+          confirmVariant="primary"
+          onConfirm={() => { setReinstallOpen(false); void helper.reinstall(); }}
+        />
+      )}
 
       {/* Logs */}
       <motion.div id="logs" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
