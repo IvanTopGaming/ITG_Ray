@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { type Sub } from "@/lib/subsAdapter";
-import { useSubs } from "@/lib/subsStore";
+import { useSubs, humanizeError } from "@/lib/subsStore";
 
 type SyncStatus = "ok" | "error" | "syncing" | "never";
 
@@ -456,6 +456,8 @@ function SubModal({
   const [name, setName] = useState(sub?.name ?? "");
   const [url, setUrl] = useState(sub?.url ?? "");
   const [urlError, setUrlError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   function validateUrl(value: string): string | null {
     if (!value.trim()) return "Required";
@@ -467,15 +469,36 @@ function SubModal({
 
   const valid = !!name.trim() && !!url.trim() && validateUrl(url) === null;
 
-  function submit() {
+  async function submit() {
     const e = validateUrl(url);
     if (e) {
       setUrlError(e);
       return;
     }
     if (!valid) return;
-    if (isAdd) onAdd(name.trim(), url.trim());
-    else if (sub) onEditSave(sub.id, name.trim(), url.trim());
+    setSubmitError(null);
+    setBusy(true);
+    try {
+      if (isAdd) await onAdd(name.trim(), url.trim());
+      else if (sub) await onEditSave(sub.id, name.trim(), url.trim());
+      onClose();
+    } catch (err) {
+      setSubmitError(humanizeError(err));
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteClick() {
+    if (!sub) return;
+    setSubmitError(null);
+    setBusy(true);
+    try {
+      await onDelete(sub.id);
+      onClose();
+    } catch (err) {
+      setSubmitError(humanizeError(err));
+      setBusy(false);
+    }
   }
 
   const title = isAdd ? "Add subscription" : "Edit subscription";
@@ -544,11 +567,30 @@ function SubModal({
           </div>
         </div>
 
+        <AnimatePresence>
+          {submitError && (
+            <motion.div
+              key="submit-error"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.22, ease: SNAP_EASE }}
+              className="overflow-hidden"
+            >
+              <div className="mx-6 mb-4 flex items-start gap-2 rounded-lg border border-danger/40 bg-danger/[0.10] p-3">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger" />
+                <span className="text-[12px] text-danger">{submitError}</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div className="flex items-center justify-between gap-3 border-t border-white/[0.08] px-6 py-4">
           {!isAdd && sub ? (
             <button
-              onClick={() => onDelete(sub.id)}
-              className="flex items-center gap-1.5 rounded-lg border border-danger/40 bg-danger/[0.10] px-3 py-2 text-[12px] font-medium text-danger transition-colors hover:bg-danger/[0.20]"
+              onClick={handleDeleteClick}
+              disabled={busy}
+              className="flex items-center gap-1.5 rounded-lg border border-danger/40 bg-danger/[0.10] px-3 py-2 text-[12px] font-medium text-danger transition-colors hover:bg-danger/[0.20] disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Trash2 className="h-3.5 w-3.5" />
               Delete
@@ -565,7 +607,7 @@ function SubModal({
             </button>
             <button
               onClick={submit}
-              disabled={!valid}
+              disabled={!valid || busy}
               className="rounded-lg bg-gradient-to-br from-accent-start to-accent-mid px-4 py-2 text-[12px] font-semibold text-white shadow-[0_0_18px_rgba(120,200,255,0.30)] transition-all hover:shadow-[0_0_22px_rgba(120,200,255,0.45)] disabled:opacity-40 disabled:shadow-none"
             >
               {isAdd ? "Add" : "Save"}
