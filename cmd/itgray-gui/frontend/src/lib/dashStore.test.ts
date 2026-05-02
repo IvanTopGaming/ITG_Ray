@@ -189,6 +189,24 @@ describe("dashStore — helper:state", () => {
   });
 });
 
+describe("dashStore — sub:synced", () => {
+  it("refreshes allServers from a fresh snapshot", async () => {
+    getSnapshotMock.mockResolvedValueOnce({ ...baseSnapshot, servers: [] });
+    await __bootstrapForTest();
+    expect(getDashState().allServers).toHaveLength(0);
+
+    getSnapshotMock.mockResolvedValueOnce({
+      ...baseSnapshot,
+      servers: [{ id: "new1", name: "New", favorite: false, latencyMs: 0 }],
+    });
+    fireEvent("sub:synced", {});
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(getDashState().allServers).toHaveLength(1);
+    expect(getDashState().allServers[0].id).toBe("new1");
+  });
+});
+
 describe("effectiveStatus", () => {
   it("returns 'error' when idle + lastError", () => {
     const st = { status: "idle" as ChainStatus, lastError: { kind: "x", message: "y", at: 0 } } as any;

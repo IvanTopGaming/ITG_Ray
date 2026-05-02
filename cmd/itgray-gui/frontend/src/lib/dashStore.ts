@@ -184,11 +184,19 @@ function onHelperState(payload: any) {
   setState({ ...state, helperState: payload.state as DashState["helperState"] });
 }
 
+// onSubSynced re-fetches the snapshot so QuickSwitch sees newly-added servers
+// without requiring an app restart. The bootstrap in-flight guard coalesces
+// rapid sub:synced bursts (e.g., SyncAll fans out N events).
+function onSubSynced() {
+  void bootstrap();
+}
+
 function registerEventHandlers() {
   EventsOn("vpn:status", onVpnStatus);
   EventsOn("vpn:speed", onVpnSpeed);
   EventsOn("chain:error", onChainError);
   EventsOn("helper:state", onHelperState);
+  EventsOn("sub:synced", onSubSynced);
 }
 
 export function useDash(): DashState {

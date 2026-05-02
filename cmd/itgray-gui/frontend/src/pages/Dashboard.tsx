@@ -518,7 +518,7 @@ function QuickSwitchEmpty() {
       </div>
       <div className="flex items-center gap-2">
         <Link
-          to="/settings"
+          to="/subscriptions"
           className="rounded-md bg-white/[0.08] px-3 py-1.5 text-[11px] font-medium text-white/85 hover:bg-white/[0.12]"
         >
           Add subscription
