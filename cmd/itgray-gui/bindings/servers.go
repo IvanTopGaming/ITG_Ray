@@ -2,14 +2,19 @@ package bindings
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
+	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
 	"github.com/itg-team/itg-ray/internal/server"
+	"github.com/itg-team/itg-ray/internal/vless"
 )
 
 // probeTimeout bounds a single TCP-connect probe. Matches the spec's
@@ -22,12 +27,20 @@ const probeTimeout = 1500 * time.Millisecond
 // caller-supplied id has no entry in the on-disk servers list.
 var ErrServerNotFound = errors.New("server not found")
 
+// ActiveServerProbe is the narrow read used by Remove to block deletion
+// of the currently-connected server. *chainctl.Controller satisfies it
+// via its ActiveServerID method.
+type ActiveServerProbe interface {
+	ActiveServerID() string
+}
+
 // ServersDeps groups dependencies passed in from main.go. ServerStore is the
 // shared Load+Save adapter (defined in app.go); Hub is the in-process
 // pub-sub used to fan probe results out to the frontend.
 type ServersDeps struct {
-	ServerStore ServerStore
-	Hub         *hub.Hub
+	ServerStore  ServerStore
+	Hub          *hub.Hub
+	ActiveServer ActiveServerProbe // used by Remove; may be nil in tests that don't exercise Remove
 }
 
 // ServersService implements the Servers.* Wails bindings.
@@ -76,6 +89,10 @@ func (s *ServersService) ToggleFavorite(id string) error {
 	if err := s.d.ServerStore.Save(list); err != nil {
 		return fmt.Errorf("server.Save: %w", err)
 	}
+	// Publish servers:changed so the frontend's serversStore refetches
+	// — favorite is a persisted, list-visible flag; without this the
+	// Servers page sees stale state until the next Add/Edit/Remove.
+	s.d.Hub.Publish(hub.Event{Name: hub.EventServersChanged})
 	return nil
 }
 
@@ -134,6 +151,12 @@ func (s *ServersService) TestLatency(id string) error {
 		Name:    hub.EventProbeResult,
 		Payload: map[string]any{"results": results},
 	})
+	// Publish servers:changed so the frontend's serversStore refetches
+	// the list with new latencies. probe:result drives the dashStore's
+	// in-place latency patch (for QuickSwitch sort), but the Servers
+	// page's row list is sourced from useServers() and would otherwise
+	// drift until the next Add/Edit/Remove.
+	s.d.Hub.Publish(hub.Event{Name: hub.EventServersChanged})
 	return nil
 }
 
@@ -161,4 +184,165 @@ func probeOne(ctx context.Context, t *server.Server) map[string]any {
 		"id":        t.ID,
 		"latencyMs": ms,
 	}
+}
+
+// validateServerURI parses a VLESS URI and returns the Config. Non-empty
+// rawURI is required; vless.ParseURL is the source of truth for what is
+// considered well-formed.
+func validateServerURI(rawURI string) (vless.Config, error) {
+	if rawURI == "" {
+		return vless.Config{}, errors.New("uri required")
+	}
+	cfg, err := vless.ParseURL(rawURI)
+	if err != nil {
+		return vless.Config{}, fmt.Errorf("invalid VLESS URI: %w", err)
+	}
+	return cfg, nil
+}
+
+// generateServerID returns a fresh manual-server ID of the shape
+// m<unix-millis>-<hex4>. Mirrors generateSubID.
+func generateServerID() string {
+	var b [2]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return fmt.Sprintf("m%d", time.Now().UnixMilli())
+	}
+	return fmt.Sprintf("m%d-%s", time.Now().UnixMilli(), hex.EncodeToString(b[:]))
+}
+
+// Add creates a manual server from the supplied VLESS URI. Name overrides
+// the parsed remark when non-empty; otherwise falls back to remark or
+// host:port. Returns the resulting view. NO duplicate-detection — user
+// is responsible for list cleanliness (mirrors Subs.Add).
+func (s *ServersService) Add(rawURI, name string) (hub.ServerView, error) {
+	rawURI = strings.TrimSpace(rawURI)
+	cfg, err := validateServerURI(rawURI)
+	if err != nil {
+		return hub.ServerView{}, err
+	}
+	name = strings.TrimSpace(name)
+
+	displayName := name
+	if displayName == "" {
+		displayName = cfg.Remark
+	}
+	if displayName == "" {
+		displayName = net.JoinHostPort(cfg.Address, strconv.Itoa(int(cfg.Port)))
+	}
+
+	srv := server.Server{
+		ID:     generateServerID(),
+		Origin: server.OriginManual,
+		Name:   displayName,
+		Remark: cfg.Remark,
+		Vless:  cfg,
+	}
+
+	list, err := s.d.ServerStore.Load()
+	if err != nil {
+		return hub.ServerView{}, fmt.Errorf("server.Load: %w", err)
+	}
+	list = append(list, srv)
+	if err := s.d.ServerStore.Save(list); err != nil {
+		return hub.ServerView{}, fmt.Errorf("server.Save: %w", err)
+	}
+
+	s.d.Hub.Publish(hub.Event{Name: hub.EventServersChanged})
+
+	return toServerViews([]server.Server{srv}, nil)[0], nil
+}
+
+// Remove deletes a manual server. Refuses when:
+//   - Origin != OriginManual                  (read-only)
+//   - id == active session id                 (disconnect first)
+func (s *ServersService) Remove(id string) error {
+	list, err := s.d.ServerStore.Load()
+	if err != nil {
+		return fmt.Errorf("server.Load: %w", err)
+	}
+	idx := -1
+	for i := range list {
+		if list[i].ID == id {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return ErrServerNotFound
+	}
+	if list[idx].Origin != server.OriginManual {
+		return errors.New("only manual servers can be deleted")
+	}
+	if s.d.ActiveServer != nil && s.d.ActiveServer.ActiveServerID() == id {
+		return errors.New("disconnect first to delete this server")
+	}
+
+	list = append(list[:idx], list[idx+1:]...)
+	if err := s.d.ServerStore.Save(list); err != nil {
+		return fmt.Errorf("server.Save: %w", err)
+	}
+
+	s.d.Hub.Publish(hub.Event{Name: hub.EventServersChanged})
+	return nil
+}
+
+// Edit updates name and/or VLESS config for an existing server. Refuses
+// when the target's Origin != OriginManual (sub-origin is read-only —
+// managed by sync). When the URI changes the underlying vless.Config is
+// re-parsed; the server's ID stays stable so dashStore.currentServer
+// references survive the edit.
+//
+// vlessChanged reports whether the parsed vless.Config differs from the
+// pre-edit one (reflect.DeepEqual on vless.Config). Frontend uses this
+// flag to decide whether to show the "Reconnect to apply" banner —
+// name-only edits get vlessChanged=false and stay silent.
+func (s *ServersService) Edit(id, rawURI, name string) (hub.ServerView, bool, error) {
+	rawURI = strings.TrimSpace(rawURI)
+	cfg, err := validateServerURI(rawURI)
+	if err != nil {
+		return hub.ServerView{}, false, err
+	}
+	name = strings.TrimSpace(name)
+
+	list, err := s.d.ServerStore.Load()
+	if err != nil {
+		return hub.ServerView{}, false, fmt.Errorf("server.Load: %w", err)
+	}
+	idx := -1
+	for i := range list {
+		if list[i].ID == id {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return hub.ServerView{}, false, ErrServerNotFound
+	}
+	if list[idx].Origin != server.OriginManual {
+		return hub.ServerView{}, false, errors.New("only manual servers can be edited")
+	}
+
+	oldVless := list[idx].Vless
+	vlessChanged := !reflect.DeepEqual(oldVless, cfg)
+
+	displayName := name
+	if displayName == "" {
+		displayName = cfg.Remark
+	}
+	if displayName == "" {
+		displayName = net.JoinHostPort(cfg.Address, strconv.Itoa(int(cfg.Port)))
+	}
+
+	list[idx].Name = displayName
+	list[idx].Remark = cfg.Remark
+	list[idx].Vless = cfg
+	// Favorite, Disabled, Tags, LatencyMS preserved by skipping them.
+
+	if err := s.d.ServerStore.Save(list); err != nil {
+		return hub.ServerView{}, false, fmt.Errorf("server.Save: %w", err)
+	}
+
+	s.d.Hub.Publish(hub.Event{Name: hub.EventServersChanged})
+
+	return toServerViews([]server.Server{list[idx]}, nil)[0], vlessChanged, nil
 }

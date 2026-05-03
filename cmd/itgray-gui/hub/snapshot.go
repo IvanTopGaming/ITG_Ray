@@ -33,6 +33,7 @@ type ServerView struct {
 	Origin    string   `json:"origin"`    // subscription name or "manual"
 	Favorite  bool     `json:"favorite"`
 	Tags      []string `json:"tags,omitempty"`
+	URI       string   `json:"uri"` // canonical vless:// URI form, derived via vless.Config.URL()
 }
 
 // SubView is the read-only DTO for one subscription.

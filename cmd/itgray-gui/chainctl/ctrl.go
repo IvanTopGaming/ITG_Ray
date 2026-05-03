@@ -254,6 +254,17 @@ func (c *Controller) Status() (hub.ChainStatus, *server.Server, Mode) {
 	return hub.StatusConnected, c.current, c.mode
 }
 
+// ActiveServerID returns the currently-connected server's id, or "" when
+// the controller is idle. Used by bindings.ServersService.Remove to
+// block deletion of the active session.
+func (c *Controller) ActiveServerID() string {
+	_, srv, _ := c.Status()
+	if srv == nil {
+		return ""
+	}
+	return srv.ID
+}
+
 // LastSession returns the last persisted (serverID, mode) pair if any.
 // Used by tray "Connect (last server)" actions in C.T13.
 func (c *Controller) LastSession() (serverID, mode string) {

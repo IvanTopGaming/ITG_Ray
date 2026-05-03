@@ -260,6 +260,28 @@ func TestController_Stop_IsIdempotent(t *testing.T) {
 	require.Equal(t, Mode(""), mode)
 }
 
+// TestController_ActiveServerID_IdleAndConnected pins the contract used
+// by bindings.ServersService.Remove (Tier 6 Task 5): "" while idle, the
+// active server's id while connected.
+func TestController_ActiveServerID_IdleAndConnected(t *testing.T) {
+	c, _, h, _ := setup(t)
+	rcv := h.Subscribe(64)
+	defer h.Unsubscribe(rcv)
+
+	if got := c.ActiveServerID(); got != "" {
+		t.Fatalf("idle ActiveServerID = %q, want \"\"", got)
+	}
+
+	if err := c.Start(context.Background(), "a", ModeTUN); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	waitForVpnStatus(t, rcv, string(hub.StatusConnected), time.Second)
+
+	if got := c.ActiveServerID(); got != "a" {
+		t.Fatalf("connected ActiveServerID = %q, want %q", got, "a")
+	}
+}
+
 func TestController_Start_Stop_SysProxy_HappyPath(t *testing.T) {
 	dir := t.TempDir()
 	store := newMemStore(fixtureServer())

@@ -132,6 +132,7 @@ function onVpnStatus(payload: any) {
         origin: "manual",
         favorite: false,
         tags: [],
+        uri: "",
       } as ServerView;
     }
     if (typeof payload.mode === "string") next.mode = payload.mode as Mode;
@@ -188,8 +189,10 @@ function onHelperState(payload: any) {
 }
 
 // onSubSynced re-fetches the snapshot so QuickSwitch sees newly-added servers
-// without requiring an app restart. The bootstrap in-flight guard coalesces
-// rapid sub:synced bursts (e.g., SyncAll fans out N events).
+// without requiring an app restart. Wired to both sub:synced (subscription
+// fan-out) and servers:changed (manual mutations from Tier 6 ServersService.
+// Add/Edit/Remove). The bootstrap in-flight guard coalesces rapid bursts
+// (e.g., SyncAll fans out N sub:synced events).
 function onSubSynced() {
   void bootstrap();
 }
@@ -218,6 +221,7 @@ function registerEventHandlers() {
   EventsOn("chain:error", onChainError);
   EventsOn("helper:state", onHelperState);
   EventsOn("sub:synced", onSubSynced);
+  EventsOn("servers:changed", onSubSynced);
   EventsOn("probe:result", onProbeResult);
 }
 

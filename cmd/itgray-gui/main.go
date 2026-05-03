@@ -66,11 +66,6 @@ func main() {
 		return state
 	}
 
-	serversSvc := bindings.NewServersService(bindings.ServersDeps{
-		ServerStore: serverStore,
-		Hub:         app.Hub(),
-	})
-
 	// settingsStore is constructed early so SubsService can read live
 	// SubscriptionSettings (HWID toggles, default UA) on each SyncOne
 	// without restart — the closure resolves at call time, not init time.
@@ -137,6 +132,11 @@ func main() {
 		Hub:          app.Hub(),
 		BuildConfigs: buildConfigs(dataDir),
 		Network:      networkLoader,
+	})
+	serversSvc := bindings.NewServersService(bindings.ServersDeps{
+		ServerStore:  serverStore,
+		Hub:          app.Hub(),
+		ActiveServer: chainCtrl,
 	})
 	appSvc := bindings.NewAppService(&bindings.AppDeps{
 		DataDir:      dataDir,

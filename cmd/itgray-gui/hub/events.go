@@ -23,3 +23,8 @@ const (
 	EventHelperState = "helper:state"
 	EventSettings    = "settings:changed"
 )
+
+// EventServersChanged is published by ServersService after a successful
+// Add / Edit / Remove. Payload is nil; consumers re-fetch via List or
+// App.GetSnapshot.
+const EventServersChanged = "servers:changed"
