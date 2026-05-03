@@ -205,9 +205,8 @@ func TestRunSub_FirstTickWithinJitterWindow(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	d.wg.Add(1)
 	start := time.Now()
-	go d.runSub(ctx, st.subs[0])
+	d.wg.Go(func() { d.runSub(ctx, st.subs[0]) })
 
 	select {
 	case fired := <-syncCh:
@@ -248,8 +247,7 @@ func TestRunSub_ZeroIntervalUsesDriverDefault(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	d.wg.Add(1)
-	go d.runSub(ctx, st.subs[0])
+	d.wg.Go(func() { d.runSub(ctx, st.subs[0]) })
 
 	// First tick fires after ~3ms (seed-controlled jitter), second after
 	// ~100ms ±10%. 3 seconds of slop covers slow CI/race-detector overhead.
@@ -279,8 +277,7 @@ func TestRunSub_CtxCancel_ExitsPromptly(t *testing.T) {
 		Log:         slog.New(slog.NewTextHandler(testWriter{t}, nil)),
 	})
 	ctx, cancel := context.WithCancel(context.Background())
-	d.wg.Add(1)
-	go d.runSub(ctx, st.subs[0])
+	d.wg.Go(func() { d.runSub(ctx, st.subs[0]) })
 
 	cancel()
 	gotDone := make(chan struct{})

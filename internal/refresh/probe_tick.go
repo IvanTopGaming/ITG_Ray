@@ -43,10 +43,7 @@ func (d *Driver) probeOnce(ctx context.Context) {
 	sem := make(chan struct{}, d.probeConcurrency)
 	var wg sync.WaitGroup
 	for i := range snapshot {
-		i := i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			defer func() {
 				if r := recover(); r != nil {
 					d.log.Error("refresh.probe.worker panic", "id", snapshot[i].ID, "panic", r)
@@ -67,7 +64,7 @@ func (d *Driver) probeOnce(ctx context.Context) {
 			}
 			ms := int(dur / time.Millisecond)
 			results[i] = result{ID: snapshot[i].ID, LatencyP: &ms}
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -121,7 +118,6 @@ func (d *Driver) probeOnce(ctx context.Context) {
 // add new servers. Subsequent probes fire ProbeInterval ±10% after the
 // previous probe completed.
 func (d *Driver) runProbe(ctx context.Context) {
-	defer d.wg.Done()
 	defer func() {
 		if r := recover(); r != nil {
 			d.log.Error("refresh.runProbe panic", "panic", r)

@@ -38,12 +38,10 @@ type coreStopper interface {
 func stopBoth(grace time.Duration, xray, singbox coreStopper) (xrayErr, sbErr error) {
 	var wg sync.WaitGroup
 	if xray != nil {
-		wg.Add(1)
-		go func() { defer wg.Done(); xrayErr = xray.Stop(grace) }()
+		wg.Go(func() { xrayErr = xray.Stop(grace) })
 	}
 	if singbox != nil {
-		wg.Add(1)
-		go func() { defer wg.Done(); sbErr = singbox.Stop(grace) }()
+		wg.Go(func() { sbErr = singbox.Stop(grace) })
 	}
 	wg.Wait()
 	return
