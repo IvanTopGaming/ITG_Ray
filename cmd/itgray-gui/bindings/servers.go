@@ -89,6 +89,10 @@ func (s *ServersService) ToggleFavorite(id string) error {
 	if err := s.d.ServerStore.Save(list); err != nil {
 		return fmt.Errorf("server.Save: %w", err)
 	}
+	// Publish servers:changed so the frontend's serversStore refetches
+	// — favorite is a persisted, list-visible flag; without this the
+	// Servers page sees stale state until the next Add/Edit/Remove.
+	s.d.Hub.Publish(hub.Event{Name: hub.EventServersChanged})
 	return nil
 }
 
@@ -147,6 +151,12 @@ func (s *ServersService) TestLatency(id string) error {
 		Name:    hub.EventProbeResult,
 		Payload: map[string]any{"results": results},
 	})
+	// Publish servers:changed so the frontend's serversStore refetches
+	// the list with new latencies. probe:result drives the dashStore's
+	// in-place latency patch (for QuickSwitch sort), but the Servers
+	// page's row list is sourced from useServers() and would otherwise
+	// drift until the next Add/Edit/Remove.
+	s.d.Hub.Publish(hub.Event{Name: hub.EventServersChanged})
 	return nil
 }
 

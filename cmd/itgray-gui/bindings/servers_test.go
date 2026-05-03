@@ -95,6 +95,15 @@ func TestServersService_TestLatency_OneServer(t *testing.T) {
 	case <-timeAfter500ms():
 		t.Fatal("no probe:result event")
 	}
+
+	// TestLatency persists new latencies to the store, so it must also
+	// publish servers:changed for the frontend's serversStore to refetch.
+	select {
+	case e := <-rcv:
+		require.Equal(t, hub.EventServersChanged, e.Name)
+	case <-timeAfter500ms():
+		t.Fatal("no servers:changed event after probe")
+	}
 }
 
 func TestServersService_ToggleFavorite(t *testing.T) {
@@ -112,7 +121,10 @@ func TestServersService_ToggleFavorite(t *testing.T) {
 	}})
 
 	store := fileServerStore{path: path}
-	svc := NewServersService(ServersDeps{ServerStore: store, Hub: hub.New()})
+	h := hub.New()
+	rcv := h.Subscribe(4)
+	defer h.Close()
+	svc := NewServersService(ServersDeps{ServerStore: store, Hub: h})
 
 	require.NoError(t, svc.ToggleFavorite("a"))
 	loaded, err := store.Load()
@@ -120,11 +132,27 @@ func TestServersService_ToggleFavorite(t *testing.T) {
 	require.Len(t, loaded, 1)
 	require.True(t, loaded[0].Favorite)
 
+	// ToggleFavorite mutates persisted state and must publish
+	// servers:changed so the frontend list refetches.
+	select {
+	case e := <-rcv:
+		require.Equal(t, hub.EventServersChanged, e.Name)
+	case <-timeAfter500ms():
+		t.Fatal("no servers:changed event after first toggle")
+	}
+
 	require.NoError(t, svc.ToggleFavorite("a")) // toggle twice → off
 	loaded, err = store.Load()
 	require.NoError(t, err)
 	require.Len(t, loaded, 1)
 	require.False(t, loaded[0].Favorite)
+
+	select {
+	case e := <-rcv:
+		require.Equal(t, hub.EventServersChanged, e.Name)
+	case <-timeAfter500ms():
+		t.Fatal("no servers:changed event after second toggle")
+	}
 }
 
 func timeAfter500ms() <-chan time.Time { return time.After(500 * time.Millisecond) }

@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
+  AlertTriangle,
   Copy,
   Eye,
   Pencil,
@@ -14,66 +15,27 @@ import {
 import { cn } from "@/lib/cn";
 import { CountryFlag } from "@/components/controls/CountryFlag";
 import { Dropdown } from "@/components/controls/Dropdown";
+import {
+  clearLastError,
+  serverAdd,
+  serverEdit,
+  serverRemove,
+  useServers,
+} from "@/lib/serversStore";
+import { effectiveStatus, useDash } from "@/lib/dashStore";
+import {
+  TestLatency,
+  ToggleFavorite,
+} from "../../wailsjs/go/bindings/ServersService";
+import { EventsOn } from "../../wailsjs/runtime/runtime";
+import type { hub } from "../../wailsjs/go/models";
 
-type Origin = "subscription" | "manual";
 type Sort = "latency" | "name";
 type ProbeState = "idle" | "probing" | "ok" | "error";
 
-interface FakeSub {
-  id: string;
-  name: string;
-  syncedAgo: string;
-}
+type Server = hub.ServerView;
 
-interface FakeServer {
-  id: string;
-  subId: string | null;
-  origin: Origin;
-  flag: string;
-  city: string;
-  code: string;
-  pingMs: number;
-  favorite: boolean;
-  vlessUri: string;
-}
-
-const SUBS: FakeSub[] = [
-  { id: "sub-1", name: "Main provider", syncedAgo: "2 min ago" },
-  { id: "sub-2", name: "Backup provider", syncedAgo: "14 min ago" },
-];
-
-const SAMPLE_URI = (city: string) =>
-  `vless://550e8400-e29b-41d4-a716-446655440000@host.example.com:443?type=ws&path=%2Fws&security=reality&sni=www.cloudflare.com&fp=chrome&pbk=PUBKEY&sid=0011#${encodeURIComponent(city)}`;
-
-const INITIAL_SERVERS: FakeServer[] = [
-  // Manual (user-added)
-  {
-    id: "m1",
-    subId: null,
-    origin: "manual",
-    flag: "🇨🇦",
-    city: "Toronto",
-    code: "manual",
-    pingMs: 92,
-    favorite: true,
-    vlessUri: SAMPLE_URI("Toronto"),
-  },
-  // Main provider
-  { id: "s1",  subId: "sub-1", origin: "subscription", flag: "🇳🇱", city: "Amsterdam",   code: "NL-AMS-03", pingMs: 12,  favorite: true,  vlessUri: SAMPLE_URI("Amsterdam") },
-  { id: "s2",  subId: "sub-1", origin: "subscription", flag: "🇩🇪", city: "Frankfurt",   code: "DE-FRA-01", pingMs: 28,  favorite: false, vlessUri: SAMPLE_URI("Frankfurt") },
-  { id: "s3",  subId: "sub-1", origin: "subscription", flag: "🇫🇮", city: "Helsinki",    code: "FI-HEL-02", pingMs: 34,  favorite: true,  vlessUri: SAMPLE_URI("Helsinki") },
-  { id: "s4",  subId: "sub-1", origin: "subscription", flag: "🇸🇪", city: "Stockholm",   code: "SE-STO-01", pingMs: 41,  favorite: false, vlessUri: SAMPLE_URI("Stockholm") },
-  { id: "s5",  subId: "sub-1", origin: "subscription", flag: "🇬🇧", city: "London",      code: "GB-LON-04", pingMs: 47,  favorite: false, vlessUri: SAMPLE_URI("London") },
-  { id: "s6",  subId: "sub-1", origin: "subscription", flag: "🇫🇷", city: "Paris",       code: "FR-PAR-02", pingMs: 38,  favorite: false, vlessUri: SAMPLE_URI("Paris") },
-  { id: "s7",  subId: "sub-1", origin: "subscription", flag: "🇨🇭", city: "Zurich",      code: "CH-ZRH-01", pingMs: 52,  favorite: false, vlessUri: SAMPLE_URI("Zurich") },
-  { id: "s8",  subId: "sub-1", origin: "subscription", flag: "🇪🇸", city: "Madrid",      code: "ES-MAD-01", pingMs: 64,  favorite: false, vlessUri: SAMPLE_URI("Madrid") },
-  // Backup
-  { id: "s9",  subId: "sub-2", origin: "subscription", flag: "🇺🇸", city: "New York",    code: "US-NYC-04", pingMs: 112, favorite: false, vlessUri: SAMPLE_URI("New York") },
-  { id: "s10", subId: "sub-2", origin: "subscription", flag: "🇺🇸", city: "Los Angeles", code: "US-LAX-02", pingMs: 158, favorite: false, vlessUri: SAMPLE_URI("Los Angeles") },
-  { id: "s11", subId: "sub-2", origin: "subscription", flag: "🇯🇵", city: "Tokyo",       code: "JP-TYO-01", pingMs: 235, favorite: false, vlessUri: SAMPLE_URI("Tokyo") },
-  { id: "s12", subId: "sub-2", origin: "subscription", flag: "🇸🇬", city: "Singapore",   code: "SG-SIN-03", pingMs: 198, favorite: false, vlessUri: SAMPLE_URI("Singapore") },
-];
-
+const MANUAL_ORIGIN = "manual";
 const MANUAL_GROUP_ID = "__manual__";
 
 const SNAP_EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
@@ -94,25 +56,71 @@ const itemVariants: Variants = {
 type ModalState =
   | { kind: "closed" }
   | { kind: "add" }
-  | { kind: "view"; server: FakeServer }
-  | { kind: "edit"; server: FakeServer };
+  | { kind: "view"; server: Server }
+  | { kind: "edit"; server: Server };
 
 export function Servers() {
-  const [servers, setServers] = useState<FakeServer[]>(INITIAL_SERVERS);
+  // Use dash.allServers as the rendered source (it carries resolved origin
+  // labels from GetSnapshot's originByID map). serversStore.useServers()
+  // is consumed only for lastError + the bootstrap side-effect.
+  const dash = useDash();
+  const { lastError } = useServers();
+  const status = effectiveStatus(dash);
+
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<Sort>("latency");
   const [favoritesFirst, setFavoritesFirst] = useState(true);
-  const [activeServerId, setActiveServerId] = useState<string | null>("s1");
   const [probe, setProbe] = useState<Map<string, ProbeState>>(new Map());
   const [modal, setModal] = useState<ModalState>({ kind: "closed" });
+  const [reconnectBanner, setReconnectBanner] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const servers = dash.allServers;
+  const activeServerId = dash.currentServer?.id ?? null;
+
+  // Listen for probe:result events to flip the per-row probing UI back to
+  // idle/ok/error. dashStore patches latencies in dash.allServers (and the
+  // backend's servers:changed re-bootstrap follows), but the row's "probing…"
+  // pill needs an explicit settle signal.
+  useEffect(() => {
+    const off = EventsOn("probe:result", (payload: any) => {
+      if (!payload || !Array.isArray(payload.results)) return;
+      setProbe((prev) => {
+        const m = new Map(prev);
+        for (const r of payload.results) {
+          if (r && typeof r.id === "string") {
+            m.set(r.id, r.error ? "error" : "ok");
+          }
+        }
+        return m;
+      });
+    });
+    return () => {
+      // Wails EventsOn returns a cleanup function (or void in some shims).
+      if (typeof off === "function") off();
+    };
+  }, []);
+
+  // The Reconnect banner is a one-shot signal: vlessChanged on Edit while
+  // a connection is active. Auto-clear once the chain transitions to idle
+  // (the user disconnected; a fresh Connect with the new URI is implied
+  // when they next connect). Manual Dismiss also clears it.
+  const wasConnectedRef = useRef(status === "connected" || status === "connecting");
+  useEffect(() => {
+    if (status === "idle" && wasConnectedRef.current && reconnectBanner) {
+      setReconnectBanner(false);
+    }
+    wasConnectedRef.current = status === "connected" || status === "connecting";
+  }, [status, reconnectBanner]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    if (!q) return servers;
     return servers.filter(
       (s) =>
-        !q ||
-        s.city.toLowerCase().includes(q) ||
-        s.code.toLowerCase().includes(q),
+        s.name.toLowerCase().includes(q) ||
+        s.country.toLowerCase().includes(q) ||
+        s.address.toLowerCase().includes(q),
     );
   }, [servers, search]);
 
@@ -121,20 +129,25 @@ export function Servers() {
       id: string;
       label: string;
       hint: string | null;
-      origin: Origin;
-      rows: FakeServer[];
+      origin: "manual" | "subscription";
+      rows: Server[];
     }> = [];
 
-    const sortRows = (rows: FakeServer[]) =>
+    const sortRows = (rows: Server[]) =>
       [...rows].sort((a, b) => {
         if (favoritesFirst && a.favorite !== b.favorite) {
           return a.favorite ? -1 : 1;
         }
-        if (sort === "latency") return a.pingMs - b.pingMs;
-        return a.city.localeCompare(b.city);
+        if (sort === "latency") {
+          // 0 = unprobed → sort to bottom
+          const al = a.latencyMs > 0 ? a.latencyMs : Number.MAX_SAFE_INTEGER;
+          const bl = b.latencyMs > 0 ? b.latencyMs : Number.MAX_SAFE_INTEGER;
+          return al - bl;
+        }
+        return a.name.localeCompare(b.name);
       });
 
-    const manualRows = filtered.filter((s) => s.origin === "manual");
+    const manualRows = filtered.filter((s) => s.origin === MANUAL_ORIGIN);
     if (manualRows.length) {
       out.push({
         id: MANUAL_GROUP_ID,
@@ -145,17 +158,20 @@ export function Servers() {
       });
     }
 
-    for (const sub of SUBS) {
-      const rows = filtered.filter((s) => s.subId === sub.id);
-      if (rows.length) {
-        out.push({
-          id: sub.id,
-          label: sub.name,
-          hint: `synced ${sub.syncedAgo}`,
-          origin: "subscription",
-          rows: sortRows(rows),
-        });
-      }
+    // Group subscription servers by origin (= subscription name).
+    const subOrigins = new Set<string>();
+    for (const s of filtered) {
+      if (s.origin && s.origin !== MANUAL_ORIGIN) subOrigins.add(s.origin);
+    }
+    for (const subName of [...subOrigins].sort()) {
+      const rows = filtered.filter((s) => s.origin === subName);
+      out.push({
+        id: `sub:${subName}`,
+        label: subName,
+        hint: `${rows.length} server${rows.length === 1 ? "" : "s"}`,
+        origin: "subscription",
+        rows: sortRows(rows),
+      });
     }
     return out;
   }, [filtered, sort, favoritesFirst]);
@@ -168,82 +184,95 @@ export function Servers() {
     });
   }
 
-  function finishProbe(id: string) {
-    setServers((prev) =>
-      prev.map((s) =>
-        s.id === id
-          ? {
-              ...s,
-              pingMs: Math.max(
-                8,
-                Math.round(s.pingMs * (0.8 + Math.random() * 0.5)),
-              ),
-            }
-          : s,
-      ),
-    );
-    setProbe((prev) => {
-      const m = new Map(prev);
-      m.set(id, "ok");
-      return m;
-    });
-  }
-
   function probeOne(id: string) {
     setProbing(id);
-    setTimeout(() => finishProbe(id), 300 + Math.random() * 600);
+    void TestLatency(id).catch(() => {
+      // Non-fatal — backend still publishes probe:result for individual
+      // failures (with `error` field). The catch covers ID-not-found and
+      // store-load errors which won't fire probe:result; reset the pill.
+      setProbe((prev) => {
+        const m = new Map(prev);
+        m.set(id, "error");
+        return m;
+      });
+    });
   }
 
   function probeAll() {
-    servers.forEach((s, i) => {
-      setTimeout(() => {
-        setProbing(s.id);
-        setTimeout(() => finishProbe(s.id), 300 + Math.random() * 600);
-      }, i * 80);
+    setProbe((prev) => {
+      const m = new Map(prev);
+      for (const s of servers) m.set(s.id, "probing");
+      return m;
+    });
+    void TestLatency("").catch(() => {
+      // Reset all to error on full-batch failure.
+      setProbe((prev) => {
+        const m = new Map(prev);
+        for (const s of servers) m.set(s.id, "error");
+        return m;
+      });
     });
   }
 
-  function toggleFavorite(id: string) {
-    setServers((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, favorite: !s.favorite } : s)),
-    );
+  async function toggleFavorite(id: string) {
+    try {
+      await ToggleFavorite(id);
+      // No local mutation — backend publishes servers:changed and the
+      // dash bootstrap refreshes allServers.
+    } catch (err: any) {
+      setSubmitError(err?.message ?? String(err));
+    }
   }
 
-  function selectServer(id: string) {
-    setActiveServerId(id);
+  async function handleAddManual(name: string, uri: string) {
+    try {
+      await serverAdd(uri, name);
+      setModal({ kind: "closed" });
+      setSubmitError(null);
+    } catch (err: any) {
+      // Keep the modal open — lastError banner will surface the message.
+      // Also stash a local copy so the modal-level UX isn't tied to the
+      // global banner timing.
+      setSubmitError(err?.message ?? String(err));
+    }
   }
 
-  function handleAddManual(name: string, uri: string) {
-    const id = `m-${Date.now()}`;
-    setServers((prev) => [
-      {
-        id,
-        subId: null,
-        origin: "manual",
-        flag: "🌐",
-        city: name,
-        code: "manual",
-        pingMs: 50 + Math.floor(Math.random() * 150),
-        favorite: false,
-        vlessUri: uri,
-      },
-      ...prev,
-    ]);
-    setModal({ kind: "closed" });
+  async function handleSaveEdit(id: string, name: string, uri: string) {
+    try {
+      const { vlessChanged } = await serverEdit(id, uri, name);
+      setModal({ kind: "closed" });
+      setSubmitError(null);
+      if (
+        vlessChanged &&
+        activeServerId === id &&
+        (status === "connected" || status === "connecting")
+      ) {
+        setReconnectBanner(true);
+      }
+    } catch (err: any) {
+      setSubmitError(err?.message ?? String(err));
+    }
   }
 
-  function handleSaveEdit(id: string, name: string, uri: string) {
-    setServers((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, city: name, vlessUri: uri } : s)),
-    );
-    setModal({ kind: "closed" });
+  async function handleDelete(id: string) {
+    try {
+      await serverRemove(id);
+      setModal({ kind: "closed" });
+      setSubmitError(null);
+    } catch (err: any) {
+      setSubmitError(err?.message ?? String(err));
+    }
   }
 
-  function handleDelete(id: string) {
-    setServers((prev) => prev.filter((s) => s.id !== id));
-    if (activeServerId === id) setActiveServerId(null);
-    setModal({ kind: "closed" });
+  function dismissLastError() {
+    clearLastError();
+    setSubmitError(null);
   }
+
+  // Prefer the store's lastError (set on failed mutations), fall back to
+  // local submitError (covers ToggleFavorite + raw probe failures that
+  // don't go through the store).
+  const errorMessage = lastError ?? submitError;
 
   return (
     <>
@@ -270,12 +299,25 @@ export function Servers() {
           </div>
         </motion.div>
 
+        {errorMessage && (
+          <ErrorBanner
+            message={errorMessage}
+            onDismiss={dismissLastError}
+          />
+        )}
+
+        {reconnectBanner && (
+          <ReconnectBanner onDismiss={() => setReconnectBanner(false)} />
+        )}
+
         {grouped.length === 0 ? (
           <motion.div
             variants={itemVariants}
             className="glass-regular rounded-2xl p-10 text-center text-[13px] text-white/55"
           >
-            Nothing matches “{search}”.
+            {servers.length === 0
+              ? "No servers yet — add one or sync a subscription."
+              : `Nothing matches “${search}”.`}
           </motion.div>
         ) : (
           <AnimatePresence>
@@ -328,13 +370,12 @@ export function Servers() {
                         active={server.id === activeServerId}
                         probing={probe.get(server.id) === "probing"}
                         isLast={idx === group.rows.length - 1}
-                        onSelect={() => selectServer(server.id)}
-                        onToggleFavorite={() => toggleFavorite(server.id)}
+                        onToggleFavorite={() => void toggleFavorite(server.id)}
                         onProbe={() => probeOne(server.id)}
                         onAction={() =>
                           setModal({
                             kind:
-                              server.origin === "manual" ? "edit" : "view",
+                              server.origin === MANUAL_ORIGIN ? "edit" : "view",
                             server,
                           })
                         }
@@ -353,7 +394,10 @@ export function Servers() {
         {modal.kind !== "closed" && (
           <ServerModal
             modal={modal}
-            onClose={() => setModal({ kind: "closed" })}
+            onClose={() => {
+              setModal({ kind: "closed" });
+              setSubmitError(null);
+            }}
             onAdd={handleAddManual}
             onSaveEdit={handleSaveEdit}
             onDelete={handleDelete}
@@ -361,6 +405,60 @@ export function Servers() {
         )}
       </AnimatePresence>
     </>
+  );
+}
+
+function ErrorBanner({
+  message,
+  onDismiss,
+}: {
+  message: string;
+  onDismiss: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.22, ease: SNAP_EASE }}
+      role="alert"
+      className="flex items-start gap-3 rounded-xl border border-danger/40 bg-danger/[0.10] px-4 py-3"
+    >
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
+      <div className="flex-1 text-[12px] text-white/85">{message}</div>
+      <button
+        onClick={onDismiss}
+        className="rounded p-1 text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white"
+        aria-label="Dismiss error"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </motion.div>
+  );
+}
+
+function ReconnectBanner({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.22, ease: SNAP_EASE }}
+      role="status"
+      className="flex items-start gap-3 rounded-xl border border-warn/40 bg-warn/[0.10] px-4 py-3"
+    >
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
+      <div className="flex-1 text-[12px] text-white/85">
+        Reconnect to apply the updated server URI.
+      </div>
+      <button
+        onClick={onDismiss}
+        className="rounded p-1 text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white"
+        aria-label="Dismiss reconnect notice"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </motion.div>
   );
 }
 
@@ -473,35 +571,40 @@ function ServerRow({
   active,
   probing,
   isLast,
-  onSelect,
   onToggleFavorite,
   onProbe,
   onAction,
 }: {
-  server: FakeServer;
+  server: Server;
   active: boolean;
   probing: boolean;
   isLast: boolean;
-  onSelect: () => void;
   onToggleFavorite: () => void;
   onProbe: () => void;
   onAction: () => void;
 }) {
+  const ping = server.latencyMs;
   const pingColor =
-    server.pingMs < 25
-      ? "text-success"
-      : server.pingMs < 60
-        ? "text-warn"
-        : server.pingMs < 120
-          ? "text-white/65"
-          : "text-danger";
+    ping === 0
+      ? "text-white/40"
+      : ping < 25
+        ? "text-success"
+        : ping < 60
+          ? "text-warn"
+          : ping < 120
+            ? "text-white/65"
+            : "text-danger";
 
-  const ActionIcon = server.origin === "manual" ? Pencil : Eye;
-  const actionTitle = server.origin === "manual" ? "Edit" : "View details";
+  const isManual = server.origin === MANUAL_ORIGIN;
+  const ActionIcon = isManual ? Pencil : Eye;
+  const actionTitle = isManual ? "Edit" : "View details";
+
+  // Country code from ServerView; CountryFlag accepts ISO-2 alpha or emoji.
+  // When missing, render a neutral globe placeholder to preserve layout.
+  const flagCode = server.country || "🌐";
 
   return (
-    <button
-      onClick={onSelect}
+    <div
       className={cn(
         "group relative flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-instant ease-snap",
         !isLast && "border-b border-white/[0.05]",
@@ -528,14 +631,14 @@ function ServerRow({
       </span>
 
       <CountryFlag
-        code={server.flag}
+        code={flagCode}
         className="relative z-10 h-[14px] w-[21px] shrink-0 rounded-[2px] object-cover shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
       />
 
       <div className="relative z-10 flex min-w-0 flex-1 items-baseline gap-3">
-        <span className="text-[13px] font-medium">{server.city}</span>
+        <span className="text-[13px] font-medium">{server.name}</span>
         <span className="font-mono text-[10px] tabular-nums text-white/40">
-          {server.code}
+          {server.address}
         </span>
       </div>
 
@@ -585,7 +688,7 @@ function ServerRow({
         )}
         title="Re-probe latency"
       >
-        {probing ? "probing…" : `${server.pingMs} ms`}
+        {probing ? "probing…" : ping > 0 ? `${ping} ms` : "—"}
       </button>
 
       <button
@@ -598,7 +701,7 @@ function ServerRow({
       >
         <ActionIcon className="h-3.5 w-3.5" />
       </button>
-    </button>
+    </div>
   );
 }
 
@@ -721,9 +824,9 @@ function ServerModal({
 }: {
   modal: Exclude<ModalState, { kind: "closed" }>;
   onClose: () => void;
-  onAdd: (name: string, uri: string) => void;
-  onSaveEdit: (id: string, name: string, uri: string) => void;
-  onDelete: (id: string) => void;
+  onAdd: (name: string, uri: string) => void | Promise<void>;
+  onSaveEdit: (id: string, name: string, uri: string) => void | Promise<void>;
+  onDelete: (id: string) => void | Promise<void>;
 }) {
   const isAdd = modal.kind === "add";
   const isEdit = modal.kind === "edit";
@@ -732,10 +835,12 @@ function ServerModal({
   const server = !isAdd ? modal.server : null;
 
   const [config, setConfig] = useState<VlessConfig>(() =>
-    server ? parseVless(server.vlessUri) : { ...EMPTY_VLESS },
+    server ? parseVless(server.uri) : { ...EMPTY_VLESS },
   );
   const [pasteText, setPasteText] = useState("");
   const [pasteError, setPasteError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   function update<K extends keyof VlessConfig>(key: K, value: VlessConfig[K]) {
     setConfig((prev) => ({ ...prev, [key]: value }));
@@ -761,11 +866,30 @@ function ServerModal({
   const computedUri = buildVless(config);
   const valid = !!config.name.trim() && !!config.uuid.trim() && !!config.host.trim();
 
-  function submit() {
-    if (!valid) return;
-    if (isAdd) onAdd(config.name.trim(), computedUri);
-    else if (isEdit && server)
-      onSaveEdit(server.id, config.name.trim(), computedUri);
+  async function submit() {
+    if (!valid || submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    try {
+      if (isAdd) await onAdd(config.name.trim(), computedUri);
+      else if (isEdit && server)
+        await onSaveEdit(server.id, config.name.trim(), computedUri);
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  }
+
+  async function deleteServer() {
+    if (!server || submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    try {
+      await onDelete(server.id);
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
   }
 
   function copyUri() {
@@ -809,12 +933,12 @@ function ServerModal({
               <span
                 className={cn(
                   "rounded px-1.5 py-px text-[8px] font-bold uppercase tracking-[0.16em]",
-                  server.origin === "manual"
+                  server.origin === MANUAL_ORIGIN
                     ? "bg-warn/15 text-warn"
                     : "bg-white/[0.08] text-white/55",
                 )}
               >
-                {server.origin}
+                {server.origin === MANUAL_ORIGIN ? "manual" : "subscription"}
               </span>
             )}
           </div>
@@ -1035,13 +1159,18 @@ function ServerModal({
                 <Meta
                   label="Origin"
                   value={
-                    server.origin === "manual"
+                    server.origin === MANUAL_ORIGIN
                       ? "Manual entry"
-                      : `Subscription · ${server.subId}`
+                      : `Subscription · ${server.origin}`
                   }
                 />
-                <Meta label="Latency" value={`${server.pingMs} ms`} />
-                <Meta label="Code" value={server.code} mono />
+                <Meta
+                  label="Latency"
+                  value={
+                    server.latencyMs > 0 ? `${server.latencyMs} ms` : "—"
+                  }
+                />
+                <Meta label="Address" value={server.address} mono />
                 <Meta
                   label="Favourite"
                   value={server.favorite ? "Yes" : "No"}
@@ -1054,8 +1183,9 @@ function ServerModal({
         <div className="flex items-center justify-between gap-3 border-t border-white/[0.08] px-6 py-4">
           {isEdit && server ? (
             <button
-              onClick={() => onDelete(server.id)}
-              className="flex items-center gap-1.5 rounded-lg border border-danger/40 bg-danger/[0.10] px-3 py-2 text-[12px] font-medium text-danger transition-colors hover:bg-danger/[0.20]"
+              onClick={() => void deleteServer()}
+              disabled={submitting}
+              className="flex items-center gap-1.5 rounded-lg border border-danger/40 bg-danger/[0.10] px-3 py-2 text-[12px] font-medium text-danger transition-colors hover:bg-danger/[0.20] disabled:opacity-50"
             >
               <Trash2 className="h-3.5 w-3.5" />
               Delete
@@ -1073,11 +1203,11 @@ function ServerModal({
             </button>
             {editable && (
               <button
-                onClick={submit}
-                disabled={!valid}
+                onClick={() => void submit()}
+                disabled={!valid || submitting}
                 className="rounded-lg bg-gradient-to-br from-accent-start to-accent-mid px-4 py-2 text-[12px] font-semibold text-white shadow-[0_0_18px_rgba(120,200,255,0.30)] transition-all hover:shadow-[0_0_22px_rgba(120,200,255,0.45)] disabled:opacity-40 disabled:shadow-none"
               >
-                {isAdd ? "Add" : "Save"}
+                {submitting ? (isAdd ? "Adding…" : "Saving…") : isAdd ? "Add" : "Save"}
               </button>
             )}
           </div>
