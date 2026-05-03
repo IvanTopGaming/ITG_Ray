@@ -274,4 +274,59 @@ describe("Servers page", () => {
     await user.click(screen.getByTitle("Favourite"));
     expect(toggleFavoriteMock).toHaveBeenCalledWith("m1");
   });
+
+  it("row click switches active server when not active", async () => {
+    const user = userEvent.setup();
+    useDashMock.mockReturnValue({
+      ...baseDash,
+      allServers: [makeServer({ id: "s1", name: "A" })],
+      currentServer: null,
+      bootstrapped: true,
+    });
+    render(<Servers />);
+    await user.click(screen.getByText("A"));
+    expect(dashConnectMock).toHaveBeenCalledWith("s1");
+  });
+
+  it("row click does nothing when already active", async () => {
+    const user = userEvent.setup();
+    const active = makeServer({ id: "s1", name: "A" });
+    useDashMock.mockReturnValue({
+      ...baseDash,
+      allServers: [active],
+      currentServer: active,
+      status: "connected",
+      bootstrapped: true,
+    });
+    render(<Servers />);
+    await user.click(screen.getByText("A"));
+    expect(dashConnectMock).not.toHaveBeenCalled();
+  });
+
+  it("row click does nothing during connecting/disconnecting", async () => {
+    const user = userEvent.setup();
+    useDashMock.mockReturnValue({
+      ...baseDash,
+      allServers: [makeServer({ id: "s1", name: "A" })],
+      currentServer: null,
+      status: "connecting",
+      bootstrapped: true,
+    });
+    render(<Servers />);
+    await user.click(screen.getByText("A"));
+    expect(dashConnectMock).not.toHaveBeenCalled();
+  });
+
+  it("row click is suppressed when clicking inner buttons", async () => {
+    const user = userEvent.setup();
+    useDashMock.mockReturnValue({
+      ...baseDash,
+      allServers: [makeServer({ id: "s1", name: "A", favorite: false })],
+      bootstrapped: true,
+    });
+    render(<Servers />);
+    await user.click(screen.getByTitle("Favourite"));
+    expect(dashConnectMock).not.toHaveBeenCalled();
+    expect(toggleFavoriteMock).toHaveBeenCalledWith("s1");
+  });
 });

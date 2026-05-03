@@ -26,6 +26,7 @@ import {
 import {
   effectiveStatus,
   useDash,
+  dashConnect,
   dashProbeOne,
   dashProbeAll,
 } from "@/lib/dashStore";
@@ -326,6 +327,12 @@ export function Servers() {
                             server,
                           })
                         }
+                        onSelectActive={() => {
+                          if (status === "connecting" || status === "disconnecting") return;
+                          void dashConnect(server.id).catch(() => {
+                            /* dashStore sets lastError; banner shows it */
+                          });
+                        }}
                       />
                     </motion.div>
                   ))}
@@ -522,6 +529,7 @@ function ServerRow({
   onToggleFavorite,
   onProbe,
   onAction,
+  onSelectActive,
 }: {
   server: Server;
   active: boolean;
@@ -530,6 +538,7 @@ function ServerRow({
   onToggleFavorite: () => void;
   onProbe: () => void;
   onAction: () => void;
+  onSelectActive: () => void;
 }) {
   const ping = server.latencyMs;
   const pingColor =
@@ -549,10 +558,15 @@ function ServerRow({
 
   return (
     <div
+      onClick={() => {
+        if (!active) onSelectActive();
+      }}
       className={cn(
         "group relative flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-instant ease-snap",
         !isLast && "border-b border-white/[0.05]",
-        active ? "bg-success/[0.06]" : "hover:bg-white/[0.03]",
+        active
+          ? "cursor-default bg-success/[0.06]"
+          : "cursor-pointer hover:bg-white/[0.03]",
       )}
     >
       {active && (
