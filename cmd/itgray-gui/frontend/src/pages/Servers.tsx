@@ -69,7 +69,7 @@ export function Servers() {
   const status = effectiveStatus(dash);
 
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<Sort>("latency");
+  const [sort, setSort] = useState<Sort>("name");
   const [favoritesFirst, setFavoritesFirst] = useState(true);
   const [probe, setProbe] = useState<Map<string, ProbeState>>(new Map());
   const [modal, setModal] = useState<ModalState>({ kind: "closed" });
