@@ -24,7 +24,7 @@ func TestBuildXray_Reality_XHTTP(t *testing.T) {
 	require.NoError(t, json.Unmarshal(b, &doc))
 
 	inbounds := doc["inbounds"].([]any)
-	require.Len(t, inbounds, 1)
+	require.Len(t, inbounds, 2)
 	in0 := inbounds[0].(map[string]any)
 	require.Equal(t, "socks", in0["protocol"])
 	require.Equal(t, float64(1081), in0["port"])
@@ -118,4 +118,54 @@ func TestBuildXray_ServerIPEmpty_FallsBackToAddress(t *testing.T) {
 	vnext0 := out0["settings"].(map[string]any)["vnext"].([]any)[0].(map[string]any)
 	require.Equal(t, "example.com", vnext0["address"],
 		"with ServerIP empty, vnext.address must fall back to Server.Address")
+}
+
+func TestBuildXray_IncludesStatsAPIBlocks(t *testing.T) {
+	cfg, err := BuildXray(&XrayInput{
+		Server:    vless.Config{Address: "x.example", Port: 443, UUID: "abc"},
+		SocksPort: 10808,
+	})
+	if err != nil {
+		t.Fatalf("BuildXray: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(cfg, &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	api, ok := doc["api"].(map[string]any)
+	if !ok {
+		t.Fatalf("api block missing")
+	}
+	if api["tag"] != "api" {
+		t.Fatalf("api.tag=%v, want api", api["tag"])
+	}
+	services, _ := api["services"].([]any)
+	if len(services) != 1 || services[0] != "StatsService" {
+		t.Fatalf("api.services=%v, want [StatsService]", services)
+	}
+
+	inbounds, _ := doc["inbounds"].([]any)
+	var foundAPIInbound bool
+	for _, ib := range inbounds {
+		m, _ := ib.(map[string]any)
+		if m["tag"] == "api" {
+			foundAPIInbound = true
+			if int(m["port"].(float64)) != XrayAPIPort {
+				t.Fatalf("api inbound port=%v, want %d", m["port"], XrayAPIPort)
+			}
+			if m["protocol"] != "dokodemo-door" {
+				t.Fatalf("api inbound protocol=%v, want dokodemo-door", m["protocol"])
+			}
+		}
+	}
+	if !foundAPIInbound {
+		t.Fatalf("api inbound missing")
+	}
+
+	routing, _ := doc["routing"].(map[string]any)
+	rules, _ := routing["rules"].([]any)
+	if len(rules) == 0 {
+		t.Fatalf("routing.rules empty")
+	}
 }
