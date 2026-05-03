@@ -19,7 +19,13 @@ const initial = (): ServersState => ({ servers: [], loading: false, lastError: n
 
 let state: ServersState = initial();
 const listeners = new Set<() => void>();
-let bootstrapped = false;
+let bootPromise: Promise<void> | null = null;
+// mutationInFlight is a single shared mutex across Add/Edit/Remove. The Subs
+// precedent uses per-method/per-id flags, but Servers mutations are
+// user-paced (single-window, click-by-click) and the backend is authoritative,
+// so a binary mutex is sufficient. Concurrent mutations are rare and
+// rejecting the second with a clear error is preferable to queueing —
+// Task 10 (Servers.tsx) translates the rejection into a banner via lastError.
 let mutationInFlight = false;
 
 function notify() {
@@ -52,23 +58,24 @@ async function refetch(): Promise<void> {
 }
 
 export async function serversBootstrap(): Promise<void> {
-  if (bootstrapped) return;
-  bootstrapped = true;
+  if (bootPromise) return bootPromise;
+  bootPromise = (async () => {
+    EventsOn("servers:changed", () => {
+      void refetch();
+    });
+    EventsOn("sub:synced", () => {
+      void refetch();
+    });
 
-  EventsOn("servers:changed", () => {
-    void refetch();
-  });
-  EventsOn("sub:synced", () => {
-    void refetch();
-  });
-
-  setState({ ...state, loading: true, lastError: null });
-  await refetch();
+    setState({ ...state, loading: true, lastError: null });
+    await refetch();
+  })();
+  return bootPromise;
 }
 
 export function useServers(): ServersState {
   // Lazy bootstrap on first hook use. serversBootstrap is idempotent.
-  if (!bootstrapped) void serversBootstrap();
+  if (!bootPromise) void serversBootstrap();
   return useSyncExternalStore(subscribe, () => state, () => state);
 }
 
@@ -144,6 +151,6 @@ export function clearLastError(): void {
 export function __resetForTest(): void {
   state = initial();
   listeners.clear();
-  bootstrapped = false;
+  bootPromise = null;
   mutationInFlight = false;
 }

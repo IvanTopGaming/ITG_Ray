@@ -115,6 +115,33 @@ describe("serversStore mutations", () => {
     await expect(serverRemove("m1")).rejects.toThrow("disconnect first");
     expect(getServersState().lastError).toContain("disconnect first");
   });
+
+  it("serverEdit defaults vlessChanged=false when backend returns non-array", async () => {
+    // Defensive: today the Wails runtime emits Go multi-returns as [view, bool],
+    // but if codegen ever flattens to just `view`, our store should not crash.
+    editMock.mockResolvedValue(fixtureServer);
+    const result = await serverEdit("m1", "vless://x", "DE");
+    expect(result.vlessChanged).toBe(false);
+  });
+
+  it("rejects concurrent mutations with in-flight error", async () => {
+    // Make the first Add hang so the second Add lands while it's in flight.
+    let releaseFirst: () => void = () => {};
+    addMock.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseFirst = resolve;
+        }),
+    );
+
+    const first = serverAdd("vless://a", "A");
+    await expect(serverAdd("vless://b", "B")).rejects.toThrow(
+      "another server mutation is in flight",
+    );
+
+    releaseFirst();
+    await first;
+  });
 });
 
 describe("serversStore events", () => {
