@@ -2,14 +2,18 @@ package bindings
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
 	"github.com/itg-team/itg-ray/internal/server"
+	"github.com/itg-team/itg-ray/internal/vless"
 )
 
 // probeTimeout bounds a single TCP-connect probe. Matches the spec's
@@ -169,4 +173,70 @@ func probeOne(ctx context.Context, t *server.Server) map[string]any {
 		"id":        t.ID,
 		"latencyMs": ms,
 	}
+}
+
+// validateServerURI parses a VLESS URI and returns the Config. Non-empty
+// rawURI is required; vless.ParseURL is the source of truth for what is
+// considered well-formed.
+func validateServerURI(rawURI string) (vless.Config, error) {
+	if rawURI == "" {
+		return vless.Config{}, errors.New("uri required")
+	}
+	cfg, err := vless.ParseURL(rawURI)
+	if err != nil {
+		return vless.Config{}, fmt.Errorf("invalid VLESS URI: %w", err)
+	}
+	return cfg, nil
+}
+
+// generateServerID returns a fresh manual-server ID of the shape
+// m<unix-millis>-<hex4>. Mirrors generateSubID.
+func generateServerID() string {
+	var b [2]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return fmt.Sprintf("m%d", time.Now().UnixMilli())
+	}
+	return fmt.Sprintf("m%d-%s", time.Now().UnixMilli(), hex.EncodeToString(b[:]))
+}
+
+// Add creates a manual server from the supplied VLESS URI. Name overrides
+// the parsed remark when non-empty; otherwise falls back to remark or
+// host:port. Returns the resulting view. NO duplicate-detection — user
+// is responsible for list cleanliness (mirrors Subs.Add).
+func (s *ServersService) Add(rawURI, name string) (hub.ServerView, error) {
+	rawURI = strings.TrimSpace(rawURI)
+	cfg, err := validateServerURI(rawURI)
+	if err != nil {
+		return hub.ServerView{}, err
+	}
+	name = strings.TrimSpace(name)
+
+	displayName := name
+	if displayName == "" {
+		displayName = cfg.Remark
+	}
+	if displayName == "" {
+		displayName = net.JoinHostPort(cfg.Address, strconv.Itoa(int(cfg.Port)))
+	}
+
+	srv := server.Server{
+		ID:     generateServerID(),
+		Origin: server.OriginManual,
+		Name:   displayName,
+		Remark: cfg.Remark,
+		Vless:  cfg,
+	}
+
+	list, err := s.d.ServerStore.Load()
+	if err != nil {
+		return hub.ServerView{}, fmt.Errorf("server.Load: %w", err)
+	}
+	list = append(list, srv)
+	if err := s.d.ServerStore.Save(list); err != nil {
+		return hub.ServerView{}, fmt.Errorf("server.Save: %w", err)
+	}
+
+	s.d.Hub.Publish(hub.Event{Name: hub.EventServersChanged})
+
+	return toServerViews([]server.Server{srv}, nil)[0], nil
 }

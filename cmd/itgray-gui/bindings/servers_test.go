@@ -2,6 +2,7 @@ package bindings
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -127,3 +128,90 @@ func TestServersService_ToggleFavorite(t *testing.T) {
 }
 
 func timeAfter500ms() <-chan time.Time { return time.After(500 * time.Millisecond) }
+
+func TestServersService_Add_GeneratesIDAndPersists(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "servers.json")
+	store := fileServerStore{path: path}
+
+	h := hub.New()
+	rcv := h.Subscribe(4)
+	defer h.Close()
+
+	svc := NewServersService(ServersDeps{ServerStore: store, Hub: h})
+
+	uri := "vless://00000000-0000-0000-0000-000000000000@h.example:443?type=tcp&security=none#remark"
+	view, err := svc.Add(uri, "Frankfurt")
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(view.ID, "m"), "ID = %q, want m-prefix", view.ID)
+	require.Equal(t, "Frankfurt", view.Name)
+	require.Equal(t, "manual", view.Origin)
+
+	loaded, err := store.Load()
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	require.Equal(t, view.ID, loaded[0].ID)
+
+	select {
+	case e := <-rcv:
+		require.Equal(t, hub.EventServersChanged, e.Name)
+	case <-timeAfter500ms():
+		t.Fatal("no servers:changed event")
+	}
+}
+
+func TestServersService_Add_RejectsEmptyURI(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "servers.json")
+	svc := NewServersService(ServersDeps{
+		ServerStore: fileServerStore{path: path},
+		Hub:         hub.New(),
+	})
+
+	_, err := svc.Add("", "Name")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "uri required")
+}
+
+func TestServersService_Add_RejectsInvalidURI(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "servers.json")
+	svc := NewServersService(ServersDeps{
+		ServerStore: fileServerStore{path: path},
+		Hub:         hub.New(),
+	})
+
+	_, err := svc.Add("not-a-vless-uri", "Name")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid VLESS URI")
+}
+
+func TestServersService_Add_AllowsDuplicateURIs(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "servers.json")
+	store := fileServerStore{path: path}
+	svc := NewServersService(ServersDeps{ServerStore: store, Hub: hub.New()})
+
+	uri := "vless://00000000-0000-0000-0000-000000000000@h.example:443?type=tcp&security=none"
+	_, err := svc.Add(uri, "First")
+	require.NoError(t, err)
+	_, err = svc.Add(uri, "Second")
+	require.NoError(t, err, "duplicate URI must succeed (no dedup)")
+
+	loaded, _ := store.Load()
+	require.Len(t, loaded, 2)
+	require.NotEqual(t, loaded[0].ID, loaded[1].ID, "duplicate adds must yield distinct IDs")
+}
+
+func TestServersService_Add_NameFallback(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "servers.json")
+	svc := NewServersService(ServersDeps{
+		ServerStore: fileServerStore{path: path},
+		Hub:         hub.New(),
+	})
+
+	view, err := svc.Add("vless://00000000-0000-0000-0000-000000000000@h.example:443?type=tcp&security=none#FromRemark", "")
+	require.NoError(t, err)
+	require.Equal(t, "FromRemark", view.Name, "empty name should fall back to remark")
+}
