@@ -16,6 +16,7 @@ function s(over: Partial<ServerView>): ServerView {
     origin: "manual",
     favorite: false,
     tags: [],
+    uri: "",
     ...over,
   };
 }

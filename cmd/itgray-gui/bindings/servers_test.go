@@ -452,3 +452,39 @@ func TestServersService_Edit_RejectsInvalidURI(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid VLESS URI")
 }
+
+func TestServersService_List_PopulatesURI(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "servers.json")
+	seedServers(t, path, []server.Server{{
+		ID:     "m1",
+		Origin: server.OriginManual,
+		Name:   "DE",
+		Vless: vless.Config{
+			Address:    "h.example",
+			Port:       443,
+			UUID:       "00000000-0000-0000-0000-000000000000",
+			Transport:  vless.TransportTCP,
+			Security:   vless.SecurityNone,
+			Encryption: "none",
+		},
+	}})
+
+	svc := NewServersService(ServersDeps{
+		ServerStore: fileServerStore{path: path},
+		Hub:         hub.New(),
+	})
+	got, err := svc.List()
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.NotEmpty(t, got[0].URI, "URI must be populated for the projection")
+	require.Contains(t, got[0].URI, "vless://", "URI must start with vless://")
+	require.Contains(t, got[0].URI, "h.example", "URI must contain the host")
+
+	// Round-trip: parsed URI must equal the original config.
+	parsed, err := vless.ParseURL(got[0].URI)
+	require.NoError(t, err)
+	require.Equal(t, "h.example", parsed.Address)
+	require.Equal(t, uint16(443), parsed.Port)
+	require.Equal(t, "00000000-0000-0000-0000-000000000000", parsed.UUID)
+}

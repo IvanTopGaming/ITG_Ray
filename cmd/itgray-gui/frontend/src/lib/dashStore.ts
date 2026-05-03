@@ -132,6 +132,7 @@ function onVpnStatus(payload: any) {
         origin: "manual",
         favorite: false,
         tags: [],
+        uri: "",
       } as ServerView;
     }
     if (typeof payload.mode === "string") next.mode = payload.mode as Mode;
