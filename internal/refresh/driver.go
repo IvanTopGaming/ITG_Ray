@@ -132,12 +132,10 @@ func (d *Driver) Run(ctx context.Context) error {
 		subs = nil
 	}
 	for _, s := range subs {
-		d.wg.Add(1)
-		go d.runSub(ctx, s)
+		d.wg.Go(func() { d.runSub(ctx, s) })
 	}
 
-	d.wg.Add(1)
-	go d.runProbe(ctx)
+	d.wg.Go(func() { d.runProbe(ctx) })
 
 	<-ctx.Done()
 	d.wg.Wait()

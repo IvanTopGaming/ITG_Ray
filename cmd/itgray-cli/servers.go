@@ -46,9 +46,7 @@ func newServerCmd() *cobra.Command {
 			var wg sync.WaitGroup
 			mu := sync.Mutex{}
 			for i := range all {
-				wg.Add(1)
-				go func(i int) {
-					defer wg.Done()
+				wg.Go(func() {
 					sem <- struct{}{}
 					defer func() { <-sem }()
 					addr := net.JoinHostPort(all[i].Vless.Address, fmt.Sprintf("%d", all[i].Vless.Port))
@@ -61,7 +59,7 @@ func newServerCmd() *cobra.Command {
 						ms := int(d / time.Millisecond)
 						all[i].LatencyMS = &ms
 					}
-				}(i)
+				})
 			}
 			wg.Wait()
 			return server.Save(serversPath(), all)

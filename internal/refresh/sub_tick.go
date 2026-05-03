@@ -84,7 +84,6 @@ func truncate(s string, n int) string {
 // subs; subsequent ticks fire after the effective interval (with ±10% jitter)
 // elapsed since the previous tick completed.
 func (d *Driver) runSub(ctx context.Context, s subscription.Stored) {
-	defer d.wg.Done()
 	defer func() {
 		if r := recover(); r != nil {
 			d.log.Error("refresh.runSub panic", "id", s.ID, "panic", r)
