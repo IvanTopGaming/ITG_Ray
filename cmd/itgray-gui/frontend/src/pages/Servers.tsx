@@ -105,7 +105,7 @@ export function Servers() {
   // a connection is active. Auto-clear once the chain transitions to idle
   // (the user disconnected; a fresh Connect with the new URI is implied
   // when they next connect). Manual Dismiss also clears it.
-  const wasConnectedRef = useRef(status === "connected" || status === "connecting");
+  const wasConnectedRef = useRef(false);
   useEffect(() => {
     if (status === "idle" && wasConnectedRef.current && reconnectBanner) {
       setReconnectBanner(false);
