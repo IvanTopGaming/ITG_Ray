@@ -310,3 +310,145 @@ func TestServersService_Remove_BlocksActive(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "disconnect first to delete this server")
 }
+
+func TestServersService_Edit_NameOnly_PreservesVlessAndID(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "servers.json")
+	store := fileServerStore{path: path}
+	seedServers(t, path, []server.Server{{
+		ID:     "m1",
+		Origin: server.OriginManual,
+		Name:   "Old",
+		Vless:  vless.Config{Address: "h.example", Port: 443, UUID: "00000000-0000-0000-0000-000000000000", Transport: vless.TransportTCP, Security: vless.SecurityNone, Encryption: "none"},
+	}})
+
+	h := hub.New()
+	rcv := h.Subscribe(4)
+	defer h.Close()
+
+	svc := NewServersService(ServersDeps{ServerStore: store, Hub: h})
+
+	uri := "vless://00000000-0000-0000-0000-000000000000@h.example:443?type=tcp&security=none"
+	view, vlessChanged, err := svc.Edit("m1", uri, "New")
+	require.NoError(t, err)
+	require.False(t, vlessChanged, "name-only edit must report vlessChanged=false")
+	require.Equal(t, "m1", view.ID, "ID must stay stable across edit")
+	require.Equal(t, "New", view.Name)
+
+	loaded, _ := store.Load()
+	require.Len(t, loaded, 1)
+	require.Equal(t, "New", loaded[0].Name)
+
+	select {
+	case e := <-rcv:
+		require.Equal(t, hub.EventServersChanged, e.Name)
+	case <-timeAfter500ms():
+		t.Fatal("no servers:changed event")
+	}
+}
+
+func TestServersService_Edit_URIChange_FlagsVlessChanged(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "servers.json")
+	store := fileServerStore{path: path}
+	seedServers(t, path, []server.Server{{
+		ID:     "m1",
+		Origin: server.OriginManual,
+		Name:   "DE",
+		Vless:  vless.Config{Address: "old.example", Port: 443, UUID: "00000000-0000-0000-0000-000000000000", Transport: vless.TransportTCP, Security: vless.SecurityNone},
+	}})
+
+	svc := NewServersService(ServersDeps{ServerStore: store, Hub: hub.New()})
+
+	uri := "vless://00000000-0000-0000-0000-000000000000@new.example:443?type=tcp&security=none"
+	_, vlessChanged, err := svc.Edit("m1", uri, "DE")
+	require.NoError(t, err)
+	require.True(t, vlessChanged, "URI change must report vlessChanged=true")
+
+	loaded, _ := store.Load()
+	require.Equal(t, "new.example", loaded[0].Vless.Address)
+}
+
+func TestServersService_Edit_PreservesUserFlags(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "servers.json")
+	store := fileServerStore{path: path}
+	latency := 42
+	seedServers(t, path, []server.Server{{
+		ID:        "m1",
+		Origin:    server.OriginManual,
+		Name:      "DE",
+		Favorite:  true,
+		Disabled:  false,
+		Tags:      []string{"home"},
+		LatencyMS: &latency,
+		Vless:     vless.Config{Address: "h.example", Port: 443, UUID: "00000000-0000-0000-0000-000000000000", Transport: vless.TransportTCP, Security: vless.SecurityNone},
+	}})
+
+	svc := NewServersService(ServersDeps{ServerStore: store, Hub: hub.New()})
+
+	uri := "vless://00000000-0000-0000-0000-000000000000@new.example:443?type=tcp&security=none"
+	_, _, err := svc.Edit("m1", uri, "DE-renamed")
+	require.NoError(t, err)
+
+	loaded, _ := store.Load()
+	require.True(t, loaded[0].Favorite)
+	require.Equal(t, []string{"home"}, loaded[0].Tags)
+	require.NotNil(t, loaded[0].LatencyMS)
+	require.Equal(t, 42, *loaded[0].LatencyMS)
+}
+
+func TestServersService_Edit_NotFound(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "servers.json")
+	svc := NewServersService(ServersDeps{
+		ServerStore: fileServerStore{path: path},
+		Hub:         hub.New(),
+	})
+
+	uri := "vless://00000000-0000-0000-0000-000000000000@h.example:443?type=tcp&security=none"
+	_, _, err := svc.Edit("nope", uri, "X")
+	require.ErrorIs(t, err, ErrServerNotFound)
+}
+
+func TestServersService_Edit_RejectsSubOrigin(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "servers.json")
+	seedServers(t, path, []server.Server{{
+		ID:       "sub1",
+		Origin:   server.OriginSubscription,
+		SourceID: "src",
+		Name:     "DE",
+		Vless:    vless.Config{Address: "h", Port: 443, UUID: "00000000-0000-0000-0000-000000000000"},
+	}})
+
+	svc := NewServersService(ServersDeps{
+		ServerStore: fileServerStore{path: path},
+		Hub:         hub.New(),
+	})
+
+	uri := "vless://00000000-0000-0000-0000-000000000000@h.example:443?type=tcp&security=none"
+	_, _, err := svc.Edit("sub1", uri, "DE")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "only manual servers can be edited")
+}
+
+func TestServersService_Edit_RejectsInvalidURI(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "servers.json")
+	seedServers(t, path, []server.Server{{
+		ID:     "m1",
+		Origin: server.OriginManual,
+		Name:   "DE",
+		Vless:  vless.Config{Address: "h", Port: 443, UUID: "00000000-0000-0000-0000-000000000000"},
+	}})
+
+	svc := NewServersService(ServersDeps{
+		ServerStore: fileServerStore{path: path},
+		Hub:         hub.New(),
+	})
+
+	_, _, err := svc.Edit("m1", "garbage", "DE")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid VLESS URI")
+}

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -273,4 +274,65 @@ func (s *ServersService) Remove(id string) error {
 
 	s.d.Hub.Publish(hub.Event{Name: hub.EventServersChanged})
 	return nil
+}
+
+// Edit updates name and/or VLESS config for an existing server. Refuses
+// when the target's Origin != OriginManual (sub-origin is read-only —
+// managed by sync). When the URI changes the underlying vless.Config is
+// re-parsed; the server's ID stays stable so dashStore.currentServer
+// references survive the edit.
+//
+// vlessChanged reports whether the parsed vless.Config differs from the
+// pre-edit one (reflect.DeepEqual on vless.Config). Frontend uses this
+// flag to decide whether to show the "Reconnect to apply" banner —
+// name-only edits get vlessChanged=false and stay silent.
+func (s *ServersService) Edit(id, rawURI, name string) (hub.ServerView, bool, error) {
+	rawURI = strings.TrimSpace(rawURI)
+	cfg, err := validateServerURI(rawURI)
+	if err != nil {
+		return hub.ServerView{}, false, err
+	}
+	name = strings.TrimSpace(name)
+
+	list, err := s.d.ServerStore.Load()
+	if err != nil {
+		return hub.ServerView{}, false, fmt.Errorf("server.Load: %w", err)
+	}
+	idx := -1
+	for i := range list {
+		if list[i].ID == id {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return hub.ServerView{}, false, ErrServerNotFound
+	}
+	if list[idx].Origin != server.OriginManual {
+		return hub.ServerView{}, false, errors.New("only manual servers can be edited")
+	}
+
+	oldVless := list[idx].Vless
+	vlessChanged := !reflect.DeepEqual(oldVless, cfg)
+
+	displayName := name
+	if displayName == "" {
+		displayName = cfg.Remark
+	}
+	if displayName == "" {
+		displayName = net.JoinHostPort(cfg.Address, strconv.Itoa(int(cfg.Port)))
+	}
+
+	list[idx].Name = displayName
+	list[idx].Remark = cfg.Remark
+	list[idx].Vless = cfg
+	// Favorite, Disabled, Tags, LatencyMS preserved by skipping them.
+
+	if err := s.d.ServerStore.Save(list); err != nil {
+		return hub.ServerView{}, false, fmt.Errorf("server.Save: %w", err)
+	}
+
+	s.d.Hub.Publish(hub.Event{Name: hub.EventServersChanged})
+
+	return toServerViews([]server.Server{list[idx]}, nil)[0], vlessChanged, nil
 }
