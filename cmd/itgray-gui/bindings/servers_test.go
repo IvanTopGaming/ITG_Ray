@@ -215,3 +215,98 @@ func TestServersService_Add_NameFallback(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "FromRemark", view.Name, "empty name should fall back to remark")
 }
+
+// fakeActiveProbe is a minimal ActiveServerProbe used in Remove tests.
+type fakeActiveProbe struct{ id string }
+
+func (p fakeActiveProbe) ActiveServerID() string { return p.id }
+
+func TestServersService_Remove_ManualWhileIdle(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "servers.json")
+	store := fileServerStore{path: path}
+	seedServers(t, path, []server.Server{{
+		ID:     "m1",
+		Origin: server.OriginManual,
+		Name:   "DE",
+		Vless:  vless.Config{Address: "h", Port: 443, UUID: "00000000-0000-0000-0000-000000000000"},
+	}})
+
+	h := hub.New()
+	rcv := h.Subscribe(4)
+	defer h.Close()
+
+	svc := NewServersService(ServersDeps{
+		ServerStore:  store,
+		Hub:          h,
+		ActiveServer: fakeActiveProbe{}, // idle
+	})
+
+	require.NoError(t, svc.Remove("m1"))
+
+	loaded, _ := store.Load()
+	require.Len(t, loaded, 0)
+
+	select {
+	case e := <-rcv:
+		require.Equal(t, hub.EventServersChanged, e.Name)
+	case <-timeAfter500ms():
+		t.Fatal("no servers:changed event")
+	}
+}
+
+func TestServersService_Remove_NotFound(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "servers.json")
+	svc := NewServersService(ServersDeps{
+		ServerStore:  fileServerStore{path: path},
+		Hub:          hub.New(),
+		ActiveServer: fakeActiveProbe{},
+	})
+
+	err := svc.Remove("nope")
+	require.ErrorIs(t, err, ErrServerNotFound)
+}
+
+func TestServersService_Remove_RejectsSubOrigin(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "servers.json")
+	seedServers(t, path, []server.Server{{
+		ID:       "sub1",
+		Origin:   server.OriginSubscription,
+		SourceID: "src",
+		Name:     "DE",
+		Vless:    vless.Config{Address: "h", Port: 443, UUID: "00000000-0000-0000-0000-000000000000"},
+	}})
+
+	svc := NewServersService(ServersDeps{
+		ServerStore:  fileServerStore{path: path},
+		Hub:          hub.New(),
+		ActiveServer: fakeActiveProbe{},
+	})
+
+	err := svc.Remove("sub1")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "only manual servers can be deleted")
+}
+
+func TestServersService_Remove_BlocksActive(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "servers.json")
+	seedServers(t, path, []server.Server{{
+		ID:     "m1",
+		Origin: server.OriginManual,
+		Name:   "DE",
+		Vless:  vless.Config{Address: "h", Port: 443, UUID: "00000000-0000-0000-0000-000000000000"},
+	}})
+
+	svc := NewServersService(ServersDeps{
+		ServerStore:  fileServerStore{path: path},
+		Hub:          hub.New(),
+		ActiveServer: fakeActiveProbe{id: "m1"},
+	})
+
+	err := svc.Remove("m1")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "disconnect first to delete this server")
+}

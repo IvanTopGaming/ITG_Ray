@@ -240,3 +240,37 @@ func (s *ServersService) Add(rawURI, name string) (hub.ServerView, error) {
 
 	return toServerViews([]server.Server{srv}, nil)[0], nil
 }
+
+// Remove deletes a manual server. Refuses when:
+//   - Origin != OriginManual                  (read-only)
+//   - id == active session id                 (disconnect first)
+func (s *ServersService) Remove(id string) error {
+	list, err := s.d.ServerStore.Load()
+	if err != nil {
+		return fmt.Errorf("server.Load: %w", err)
+	}
+	idx := -1
+	for i := range list {
+		if list[i].ID == id {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return ErrServerNotFound
+	}
+	if list[idx].Origin != server.OriginManual {
+		return errors.New("only manual servers can be deleted")
+	}
+	if s.d.ActiveServer != nil && s.d.ActiveServer.ActiveServerID() == id {
+		return errors.New("disconnect first to delete this server")
+	}
+
+	list = append(list[:idx], list[idx+1:]...)
+	if err := s.d.ServerStore.Save(list); err != nil {
+		return fmt.Errorf("server.Save: %w", err)
+	}
+
+	s.d.Hub.Publish(hub.Event{Name: hub.EventServersChanged})
+	return nil
+}
