@@ -69,35 +69,35 @@ func TestBuildSingbox_FakeIP(t *testing.T) {
 	servers := dns["servers"].([]any)
 	require.GreaterOrEqual(t, len(servers), 2, "expect remote + fakeip servers")
 
-	// Find fakeip server.
-	var foundFakeIP bool
+	// 1.12+ schema: fakeip is a server type with inline inet4_range, NOT a
+	// top-level dns.fakeip block (the legacy block is rejected with a
+	// deprecation WARN and degraded hijack-dns behavior).
+	var fakeipServer map[string]any
+	var remoteServer map[string]any
 	for _, s := range servers {
 		m := s.(map[string]any)
-		if m["address"] == "fakeip" {
-			foundFakeIP = true
-			break
+		if m["type"] == "fakeip" {
+			fakeipServer = m
 		}
-	}
-	require.True(t, foundFakeIP, "dns.servers must include a fakeip server")
-
-	// Find remote server with detour=proxy (so DNS leaks via tunnel, not LAN).
-	var foundRemote bool
-	for _, s := range servers {
-		m := s.(map[string]any)
 		if m["detour"] == "proxy" {
-			foundRemote = true
-			break
+			remoteServer = m
 		}
 	}
-	require.True(t, foundRemote, "dns.servers must include a server with detour=proxy")
+	require.NotNil(t, fakeipServer, "dns.servers must include a server with type=fakeip")
+	require.Equal(t, "198.18.0.0/15", fakeipServer["inet4_range"],
+		"fakeip server must declare inet4_range inline (not in legacy dns.fakeip)")
+	require.Nil(t, dns["fakeip"], "legacy top-level dns.fakeip block must not be emitted")
 
-	// FakeIP block.
-	fakeip := dns["fakeip"].(map[string]any)
-	require.Equal(t, true, fakeip["enabled"])
-	require.Equal(t, "198.18.0.0/15", fakeip["inet4_range"])
+	require.NotNil(t, remoteServer, "dns.servers must include a server with detour=proxy")
+	require.Equal(t, "udp", remoteServer["type"],
+		"remote server must declare type=udp (1.12+ schema replaces address-based servers)")
 
-	// independent_cache must be true (sing-box requires it for FakeIP).
-	require.Equal(t, true, dns["independent_cache"])
+	require.Equal(t, true, dns["independent_cache"], "sing-box requires independent_cache for FakeIP")
+
+	// 1.12+: route.default_domain_resolver is mandatory-warned (hard-required in 1.14).
+	route := doc["route"].(map[string]any)
+	require.Equal(t, "remote", route["default_domain_resolver"],
+		"route.default_domain_resolver must point to the proxy-detoured server in TUN+FakeIP")
 }
 
 func TestBuildSingbox_FakeIP_RuleOrder(t *testing.T) {
@@ -116,10 +116,12 @@ func TestBuildSingbox_FakeIP_RuleOrder(t *testing.T) {
 	require.NoError(t, json.Unmarshal(b, &doc))
 	dns := doc["dns"].(map[string]any)
 	rs := dns["rules"].([]any)
-	require.GreaterOrEqual(t, len(rs), 2)
-	// First rule must be the fakeip rule (sing-box is first-match).
+	// 1.12+ schema: only the A/AAAA→fakeip rule is needed. The legacy
+	// {outbound:any, server:remote} fallback is replaced by
+	// route.default_domain_resolver.
+	require.Len(t, rs, 1, "1.12+ DNS rules contain only A/AAAA→fakeip; fallback moved to route.default_domain_resolver")
 	first := rs[0].(map[string]any)
-	require.Equal(t, "fakeip", first["server"], "fakeip rule must come before remote rule")
+	require.Equal(t, "fakeip", first["server"], "fakeip rule must dispatch A/AAAA to fakeip server")
 	qts, ok := first["query_type"].([]any)
 	require.True(t, ok)
 	require.Contains(t, qts, "A")
@@ -141,7 +143,13 @@ func TestBuildSingbox_NoFakeIPInSysProxy(t *testing.T) {
 	var doc map[string]any
 	require.NoError(t, json.Unmarshal(b, &doc))
 	dns := doc["dns"].(map[string]any)
-	require.Nil(t, dns["fakeip"], "sysproxy mode must not emit fakeip block")
+	require.Nil(t, dns["fakeip"], "legacy top-level dns.fakeip block must never be emitted in sysproxy")
+	servers := dns["servers"].([]any)
+	for _, s := range servers {
+		m := s.(map[string]any)
+		require.NotEqual(t, "fakeip", m["type"],
+			"sysproxy mode must not emit a fakeip-typed server")
+	}
 }
 
 func TestBuildSingbox_TunMode_KillswitchBlock(t *testing.T) {

@@ -46,11 +46,17 @@ type SingboxInput struct {
 	FakeIP bool
 }
 
-// buildDNSBlock builds the sing-box dns block. In TUN mode with FakeIP
-// enabled, it emits a remote+fakeip server pair plus the rules that send
-// A/AAAA queries to fakeip and everything else (PTR, MX, etc.) to remote.
-// In any other configuration, it emits a single "default" server with no
-// rules.
+// buildDNSBlock builds the sing-box dns block in the 1.12+ schema. In TUN
+// mode with FakeIP enabled, it emits a remote+fakeip server pair where the
+// fakeip server type returns synthetic IPs in 198.18.0.0/15 for A/AAAA
+// queries; everything else falls through to route.default_domain_resolver.
+// In any other configuration, it emits a single "default" server.
+//
+// The legacy schema (top-level dns.fakeip block, address-based servers,
+// {outbound:any, server:remote} catch-all rule) is rejected by sing-box
+// 1.12+ with WARN-level deprecation messages and degraded DNS handling —
+// hijack-dns silently fails to answer queries directed at the TUN gateway.
+// See https://sing-box.sagernet.org/migration/ for the migration spec.
 func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
 	strategy := in.IPv6Strategy
 	if strategy == "" {
@@ -59,16 +65,11 @@ func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
 	if in.Mode == ModeTun && in.FakeIP {
 		return map[string]any{
 			"servers": []map[string]any{
-				{"tag": "remote", "address": upstreams[0], "detour": "proxy"},
-				{"tag": "fakeip", "address": "fakeip"},
+				{"tag": "remote", "type": "udp", "server": upstreams[0], "detour": "proxy"},
+				{"tag": "fakeip", "type": "fakeip", "inet4_range": "198.18.0.0/15"},
 			},
 			"rules": []map[string]any{
 				{"query_type": []string{"A", "AAAA"}, "server": "fakeip"},
-				{"outbound": "any", "server": "remote"},
-			},
-			"fakeip": map[string]any{
-				"enabled":     true,
-				"inet4_range": "198.18.0.0/15",
 			},
 			"independent_cache": true,
 			"strategy":          strategy,
@@ -76,10 +77,23 @@ func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
 	}
 	return map[string]any{
 		"servers": []map[string]any{
-			{"tag": "default", "address": upstreams[0]},
+			{"tag": "default", "type": "udp", "server": upstreams[0]},
 		},
 		"strategy": strategy,
 	}
+}
+
+// defaultDomainResolverFor picks the server tag that route.default_domain_resolver
+// should reference. In 1.12+ this field is mandatory-warned; in 1.14 it
+// becomes hard-required. We point it at the upstream resolver so any
+// outbound that needs domain resolution (or any DNS query that doesn't
+// match a rule) routes through the proxy-detoured server in TUN+FakeIP
+// mode, or the plain default server otherwise.
+func defaultDomainResolverFor(in *SingboxInput) string {
+	if in.Mode == ModeTun && in.FakeIP {
+		return "remote"
+	}
+	return "default"
 }
 
 // lanBypassCIDRs is the canonical RFC1918 + loopback + link-local + multicast
@@ -249,6 +263,12 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 	if len(upstreams) == 0 {
 		upstreams = []string{"1.1.1.1", "8.8.8.8"}
 	}
+
+	// 1.12+ schema requires route.default_domain_resolver (or per-outbound
+	// domain_resolver) — the legacy {outbound:any, server:remote} DNS rule
+	// is deprecated. Without this, sing-box logs a WARN and outbounds that
+	// dial domain names fall back to system DNS, which can leak.
+	route["default_domain_resolver"] = defaultDomainResolverFor(in)
 
 	var inbound map[string]any
 	switch in.Mode {

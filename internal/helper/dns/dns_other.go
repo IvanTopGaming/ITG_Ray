@@ -22,3 +22,9 @@ func Set(_ Settings) error { return errPlatform }
 
 // Restore is a stub on non-Windows.
 func Restore(_ Settings) error { return errPlatform }
+
+// AddNrptRule is a stub on non-Windows.
+func AddNrptRule(_, _ string, _ []string) error { return errPlatform }
+
+// RemoveNrptRule is a stub on non-Windows.
+func RemoveNrptRule(_ string) error { return errPlatform }
