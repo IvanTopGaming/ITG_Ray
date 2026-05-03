@@ -51,6 +51,7 @@ func startHelperSession(
 		ServerHost:    srv.Vless.Address,
 		ServerPort:    int(srv.Vless.Port),
 		TunName:       tunName,
+		Mode:          "tun",
 	})
 	if err != nil {
 		_ = c.Close()
