@@ -24,6 +24,39 @@ import (
 	"github.com/itg-team/itg-ray/internal/helper/undo"
 )
 
+// coreStopper is the narrow surface stopBoth needs from a supervised
+// child process. *supervisor.Child satisfies it.
+type coreStopper interface {
+	Stop(grace time.Duration) error
+}
+
+// stopBoth runs Stop(grace) on both cores concurrently. nil arguments
+// are skipped. Returns (xrayErr, sbErr) — either may be nil. Worst-case
+// wall time is grace, not 2*grace.
+func stopBoth(grace time.Duration, xray, singbox coreStopper) (xrayErr, sbErr error) {
+	var wg sync.WaitGroup
+	if xray != nil {
+		wg.Add(1)
+		go func() { defer wg.Done(); xrayErr = xray.Stop(grace) }()
+	}
+	if singbox != nil {
+		wg.Add(1)
+		go func() { defer wg.Done(); sbErr = singbox.Stop(grace) }()
+	}
+	wg.Wait()
+	return
+}
+
+// asStopper returns a coreStopper for the given child, or nil if the
+// child itself is nil. Direct conversion `coreStopper(child)` would wrap
+// a nil pointer in a non-nil interface — stopBoth's nil-check would miss.
+func asStopper(c *supervisor.Child) coreStopper {
+	if c == nil {
+		return nil
+	}
+	return c
+}
+
 // StartChainArgs is the JSON payload of OpStartChain.
 type StartChainArgs struct {
 	SingboxConfig json.RawMessage `json:"singbox_config"`
@@ -418,16 +451,13 @@ func stopActiveChainLocked() []string {
 	s := activeSess
 	var errs []string
 
-	// 1. Stop cores (xray first, then sing-box).
-	if s.xray != nil {
-		if err := s.xray.Stop(5 * time.Second); err != nil {
-			errs = append(errs, "xray.Stop: "+err.Error())
-		}
+	// 1. Stop cores in parallel (worst case 5s, not 10s).
+	xrayErr, sbErr := stopBoth(5*time.Second, asStopper(s.xray), asStopper(s.singbox))
+	if xrayErr != nil {
+		errs = append(errs, "xray.Stop: "+xrayErr.Error())
 	}
-	if s.singbox != nil {
-		if err := s.singbox.Stop(5 * time.Second); err != nil {
-			errs = append(errs, "singbox.Stop: "+err.Error())
-		}
+	if sbErr != nil {
+		errs = append(errs, "singbox.Stop: "+sbErr.Error())
 	}
 
 	// 2. Restore DNS if we changed it (legacy dns_alias single-adapter path
