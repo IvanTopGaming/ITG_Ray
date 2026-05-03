@@ -50,8 +50,12 @@ func TestBuildConfigs_ThreadsNetworkValues_TUN(t *testing.T) {
 	dns := doc["dns"].(map[string]any)
 	require.Equal(t, "prefer_ipv6", dns["strategy"])
 	servers := dns["servers"].([]any)
+	// 1.12+ schema: servers use {type, server} pair, not the legacy
+	// {address}. The first server is the proxy-detoured upstream that
+	// route.default_domain_resolver points at.
 	remote := servers[0].(map[string]any)
-	require.Equal(t, "9.9.9.9", remote["address"])
+	require.Equal(t, "udp", remote["type"])
+	require.Equal(t, "9.9.9.9", remote["server"])
 
 	route := doc["route"].(map[string]any)
 	rules := route["rules"].([]any)
