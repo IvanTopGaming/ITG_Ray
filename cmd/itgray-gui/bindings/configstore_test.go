@@ -188,3 +188,43 @@ func TestConfigStore_UpdateSubscriptions_Persists(t *testing.T) {
 	require.Equal(t, "Custom/9.9", v.Subscriptions.UserAgent, "UserAgent persists across reload")
 	require.True(t, v.Subscriptions.SendDeviceOS, "untouched flag preserved")
 }
+
+// TestUpdateSection_NetworkPortCollisionRejected guards against the
+// configgen single-mixed-inbound fallback being silently invoked because
+// Settings persisted equal SOCKS/HTTP ports. UpdateSection must reject
+// the patch and leave the on-disk config untouched.
+func TestUpdateSection_NetworkPortCollisionRejected(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json")
+	store := NewConfigStore(cfgPath, "test", "test")
+
+	_, err := store.UpdateSection("network", map[string]any{
+		"socksPort": float64(8888),
+		"httpPort":  float64(8888),
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "must differ")
+
+	// On-disk file must not have been written; defaults preserved.
+	store2 := NewConfigStore(cfgPath, "test", "test")
+	v, err := store2.View()
+	require.NoError(t, err)
+	require.Equal(t, 1080, v.Network.SocksPort, "default SOCKS port preserved")
+	require.Equal(t, 8888, v.Network.HttpPort, "default HTTP port preserved")
+}
+
+// TestUpdateSection_NetworkPortCollisionAgainstExisting covers the
+// single-port patch case: setting only socksPort to match the
+// already-persisted httpPort must also be rejected.
+func TestUpdateSection_NetworkPortCollisionAgainstExisting(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json")
+	store := NewConfigStore(cfgPath, "test", "test")
+
+	// httpPort starts at default 8888; patch only socksPort to match it.
+	_, err := store.UpdateSection("network", map[string]any{
+		"socksPort": float64(8888),
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "must differ")
+}
