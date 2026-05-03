@@ -112,7 +112,6 @@ func NewStartChainHandler() Handler {
 		default:
 			return nil, errors.New("invalid mode")
 		}
-		_ = sysproxyMode // used by Task 2's gating logic
 
 		chainMu.Lock()
 		defer chainMu.Unlock()
@@ -168,56 +167,60 @@ func NewStartChainHandler() Handler {
 		}
 
 		// Step 3: snapshot routes for restore.
-		snap, err := route.Snapshot()
-		if err != nil {
-			rollback()
-			return nil, fmt.Errorf("route.Snapshot: %w", err)
+		if !sysproxyMode {
+			snap, err := route.Snapshot()
+			if err != nil {
+				rollback()
+				return nil, fmt.Errorf("route.Snapshot: %w", err)
+			}
+			state.snapshot = snap
+			doneRouteSnap = true
 		}
-		state.snapshot = snap
-		doneRouteSnap = true
 
 		// Step 4: peer-route via current default gateway.
-		gw, err := gateway.Default()
-		if err != nil {
-			rollback()
-			return nil, fmt.Errorf("gateway.Default: %w", err)
-		}
-
-		// Resolve ServerHost to an IPv4 literal — peer-route's CIDR must be parseable
-		// by netip.ParsePrefix. Resolution uses the host's DNS (the same one sing-box
-		// will inherit on spawn) and runs BEFORE sing-box spawns, so it goes through
-		// the original network path rather than sing-box's auto_route + DNS hijack.
-		serverIPs, err := net.LookupIP(a.ServerHost)
-		if err != nil {
-			rollback()
-			return nil, fmt.Errorf("resolve server host %q: %w", a.ServerHost, err)
-		}
-		var serverV4 net.IP
-		for _, ip := range serverIPs {
-			if v4 := ip.To4(); v4 != nil {
-				serverV4 = v4
-				break
+		if !sysproxyMode {
+			gw, err := gateway.Default()
+			if err != nil {
+				rollback()
+				return nil, fmt.Errorf("gateway.Default: %w", err)
 			}
-		}
-		if serverV4 == nil {
-			rollback()
-			return nil, fmt.Errorf("no IPv4 for server host %q", a.ServerHost)
+
+			// Resolve ServerHost to an IPv4 literal — peer-route's CIDR must be parseable
+			// by netip.ParsePrefix. Resolution uses the host's DNS (the same one sing-box
+			// will inherit on spawn) and runs BEFORE sing-box spawns, so it goes through
+			// the original network path rather than sing-box's auto_route + DNS hijack.
+			serverIPs, err := net.LookupIP(a.ServerHost)
+			if err != nil {
+				rollback()
+				return nil, fmt.Errorf("resolve server host %q: %w", a.ServerHost, err)
+			}
+			var serverV4 net.IP
+			for _, ip := range serverIPs {
+				if v4 := ip.To4(); v4 != nil {
+					serverV4 = v4
+					break
+				}
+			}
+			if serverV4 == nil {
+				rollback()
+				return nil, fmt.Errorf("no IPv4 for server host %q", a.ServerHost)
+			}
+
+			state.peerRoute = route.Entry{
+				DestCIDR:      serverV4.String() + "/32",
+				NextHop:       gw.NextHop,
+				InterfaceLUID: gw.InterfaceLUID,
+				Metric:        0,
+			}
+			if err := route.Add(state.peerRoute); err != nil {
+				rollback()
+				return nil, fmt.Errorf("route.Add(peer): %w", err)
+			}
+			donePeerRoute = true
 		}
 
-		state.peerRoute = route.Entry{
-			DestCIDR:      serverV4.String() + "/32",
-			NextHop:       gw.NextHop,
-			InterfaceLUID: gw.InterfaceLUID,
-			Metric:        0,
-		}
-		if err := route.Add(state.peerRoute); err != nil {
-			rollback()
-			return nil, fmt.Errorf("route.Add(peer): %w", err)
-		}
-		donePeerRoute = true
-
-		// Step 5: optional DNS override.
-		if a.DnsAlias != "" && len(a.DnsServers) > 0 {
+		// Step 5: optional DNS override (TUN mode only — sysproxy doesn't touch DNS).
+		if !sysproxyMode && a.DnsAlias != "" && len(a.DnsServers) > 0 {
 			prior, err := dns.Snapshot(a.DnsAlias)
 			if err != nil {
 				rollback()
@@ -231,11 +234,15 @@ func NewStartChainHandler() Handler {
 			doneDnsSnap = true
 		}
 
-		// Step 6: snapshot adapters before spawning sing-box.
-		before, err := adapter.Snapshot()
-		if err != nil {
-			rollback()
-			return nil, fmt.Errorf("adapter.Snapshot(before): %w", err)
+		// Step 6: snapshot adapters before spawning sing-box (TUN mode only).
+		var before []adapter.Adapter
+		if !sysproxyMode {
+			var err error
+			before, err = adapter.Snapshot()
+			if err != nil {
+				rollback()
+				return nil, fmt.Errorf("adapter.Snapshot(before): %w", err)
+			}
 		}
 
 		// Step 7: spawn sing-box.
@@ -258,32 +265,34 @@ func NewStartChainHandler() Handler {
 		}
 		doneSingbox = true
 
-		// Step 8: discover the new adapter (poll up to 10s).
-		var tunAdapter *adapter.Adapter
-		deadline := time.Now().Add(10 * time.Second)
-		for time.Now().Before(deadline) {
-			select {
-			case <-ctx.Done():
-				rollback()
-				return nil, ctx.Err()
-			default:
-			}
-			cur, err := adapter.Snapshot()
-			if err == nil {
-				added := adapter.Diff(before, cur)
-				if len(added) > 0 {
-					ad := added[0]
-					tunAdapter = &ad
-					break
+		// Step 8: discover the new adapter (poll up to 10s). TUN mode only.
+		if !sysproxyMode {
+			var tunAdapter *adapter.Adapter
+			deadline := time.Now().Add(10 * time.Second)
+			for time.Now().Before(deadline) {
+				select {
+				case <-ctx.Done():
+					rollback()
+					return nil, ctx.Err()
+				default:
 				}
+				cur, err := adapter.Snapshot()
+				if err == nil {
+					added := adapter.Diff(before, cur)
+					if len(added) > 0 {
+						ad := added[0]
+						tunAdapter = &ad
+						break
+					}
+				}
+				time.Sleep(250 * time.Millisecond)
 			}
-			time.Sleep(250 * time.Millisecond)
+			if tunAdapter == nil {
+				rollback()
+				return nil, errors.New("sing-box did not create a TUN adapter within 10s")
+			}
+			state.tunLUID = tunAdapter.LUID
 		}
-		if tunAdapter == nil {
-			rollback()
-			return nil, errors.New("sing-box did not create a TUN adapter within 10s")
-		}
-		state.tunLUID = tunAdapter.LUID
 
 		// Step 9: spawn xray. (sing-box auto_route now owns catch-all routes
 		// and DNS hijack natively; helper no longer installs them.)

@@ -37,3 +37,18 @@ func TestStartChainHandler_TunModeRequiresTunName(t *testing.T) {
 		t.Fatalf("err=%v, want tun_name required", err)
 	}
 }
+
+func TestStartChainHandler_SysProxyAcceptsEmptyTunName(t *testing.T) {
+	// Validation must accept sysproxy mode without a tun_name. The handler
+	// will fail later (no real binaries on test box), but the validator gate
+	// must pass.
+	h := NewStartChainHandler()
+	args := json.RawMessage(`{"singbox_config":{},"xray_config":{},"server_host":"x","server_port":1,"mode":"sysproxy"}`)
+	_, err := h(context.Background(), args)
+	if err == nil {
+		return // unexpected success but not the failure we're testing
+	}
+	if strings.Contains(err.Error(), "tun_name required") {
+		t.Fatalf("err=%v: validator should accept sysproxy without tun_name", err)
+	}
+}
