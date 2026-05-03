@@ -534,3 +534,23 @@ func indexRouteEntries(es []route.Entry) map[string]route.Entry {
 	}
 	return out
 }
+
+// readChainCounters returns the latest outbound proxy uplink/downlink
+// counters from xray-core, falling back to the last cached values if a
+// gRPC call fails. Returns (0, 0, false) when no chain is active.
+func readChainCounters(ctx context.Context) (up, down uint64, ok bool) {
+	chainMu.Lock()
+	defer chainMu.Unlock()
+	if activeSess == nil || activeSess.xrayAPI == nil {
+		return 0, 0, false
+	}
+	u, d, err := activeSess.xrayAPI.Counters(ctx)
+	if err != nil {
+		// Transient failure (xray API not yet up, conn blip). Return
+		// cached values without raising; they'll refresh next tick.
+		return activeSess.cachedUp, activeSess.cachedDown, true
+	}
+	activeSess.cachedUp = u
+	activeSess.cachedDown = d
+	return u, d, true
+}

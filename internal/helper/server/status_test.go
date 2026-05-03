@@ -25,3 +25,14 @@ func TestServiceStatusHandler(t *testing.T) {
 	require.GreaterOrEqual(t, got.UptimeSecs, 3)
 	require.Less(t, got.UptimeSecs, 10)
 }
+
+func TestServiceStatusResult_DecodeBytes(t *testing.T) {
+	raw := []byte(`{"version":"v1","uptime_secs":10,"up_bytes":1024,"down_bytes":2048}`)
+	var r ServiceStatusResult
+	if err := json.Unmarshal(raw, &r); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if r.UpBytes != 1024 || r.DownBytes != 2048 {
+		t.Fatalf("up=%d down=%d", r.UpBytes, r.DownBytes)
+	}
+}
