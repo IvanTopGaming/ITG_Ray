@@ -31,6 +31,7 @@ type StartChainArgs struct {
 	ServerHost    string          `json:"server_host"`
 	ServerPort    int             `json:"server_port"`
 	TunName       string          `json:"tun_name"`
+	Mode          string          `json:"mode,omitempty"` // "" or "tun" => TUN; "sysproxy" => SysProxy
 	DnsAlias      string          `json:"dns_alias,omitempty"`
 	DnsServers    []string        `json:"dns_servers,omitempty"`
 }
@@ -97,9 +98,21 @@ func NewStartChainHandler() Handler {
 		if err := json.Unmarshal(args, &a); err != nil {
 			return nil, fmt.Errorf("decode args: %w", err)
 		}
-		if a.ServerHost == "" || a.ServerPort == 0 || a.TunName == "" {
-			return nil, errors.New("server_host, server_port, tun_name required")
+		if a.ServerHost == "" || a.ServerPort == 0 {
+			return nil, errors.New("server_host, server_port required")
 		}
+		var sysproxyMode bool
+		switch a.Mode {
+		case "", "tun":
+			if a.TunName == "" {
+				return nil, errors.New("tun_name required for tun mode")
+			}
+		case "sysproxy":
+			sysproxyMode = true
+		default:
+			return nil, errors.New("invalid mode")
+		}
+		_ = sysproxyMode // used by Task 2's gating logic
 
 		chainMu.Lock()
 		defer chainMu.Unlock()
