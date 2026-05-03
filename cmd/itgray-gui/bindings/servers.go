@@ -22,12 +22,20 @@ const probeTimeout = 1500 * time.Millisecond
 // caller-supplied id has no entry in the on-disk servers list.
 var ErrServerNotFound = errors.New("server not found")
 
+// ActiveServerProbe is the narrow read used by Remove to block deletion
+// of the currently-connected server. *chainctl.Controller satisfies it
+// via its ActiveServerID method.
+type ActiveServerProbe interface {
+	ActiveServerID() string
+}
+
 // ServersDeps groups dependencies passed in from main.go. ServerStore is the
 // shared Load+Save adapter (defined in app.go); Hub is the in-process
 // pub-sub used to fan probe results out to the frontend.
 type ServersDeps struct {
-	ServerStore ServerStore
-	Hub         *hub.Hub
+	ServerStore  ServerStore
+	Hub          *hub.Hub
+	ActiveServer ActiveServerProbe // used by Remove; may be nil in tests that don't exercise Remove
 }
 
 // ServersService implements the Servers.* Wails bindings.
