@@ -87,7 +87,7 @@ func xrayServerEndpoint(xrayJSON []byte) (string, int, error) {
 // StartChain bundles the configs into OpStartChain. The session id
 // returned by the helper is captured so StopChain can address the same
 // session.
-func (a *HelperAdapter) StartChain(ctx context.Context, singboxJSON, xrayJSON []byte) error {
+func (a *HelperAdapter) StartChain(ctx context.Context, singboxJSON, xrayJSON []byte, mode Mode) error {
 	host, port, err := xrayServerEndpoint(xrayJSON)
 	if err != nil {
 		return err
@@ -98,6 +98,7 @@ func (a *HelperAdapter) StartChain(ctx context.Context, singboxJSON, xrayJSON []
 		ServerHost:    host,
 		ServerPort:    port,
 		TunName:       a.tunName,
+		Mode:          string(mode),
 	})
 	if err != nil {
 		return fmt.Errorf("marshal StartChain: %w", err)

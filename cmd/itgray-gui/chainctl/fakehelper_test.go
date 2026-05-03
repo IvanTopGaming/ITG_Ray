@@ -15,6 +15,7 @@ type fakeHelper struct {
 	downBytes uint64
 	lastError string
 	calls     []string
+	gotMode   string // last Mode value received by StartChain
 }
 
 func newFake() *fakeHelper { return &fakeHelper{} }
@@ -39,12 +40,13 @@ func (e errStub) Error() string { return string(e) }
 
 var errFail = errStub("forced failure")
 
-func (f *fakeHelper) StartChain(_ context.Context, _, _ []byte) error {
+func (f *fakeHelper) StartChain(_ context.Context, _, _ []byte, mode Mode) error {
 	if err := f.note("StartChain"); err != nil {
 		return err
 	}
 	f.mu.Lock()
 	f.running = true
+	f.gotMode = string(mode)
 	f.mu.Unlock()
 	return nil
 }

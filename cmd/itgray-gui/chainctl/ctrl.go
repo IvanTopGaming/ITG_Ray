@@ -39,7 +39,7 @@ const defaultTunName = "ITGRay-TUN"
 // tests can verify ordering and rollback. helper_adapter.go translates
 // this surface to whatever the real client offers.
 type HelperClient interface {
-	StartChain(ctx context.Context, singboxJSON, xrayJSON []byte) error
+	StartChain(ctx context.Context, singboxJSON, xrayJSON []byte, mode Mode) error
 	StopChain(ctx context.Context) error
 	TunCreate(ctx context.Context, name, cidr string) error
 	TunDestroy(ctx context.Context) error
@@ -305,7 +305,7 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 		}
 	}
 
-	if err := c.d.Helper.StartChain(ctx, singboxJSON, xrayJSON); err != nil {
+	if err := c.d.Helper.StartChain(ctx, singboxJSON, xrayJSON, mode); err != nil {
 		if mode == ModeTUN {
 			_ = c.d.Helper.TunDestroy(ctx)
 			_ = c.d.Helper.RouteRestore(ctx)

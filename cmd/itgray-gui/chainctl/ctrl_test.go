@@ -307,6 +307,38 @@ func TestController_Start_Stop_SysProxy_HappyPath(t *testing.T) {
 	require.GreaterOrEqual(t, fsp.ClearCalls(), 1, "sysproxy.Clear must be called during tearDown")
 }
 
+// TestBringUpPassesSysProxyModeToHelper pins that bringUp threads the
+// requested Mode through to HelperClient.StartChain — Task 3 of Tier 4.5
+// extended the interface so the helper can skip TUN-only steps when the
+// GUI requests sysproxy mode. Without this assertion, a future refactor
+// could drop the mode argument at the bringUp call site and the helper
+// would silently fall back to TUN behavior.
+func TestBringUpPassesSysProxyModeToHelper(t *testing.T) {
+	dir := t.TempDir()
+	store := newMemStore(fixtureServer())
+	h := hub.New()
+	t.Cleanup(h.Close)
+	fh := newFake()
+	fsp := &fakeSysproxy{}
+	c := New(&Deps{
+		DataDir:     dir,
+		ServerStore: store,
+		Helper:      fh,
+		Sysproxy:    fsp,
+		Hub:         h,
+	})
+	rcv := h.Subscribe(64)
+	defer h.Unsubscribe(rcv)
+
+	require.NoError(t, c.Start(context.Background(), "a", ModeSysProxy))
+	waitForVpnStatus(t, rcv, string(hub.StatusConnected), time.Second)
+
+	fh.mu.Lock()
+	got := fh.gotMode
+	fh.mu.Unlock()
+	require.Equal(t, string(ModeSysProxy), got, "StartChain must receive ModeSysProxy when bringUp runs in sysproxy mode")
+}
+
 // TestStart_PassesNetworkValuesToSysproxy pins that the config-driven
 // SOCKS/HTTP ports on Network.SysProxy flow into the sysproxy.Manager
 // argument during a sysproxy-mode bringup. This is the Tier 2b
