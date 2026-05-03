@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/itg-team/itg-ray/internal/configgen"
 	"github.com/itg-team/itg-ray/internal/helper/adapter"
 	"github.com/itg-team/itg-ray/internal/helper/dns"
 	"github.com/itg-team/itg-ray/internal/helper/gateway"
@@ -22,6 +23,7 @@ import (
 	"github.com/itg-team/itg-ray/internal/helper/runtime"
 	"github.com/itg-team/itg-ray/internal/helper/supervisor"
 	"github.com/itg-team/itg-ray/internal/helper/undo"
+	"github.com/itg-team/itg-ray/internal/helper/xrayapi"
 )
 
 // coreStopper is the narrow surface stopBoth needs from a supervised
@@ -92,6 +94,15 @@ type chainState struct {
 	snapshot  []route.Entry
 	dnsPrior  *dns.Settings // nil if no DNS override applied
 	dnsAlias  string
+
+	// xrayAPI is the gRPC client to xray-core's StatsService. Created in
+	// NewStartChainHandler after xray spawns successfully; closed in
+	// stopActiveChainLocked. nil before first StartChain.
+	xrayAPI *xrayapi.Client
+	// cachedUp/cachedDown are the last successful counter readings; used
+	// by OpServiceStatus when a transient gRPC error happens.
+	cachedUp   uint64
+	cachedDown uint64
 }
 
 var (
@@ -348,6 +359,11 @@ func NewStartChainHandler() Handler {
 		}
 		doneXray = true
 
+		// xray is up; create a lazy gRPC client to its StatsService. No dial
+		// yet — the first OpServiceStatus call dials, and a failure there is
+		// non-fatal (last-cached values are returned).
+		state.xrayAPI = xrayapi.New(fmt.Sprintf("127.0.0.1:%d", configgen.XrayAPIPort))
+
 		// Step 10: persist undo journal.
 		if err := undo.Save(undoPath(), undo.Journal{
 			TunName:  a.TunName,
@@ -493,6 +509,14 @@ func stopActiveChainLocked() []string {
 	// Note: do NOT wipe runtime.BasePath() here. Next session's OpStartChain
 	// calls runtime.EnsureClean() which preserves *.log* and clears the rest.
 	// Wiping here would defeat log preservation across sessions.
+
+	// Close xray API client (best-effort; the conn may already be unusable
+	// because xray itself just exited).
+	if s.xrayAPI != nil {
+		if err := s.xrayAPI.Close(); err != nil {
+			errs = append(errs, "xrayAPI.Close: "+err.Error())
+		}
+	}
 
 	activeSess = nil
 	return errs
