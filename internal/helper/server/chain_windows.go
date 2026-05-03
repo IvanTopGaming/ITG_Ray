@@ -467,8 +467,8 @@ func stopActiveChainLocked() []string {
 	s := activeSess
 	var errs []string
 
-	// 1. Stop cores in parallel (worst case 5s, not 10s).
-	xrayErr, sbErr := stopBoth(5*time.Second, asStopper(s.xray), asStopper(s.singbox))
+	// 1. Stop cores in parallel (worst case 2s — kill if not graceful by then).
+	xrayErr, sbErr := stopBoth(2*time.Second, asStopper(s.xray), asStopper(s.singbox))
 	if xrayErr != nil {
 		errs = append(errs, "xray.Stop: "+xrayErr.Error())
 	}
