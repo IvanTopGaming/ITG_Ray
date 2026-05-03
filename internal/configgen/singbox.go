@@ -52,6 +52,15 @@ type SingboxInput struct {
 // queries; everything else falls through to route.default_domain_resolver.
 // In any other configuration, it emits a single "default" server.
 //
+// Upstream DNS uses DoT (RFC 7858) over the proxy outbound rather than
+// plain UDP/53. Without TLS the queries are visible in cleartext to the
+// exit server's network even though the user's ISP can't see them
+// (because of the VLESS tunnel). DoT closes that exit-side leak and
+// validates the resolver via TLS. Cloudflare (1.1.1.1), Google
+// (8.8.8.8), and Quad9 (9.9.9.9) all publish valid DoT certificates.
+// Custom user-configured servers that don't support DoT will fail —
+// users with such servers must use a known-DoT-capable resolver.
+//
 // The legacy schema (top-level dns.fakeip block, address-based servers,
 // {outbound:any, server:remote} catch-all rule) is rejected by sing-box
 // 1.12+ with WARN-level deprecation messages and degraded DNS handling —
@@ -65,7 +74,7 @@ func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
 	if in.Mode == ModeTun && in.FakeIP {
 		return map[string]any{
 			"servers": []map[string]any{
-				{"tag": "remote", "type": "udp", "server": upstreams[0], "detour": "proxy"},
+				{"tag": "remote", "type": "tls", "server": upstreams[0], "detour": "proxy"},
 				{"tag": "fakeip", "type": "fakeip", "inet4_range": "198.18.0.0/15"},
 			},
 			"rules": []map[string]any{
@@ -77,7 +86,7 @@ func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
 	}
 	return map[string]any{
 		"servers": []map[string]any{
-			{"tag": "default", "type": "udp", "server": upstreams[0]},
+			{"tag": "default", "type": "tls", "server": upstreams[0], "detour": "proxy"},
 		},
 		"strategy": strategy,
 	}

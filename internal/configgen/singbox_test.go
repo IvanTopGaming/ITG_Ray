@@ -89,8 +89,8 @@ func TestBuildSingbox_FakeIP(t *testing.T) {
 	require.Nil(t, dns["fakeip"], "legacy top-level dns.fakeip block must not be emitted")
 
 	require.NotNil(t, remoteServer, "dns.servers must include a server with detour=proxy")
-	require.Equal(t, "udp", remoteServer["type"],
-		"remote server must declare type=udp (1.12+ schema replaces address-based servers)")
+	require.Equal(t, "tls", remoteServer["type"],
+		"remote server must use DoT (type=tls) so DNS queries are encrypted to the upstream resolver — plain UDP/53 leaks domains in cleartext to the exit server's network")
 
 	require.Equal(t, true, dns["independent_cache"], "sing-box requires independent_cache for FakeIP")
 
