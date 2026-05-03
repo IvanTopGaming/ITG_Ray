@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -92,6 +93,10 @@ type chainState struct {
 	snapshot  []route.Entry
 	dnsPrior  *dns.Settings // nil if no DNS override applied
 	dnsAlias  string
+	// nrptName is the DisplayName of the NRPT rule we installed to force
+	// all DNS through the TUN's hijack-dns route engine. Empty means no
+	// rule installed (sysproxy mode, or AddNrptRule failed).
+	nrptName string
 
 	// xrayAPI is the gRPC client to xray-core's StatsService. Created in
 	// NewStartChainHandler after xray spawns successfully; closed in
@@ -169,7 +174,7 @@ func NewStartChainHandler() Handler {
 		// rollback runs in reverse order of operations performed; only the
 		// operations whose `done` flag is set actually reverse.
 		var (
-			doneRuntime, doneRouteSnap, donePeerRoute, doneDnsSnap, doneSingbox, doneXray bool
+			doneRuntime, doneRouteSnap, donePeerRoute, doneDnsSnap, doneSingbox, doneXray, doneNrpt bool
 		)
 		rollback := func() {
 			if doneXray && state.xray != nil {
@@ -177,6 +182,9 @@ func NewStartChainHandler() Handler {
 			}
 			if doneSingbox && state.singbox != nil {
 				_ = state.singbox.Stop(2 * time.Second)
+			}
+			if doneNrpt && state.nrptName != "" {
+				_ = dns.RemoveNrptRule(state.nrptName)
 			}
 			if doneDnsSnap && state.dnsPrior != nil {
 				_ = dns.Restore(*state.dnsPrior)
@@ -362,6 +370,26 @@ func NewStartChainHandler() Handler {
 		// non-fatal (last-cached values are returned).
 		state.xrayAPI = xrayapi.New(fmt.Sprintf("127.0.0.1:%d", configgen.XrayAPIPort))
 
+		// Step 9.5: install an NRPT rule that forces every DNS query to
+		// 1.1.1.1, the transit IP. Without this, Windows resolver queries
+		// the per-adapter DNS servers (TUN gets sing-box's auto_route gateway
+		// 198.18.0.x — silent at gateway IP — while Ethernet keeps the ISP
+		// resolver, which wins the parallel race and leaks the domain to
+		// the ISP). With NRPT pointing at a transit IP, the query traverses
+		// TUN → sing-box's route engine → hijack-dns → FakeIP. Best-effort:
+		// failure is logged but doesn't abort the chain; user gets a chain
+		// up with degraded privacy rather than an opaque-failed Connect.
+		if !sysproxyMode {
+			nrptName := "ITGRay-" + state.sessionID
+			if err := dns.AddNrptRule(nrptName, ".", []string{"1.1.1.1"}); err != nil {
+				slog.Warn("AddNrptRule failed; DNS may leak to ISP",
+					"session", state.sessionID, "err", err)
+			} else {
+				state.nrptName = nrptName
+				doneNrpt = true
+			}
+		}
+
 		// Step 10: persist undo journal.
 		if err := undo.Save(undoPath(), undo.Journal{
 			TunName:  a.TunName,
@@ -479,6 +507,16 @@ func stopActiveChainLocked() []string {
 	if s.dnsPrior != nil {
 		if err := dns.Restore(*s.dnsPrior); err != nil {
 			errs = append(errs, "dns.Restore: "+err.Error())
+		}
+	}
+
+	// 2b. Remove the NRPT rule we installed at chain start. Idempotent —
+	// RemoveNrptRule succeeds silently if the rule is gone (e.g. user
+	// already cleared it manually), so a partially-rolled-back state
+	// can't block this teardown.
+	if s.nrptName != "" {
+		if err := dns.RemoveNrptRule(s.nrptName); err != nil {
+			errs = append(errs, "dns.RemoveNrptRule: "+err.Error())
 		}
 	}
 
