@@ -1,6 +1,7 @@
 package bindings
 
 import (
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -515,4 +516,103 @@ func TestServersService_List_PopulatesURI(t *testing.T) {
 	require.Equal(t, "h.example", parsed.Address)
 	require.Equal(t, uint16(443), parsed.Port)
 	require.Equal(t, "00000000-0000-0000-0000-000000000000", parsed.UUID)
+}
+
+// failingSaveStore wraps fileServerStore but always returns an error from
+// Save, used by Save-fail wrapping tests below.
+type failingSaveStore struct {
+	inner fileServerStore
+}
+
+func (s failingSaveStore) Load() ([]server.Server, error) { return s.inner.Load() }
+func (s failingSaveStore) Save([]server.Server) error     { return errors.New("disk full") }
+
+func TestServersService_Add_WrapsSaveError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "servers.json")
+	store := failingSaveStore{inner: fileServerStore{path: path}}
+
+	h := hub.New()
+	rcv := h.Subscribe(4)
+	defer h.Close()
+	svc := NewServersService(ServersDeps{ServerStore: store, Hub: h})
+
+	uri := "vless://00000000-0000-0000-0000-000000000000@h.example:443?type=tcp&security=none#x"
+	_, err := svc.Add(uri, "Frankfurt")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "server.Save:", "Add should wrap Save error")
+
+	select {
+	case e := <-rcv:
+		t.Fatalf("unexpected event after save fail: %s", e.Name)
+	case <-time.After(50 * time.Millisecond):
+		// good — no event published
+	}
+}
+
+func TestServersService_Edit_WrapsSaveError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "servers.json")
+	seedServers(t, path, []server.Server{{
+		ID:     "a",
+		Origin: server.OriginManual,
+		Name:   "DE",
+		Vless: vless.Config{
+			Address:   "h",
+			Port:      443,
+			UUID:      "00000000-0000-0000-0000-000000000000",
+			Transport: vless.TransportTCP,
+		},
+	}})
+
+	store := failingSaveStore{inner: fileServerStore{path: path}}
+	h := hub.New()
+	rcv := h.Subscribe(4)
+	defer h.Close()
+	svc := NewServersService(ServersDeps{ServerStore: store, Hub: h})
+
+	newURI := "vless://00000000-0000-0000-0000-000000000000@h2:443?type=tcp&security=none#x"
+	_, _, err := svc.Edit("a", newURI, "NL")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "server.Save:", "Edit should wrap Save error")
+
+	select {
+	case e := <-rcv:
+		t.Fatalf("unexpected event after save fail: %s", e.Name)
+	case <-time.After(50 * time.Millisecond):
+		// good
+	}
+}
+
+func TestServersService_Remove_WrapsSaveError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "servers.json")
+	seedServers(t, path, []server.Server{{
+		ID:     "a",
+		Origin: server.OriginManual,
+		Name:   "DE",
+		Vless: vless.Config{
+			Address:   "h",
+			Port:      443,
+			UUID:      "00000000-0000-0000-0000-000000000000",
+			Transport: vless.TransportTCP,
+		},
+	}})
+
+	store := failingSaveStore{inner: fileServerStore{path: path}}
+	h := hub.New()
+	rcv := h.Subscribe(4)
+	defer h.Close()
+	svc := NewServersService(ServersDeps{ServerStore: store, Hub: h})
+
+	err := svc.Remove("a")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "server.Save:", "Remove should wrap Save error")
+
+	select {
+	case e := <-rcv:
+		t.Fatalf("unexpected event after save fail: %s", e.Name)
+	case <-time.After(50 * time.Millisecond):
+		// good
+	}
 }
