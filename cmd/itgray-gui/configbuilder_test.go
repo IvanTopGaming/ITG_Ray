@@ -50,12 +50,15 @@ func TestBuildConfigs_ThreadsNetworkValues_TUN(t *testing.T) {
 	dns := doc["dns"].(map[string]any)
 	require.Equal(t, "prefer_ipv6", dns["strategy"])
 	servers := dns["servers"].([]any)
-	// 1.12+ schema: servers use {type, server} pair, not the legacy
-	// {address}. The first server is the proxy-detoured upstream that
+	// 1.12+ schema with DoT: servers use {type:tls, server} so DNS
+	// queries to the upstream resolver are encrypted end-to-end. The
+	// first server is the proxy-detoured upstream that
 	// route.default_domain_resolver points at.
 	remote := servers[0].(map[string]any)
-	require.Equal(t, "udp", remote["type"])
+	require.Equal(t, "tls", remote["type"])
 	require.Equal(t, "9.9.9.9", remote["server"])
+	require.Equal(t, "proxy", remote["detour"],
+		"all DNS upstreams must detour through proxy in both modes — the SysProxy direct path used to leak queries via the local Ethernet adapter")
 
 	route := doc["route"].(map[string]any)
 	rules := route["rules"].([]any)
