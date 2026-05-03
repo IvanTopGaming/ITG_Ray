@@ -214,6 +214,24 @@ describe("dashStore — sub:synced", () => {
   });
 });
 
+describe("dashStore — servers:changed", () => {
+  it("refreshes allServers from a fresh snapshot", async () => {
+    getSnapshotMock.mockResolvedValueOnce({ ...baseSnapshot, servers: [] });
+    await __bootstrapForTest();
+    expect(getDashState().allServers).toHaveLength(0);
+
+    getSnapshotMock.mockResolvedValueOnce({
+      ...baseSnapshot,
+      servers: [{ id: "m1", name: "Manual", favorite: false, latencyMs: 0 }],
+    });
+    fireEvent("servers:changed", {});
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(getDashState().allServers).toHaveLength(1);
+    expect(getDashState().allServers[0].id).toBe("m1");
+  });
+});
+
 describe("dashStore — probe:result", () => {
   it("auto-fires TestLatency on bootstrap when servers have latencyMs=0", async () => {
     getSnapshotMock.mockResolvedValue({
