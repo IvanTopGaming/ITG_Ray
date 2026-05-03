@@ -86,7 +86,7 @@ export function Dashboard() {
   const highlightedId =
     selectedServerId ?? dash.currentServer?.id ?? quickSwitchServers[0]?.id ?? null;
 
-  async function handleOrbClick() {
+  const handleOrbClick = React.useCallback(async () => {
     if (eff === "idle" || eff === "error") {
       const target = highlightedId;
       if (!target) return;
@@ -102,7 +102,7 @@ export function Dashboard() {
         /* lastError set */
       }
     }
-  }
+  }, [eff, highlightedId]);
 
   async function handleModeChange(next: Mode) {
     if (next === dash.mode || orbDisabled) return;

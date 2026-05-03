@@ -87,7 +87,7 @@ func xrayServerEndpoint(xrayJSON []byte) (string, int, error) {
 // StartChain bundles the configs into OpStartChain. The session id
 // returned by the helper is captured so StopChain can address the same
 // session.
-func (a *HelperAdapter) StartChain(ctx context.Context, singboxJSON, xrayJSON []byte) error {
+func (a *HelperAdapter) StartChain(ctx context.Context, singboxJSON, xrayJSON []byte, mode Mode) error {
 	host, port, err := xrayServerEndpoint(xrayJSON)
 	if err != nil {
 		return err
@@ -98,6 +98,7 @@ func (a *HelperAdapter) StartChain(ctx context.Context, singboxJSON, xrayJSON []
 		ServerHost:    host,
 		ServerPort:    port,
 		TunName:       a.tunName,
+		Mode:          string(mode),
 	})
 	if err != nil {
 		return fmt.Errorf("marshal StartChain: %w", err)
@@ -127,9 +128,13 @@ func (a *HelperAdapter) StopChain(ctx context.Context) error {
 }
 
 // ServiceStatus calls OpServiceStatus and projects the helper's
-// (version, uptime) tuple onto the chainctl ChainState shape. The real
-// counters are not yet exposed by the helper — the poller's speed
-// computation will read zero deltas until C.T14 wires real stats.
+// response onto the chainctl ChainState shape. Byte counters come from
+// xray-core's StatsService via the helper; when no chain is active they
+// are zero. "Helper is up" doesn't directly tell us "chain is running"
+// — the chainctl Controller is the source of truth for chain state in
+// this design. We report Running=true whenever the helper responds;
+// the poller's crash-detection branch only fires if the helper itself
+// goes away (Call returns an error → caller skips the tick).
 func (a *HelperAdapter) ServiceStatus(ctx context.Context) (ChainState, error) {
 	raw, err := a.c.Call(ctx, protocol.OpServiceStatus, nil)
 	if err != nil {
@@ -139,13 +144,11 @@ func (a *HelperAdapter) ServiceStatus(ctx context.Context) (ChainState, error) {
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return ChainState{}, fmt.Errorf("decode ServiceStatus: %w", err)
 	}
-	_ = res // version/uptime not yet surfaced; kept to validate decoding round-trip
-	// "Helper is up" doesn't directly tell us "chain is running" — the
-	// chainctl Controller is the source of truth for chain state in this
-	// design. We report Running=true whenever the helper responds; the
-	// poller's crash-detection branch only fires if the helper itself
-	// goes away (Call returns an error → caller skips the tick).
-	return ChainState{Running: true}, nil
+	return ChainState{
+		Running:   true,
+		UpBytes:   res.UpBytes,
+		DownBytes: res.DownBytes,
+	}, nil
 }
 
 // The remaining ops are no-ops because OpStartChain bundles them on the

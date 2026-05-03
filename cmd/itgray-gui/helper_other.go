@@ -29,7 +29,9 @@ func newHelperClient(_ context.Context) chainctl.HelperClient {
 type stubHelperClient struct{}
 
 // StartChain returns errUnsupported on non-Windows.
-func (stubHelperClient) StartChain(_ context.Context, _, _ []byte) error { return errUnsupported }
+func (stubHelperClient) StartChain(_ context.Context, _, _ []byte, _ chainctl.Mode) error {
+	return errUnsupported
+}
 
 // StopChain is a no-op on non-Windows so tearDown is idempotent.
 func (stubHelperClient) StopChain(_ context.Context) error { return nil }

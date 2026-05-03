@@ -43,7 +43,9 @@ func (m *missingHelperClient) wrap() error {
 }
 
 // StartChain reports the helper is unavailable.
-func (m *missingHelperClient) StartChain(_ context.Context, _, _ []byte) error { return m.wrap() }
+func (m *missingHelperClient) StartChain(_ context.Context, _, _ []byte, _ chainctl.Mode) error {
+	return m.wrap()
+}
 
 // StopChain is a no-op when the helper was never reached.
 func (m *missingHelperClient) StopChain(_ context.Context) error { return nil }

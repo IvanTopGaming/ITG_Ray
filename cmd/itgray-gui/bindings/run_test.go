@@ -24,7 +24,7 @@ type runFakeHelper struct {
 	running bool
 }
 
-func (f *runFakeHelper) StartChain(_ context.Context, _, _ []byte) error {
+func (f *runFakeHelper) StartChain(_ context.Context, _, _ []byte, _ chainctl.Mode) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.running = true

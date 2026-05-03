@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/itg-team/itg-ray/internal/configgen"
 	"github.com/itg-team/itg-ray/internal/helper/adapter"
 	"github.com/itg-team/itg-ray/internal/helper/dns"
 	"github.com/itg-team/itg-ray/internal/helper/gateway"
@@ -22,7 +23,41 @@ import (
 	"github.com/itg-team/itg-ray/internal/helper/runtime"
 	"github.com/itg-team/itg-ray/internal/helper/supervisor"
 	"github.com/itg-team/itg-ray/internal/helper/undo"
+	"github.com/itg-team/itg-ray/internal/helper/xrayapi"
 )
+
+// coreStopper is the narrow surface stopBoth needs from a supervised
+// child process. *supervisor.Child satisfies it.
+type coreStopper interface {
+	Stop(grace time.Duration) error
+}
+
+// stopBoth runs Stop(grace) on both cores concurrently. nil arguments
+// are skipped. Returns (xrayErr, sbErr) — either may be nil. Worst-case
+// wall time is grace, not 2*grace.
+func stopBoth(grace time.Duration, xray, singbox coreStopper) (xrayErr, sbErr error) {
+	var wg sync.WaitGroup
+	if xray != nil {
+		wg.Add(1)
+		go func() { defer wg.Done(); xrayErr = xray.Stop(grace) }()
+	}
+	if singbox != nil {
+		wg.Add(1)
+		go func() { defer wg.Done(); sbErr = singbox.Stop(grace) }()
+	}
+	wg.Wait()
+	return
+}
+
+// asStopper returns a coreStopper for the given child, or nil if the
+// child itself is nil. Direct conversion `coreStopper(child)` would wrap
+// a nil pointer in a non-nil interface — stopBoth's nil-check would miss.
+func asStopper(c *supervisor.Child) coreStopper {
+	if c == nil {
+		return nil
+	}
+	return c
+}
 
 // StartChainArgs is the JSON payload of OpStartChain.
 type StartChainArgs struct {
@@ -31,6 +66,7 @@ type StartChainArgs struct {
 	ServerHost    string          `json:"server_host"`
 	ServerPort    int             `json:"server_port"`
 	TunName       string          `json:"tun_name"`
+	Mode          string          `json:"mode,omitempty"` // "" or "tun" => TUN; "sysproxy" => SysProxy
 	DnsAlias      string          `json:"dns_alias,omitempty"`
 	DnsServers    []string        `json:"dns_servers,omitempty"`
 }
@@ -58,6 +94,15 @@ type chainState struct {
 	snapshot  []route.Entry
 	dnsPrior  *dns.Settings // nil if no DNS override applied
 	dnsAlias  string
+
+	// xrayAPI is the gRPC client to xray-core's StatsService. Created in
+	// NewStartChainHandler after xray spawns successfully; closed in
+	// stopActiveChainLocked. nil before first StartChain.
+	xrayAPI *xrayapi.Client
+	// cachedUp/cachedDown are the last successful counter readings; used
+	// by OpServiceStatus when a transient gRPC error happens.
+	cachedUp   uint64
+	cachedDown uint64
 }
 
 var (
@@ -97,8 +142,19 @@ func NewStartChainHandler() Handler {
 		if err := json.Unmarshal(args, &a); err != nil {
 			return nil, fmt.Errorf("decode args: %w", err)
 		}
-		if a.ServerHost == "" || a.ServerPort == 0 || a.TunName == "" {
-			return nil, errors.New("server_host, server_port, tun_name required")
+		if a.ServerHost == "" || a.ServerPort == 0 {
+			return nil, errors.New("server_host, server_port required")
+		}
+		var sysproxyMode bool
+		switch a.Mode {
+		case "", "tun":
+			if a.TunName == "" {
+				return nil, errors.New("tun_name required for tun mode")
+			}
+		case "sysproxy":
+			sysproxyMode = true
+		default:
+			return nil, errors.New("invalid mode")
 		}
 
 		chainMu.Lock()
@@ -155,56 +211,60 @@ func NewStartChainHandler() Handler {
 		}
 
 		// Step 3: snapshot routes for restore.
-		snap, err := route.Snapshot()
-		if err != nil {
-			rollback()
-			return nil, fmt.Errorf("route.Snapshot: %w", err)
+		if !sysproxyMode {
+			snap, err := route.Snapshot()
+			if err != nil {
+				rollback()
+				return nil, fmt.Errorf("route.Snapshot: %w", err)
+			}
+			state.snapshot = snap
+			doneRouteSnap = true
 		}
-		state.snapshot = snap
-		doneRouteSnap = true
 
 		// Step 4: peer-route via current default gateway.
-		gw, err := gateway.Default()
-		if err != nil {
-			rollback()
-			return nil, fmt.Errorf("gateway.Default: %w", err)
-		}
-
-		// Resolve ServerHost to an IPv4 literal — peer-route's CIDR must be parseable
-		// by netip.ParsePrefix. Resolution uses the host's DNS (the same one sing-box
-		// will inherit on spawn) and runs BEFORE sing-box spawns, so it goes through
-		// the original network path rather than sing-box's auto_route + DNS hijack.
-		serverIPs, err := net.LookupIP(a.ServerHost)
-		if err != nil {
-			rollback()
-			return nil, fmt.Errorf("resolve server host %q: %w", a.ServerHost, err)
-		}
-		var serverV4 net.IP
-		for _, ip := range serverIPs {
-			if v4 := ip.To4(); v4 != nil {
-				serverV4 = v4
-				break
+		if !sysproxyMode {
+			gw, err := gateway.Default()
+			if err != nil {
+				rollback()
+				return nil, fmt.Errorf("gateway.Default: %w", err)
 			}
-		}
-		if serverV4 == nil {
-			rollback()
-			return nil, fmt.Errorf("no IPv4 for server host %q", a.ServerHost)
+
+			// Resolve ServerHost to an IPv4 literal — peer-route's CIDR must be parseable
+			// by netip.ParsePrefix. Resolution uses the host's DNS (the same one sing-box
+			// will inherit on spawn) and runs BEFORE sing-box spawns, so it goes through
+			// the original network path rather than sing-box's auto_route + DNS hijack.
+			serverIPs, err := net.LookupIP(a.ServerHost)
+			if err != nil {
+				rollback()
+				return nil, fmt.Errorf("resolve server host %q: %w", a.ServerHost, err)
+			}
+			var serverV4 net.IP
+			for _, ip := range serverIPs {
+				if v4 := ip.To4(); v4 != nil {
+					serverV4 = v4
+					break
+				}
+			}
+			if serverV4 == nil {
+				rollback()
+				return nil, fmt.Errorf("no IPv4 for server host %q", a.ServerHost)
+			}
+
+			state.peerRoute = route.Entry{
+				DestCIDR:      serverV4.String() + "/32",
+				NextHop:       gw.NextHop,
+				InterfaceLUID: gw.InterfaceLUID,
+				Metric:        0,
+			}
+			if err := route.Add(state.peerRoute); err != nil {
+				rollback()
+				return nil, fmt.Errorf("route.Add(peer): %w", err)
+			}
+			donePeerRoute = true
 		}
 
-		state.peerRoute = route.Entry{
-			DestCIDR:      serverV4.String() + "/32",
-			NextHop:       gw.NextHop,
-			InterfaceLUID: gw.InterfaceLUID,
-			Metric:        0,
-		}
-		if err := route.Add(state.peerRoute); err != nil {
-			rollback()
-			return nil, fmt.Errorf("route.Add(peer): %w", err)
-		}
-		donePeerRoute = true
-
-		// Step 5: optional DNS override.
-		if a.DnsAlias != "" && len(a.DnsServers) > 0 {
+		// Step 5: optional DNS override (TUN mode only — sysproxy doesn't touch DNS).
+		if !sysproxyMode && a.DnsAlias != "" && len(a.DnsServers) > 0 {
 			prior, err := dns.Snapshot(a.DnsAlias)
 			if err != nil {
 				rollback()
@@ -218,11 +278,15 @@ func NewStartChainHandler() Handler {
 			doneDnsSnap = true
 		}
 
-		// Step 6: snapshot adapters before spawning sing-box.
-		before, err := adapter.Snapshot()
-		if err != nil {
-			rollback()
-			return nil, fmt.Errorf("adapter.Snapshot(before): %w", err)
+		// Step 6: snapshot adapters before spawning sing-box (TUN mode only).
+		var before []adapter.Adapter
+		if !sysproxyMode {
+			var err error
+			before, err = adapter.Snapshot()
+			if err != nil {
+				rollback()
+				return nil, fmt.Errorf("adapter.Snapshot(before): %w", err)
+			}
 		}
 
 		// Step 7: spawn sing-box.
@@ -245,32 +309,34 @@ func NewStartChainHandler() Handler {
 		}
 		doneSingbox = true
 
-		// Step 8: discover the new adapter (poll up to 10s).
-		var tunAdapter *adapter.Adapter
-		deadline := time.Now().Add(10 * time.Second)
-		for time.Now().Before(deadline) {
-			select {
-			case <-ctx.Done():
-				rollback()
-				return nil, ctx.Err()
-			default:
-			}
-			cur, err := adapter.Snapshot()
-			if err == nil {
-				added := adapter.Diff(before, cur)
-				if len(added) > 0 {
-					ad := added[0]
-					tunAdapter = &ad
-					break
+		// Step 8: discover the new adapter (poll up to 10s). TUN mode only.
+		if !sysproxyMode {
+			var tunAdapter *adapter.Adapter
+			deadline := time.Now().Add(10 * time.Second)
+			for time.Now().Before(deadline) {
+				select {
+				case <-ctx.Done():
+					rollback()
+					return nil, ctx.Err()
+				default:
 				}
+				cur, err := adapter.Snapshot()
+				if err == nil {
+					added := adapter.Diff(before, cur)
+					if len(added) > 0 {
+						ad := added[0]
+						tunAdapter = &ad
+						break
+					}
+				}
+				time.Sleep(250 * time.Millisecond)
 			}
-			time.Sleep(250 * time.Millisecond)
+			if tunAdapter == nil {
+				rollback()
+				return nil, errors.New("sing-box did not create a TUN adapter within 10s")
+			}
+			state.tunLUID = tunAdapter.LUID
 		}
-		if tunAdapter == nil {
-			rollback()
-			return nil, errors.New("sing-box did not create a TUN adapter within 10s")
-		}
-		state.tunLUID = tunAdapter.LUID
 
 		// Step 9: spawn xray. (sing-box auto_route now owns catch-all routes
 		// and DNS hijack natively; helper no longer installs them.)
@@ -292,6 +358,11 @@ func NewStartChainHandler() Handler {
 			return nil, fmt.Errorf("spawn xray: %w", err)
 		}
 		doneXray = true
+
+		// xray is up; create a lazy gRPC client to its StatsService. No dial
+		// yet — the first OpServiceStatus call dials, and a failure there is
+		// non-fatal (last-cached values are returned).
+		state.xrayAPI = xrayapi.New(fmt.Sprintf("127.0.0.1:%d", configgen.XrayAPIPort))
 
 		// Step 10: persist undo journal.
 		if err := undo.Save(undoPath(), undo.Journal{
@@ -396,16 +467,13 @@ func stopActiveChainLocked() []string {
 	s := activeSess
 	var errs []string
 
-	// 1. Stop cores (xray first, then sing-box).
-	if s.xray != nil {
-		if err := s.xray.Stop(5 * time.Second); err != nil {
-			errs = append(errs, "xray.Stop: "+err.Error())
-		}
+	// 1. Stop cores in parallel (worst case 2s — kill if not graceful by then).
+	xrayErr, sbErr := stopBoth(2*time.Second, asStopper(s.xray), asStopper(s.singbox))
+	if xrayErr != nil {
+		errs = append(errs, "xray.Stop: "+xrayErr.Error())
 	}
-	if s.singbox != nil {
-		if err := s.singbox.Stop(5 * time.Second); err != nil {
-			errs = append(errs, "singbox.Stop: "+err.Error())
-		}
+	if sbErr != nil {
+		errs = append(errs, "singbox.Stop: "+sbErr.Error())
 	}
 
 	// 2. Restore DNS if we changed it (legacy dns_alias single-adapter path
@@ -442,6 +510,14 @@ func stopActiveChainLocked() []string {
 	// calls runtime.EnsureClean() which preserves *.log* and clears the rest.
 	// Wiping here would defeat log preservation across sessions.
 
+	// Close xray API client (best-effort; the conn may already be unusable
+	// because xray itself just exited).
+	if s.xrayAPI != nil {
+		if err := s.xrayAPI.Close(); err != nil {
+			errs = append(errs, "xrayAPI.Close: "+err.Error())
+		}
+	}
+
 	activeSess = nil
 	return errs
 }
@@ -457,4 +533,24 @@ func indexRouteEntries(es []route.Entry) map[string]route.Entry {
 		out[key] = e
 	}
 	return out
+}
+
+// readChainCounters returns the latest outbound proxy uplink/downlink
+// counters from xray-core, falling back to the last cached values if a
+// gRPC call fails. Returns (0, 0, false) when no chain is active.
+func readChainCounters(ctx context.Context) (up, down uint64, ok bool) {
+	chainMu.Lock()
+	defer chainMu.Unlock()
+	if activeSess == nil || activeSess.xrayAPI == nil {
+		return 0, 0, false
+	}
+	u, d, err := activeSess.xrayAPI.Counters(ctx)
+	if err != nil {
+		// Transient failure (xray API not yet up, conn blip). Return
+		// cached values without raising; they'll refresh next tick.
+		return activeSess.cachedUp, activeSess.cachedDown, true
+	}
+	activeSess.cachedUp = u
+	activeSess.cachedDown = d
+	return u, d, true
 }

@@ -21,3 +21,9 @@ func NewStopChainHandler() Handler {
 		return nil, errors.New("StopChain: Windows-only")
 	}
 }
+
+// readChainCounters is the non-Windows stub. The helper is Windows-only,
+// so non-Windows callers (tests on linux dev boxes) always see no chain.
+func readChainCounters(_ context.Context) (uint64, uint64, bool) {
+	return 0, 0, false
+}
