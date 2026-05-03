@@ -138,6 +138,9 @@ func applyPatch(c *config.Config, section string, patch map[string]any) error {
 		applyGeneral(&c.General, patch)
 	case "network":
 		applyNetwork(&c.Network, patch)
+		if err := validateNetwork(&c.Network); err != nil {
+			return err
+		}
 	case "killswitch":
 		applyKillSwitch(&c.KillSwitch, patch)
 	case "subscriptions":
@@ -148,6 +151,23 @@ func applyPatch(c *config.Config, section string, patch map[string]any) error {
 		applyDebug(&c.Debug, patch)
 	default:
 		return errors.New("settings.Update: unknown section " + section)
+	}
+	return nil
+}
+
+// validateNetwork enforces cross-field invariants that the per-key
+// applyNetwork branches can't see in isolation. Runs after the patch
+// is merged into c.Network so the check sees the post-merge state.
+//
+// The configgen layer (internal/configgen/singbox.go) has a runtime
+// fallback that collapses to a single mixed inbound when ports collide,
+// but persisting a collision to disk gives the user a confusing config
+// where Settings shows two distinct ports yet only one binds. Reject
+// at save time instead.
+func validateNetwork(n *config.Network) error {
+	if n.SysProxy.SOCKSPort == n.SysProxy.HTTPPort {
+		return fmt.Errorf("socksPort (%d) must differ from httpPort (%d)",
+			n.SysProxy.SOCKSPort, n.SysProxy.HTTPPort)
 	}
 	return nil
 }

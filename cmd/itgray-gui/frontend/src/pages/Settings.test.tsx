@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { act, render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 // ──────────────────────────────────────────────────────────────────────
 //  Numeric-input draft pattern integration test
@@ -44,11 +44,14 @@ type MtuFieldProps = {
 
 function MtuField({ storeValue, onCommit }: MtuFieldProps) {
   const [draft, setDraft] = useState(String(storeValue));
+  const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
+    if (document.activeElement === ref.current) return;
     setDraft(String(storeValue));
   }, [storeValue]);
   return (
     <input
+      ref={ref}
       data-testid="mtu"
       type="text"
       inputMode="numeric"
@@ -142,6 +145,47 @@ describe('numeric draft pattern (MTU input)', () => {
     await user.tab();
     expect(input.value).toBe('1500');
     expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it('does not clobber the draft while the user is focused on the input', async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    const { rerender } = render(<MtuField storeValue={1500} onCommit={onCommit} />);
+    const input = screen.getByTestId('mtu') as HTMLInputElement;
+
+    // User is mid-edit: clears the field, types "150" (intermediate-invalid).
+    await user.click(input);
+    await user.tripleClick(input);
+    await user.keyboard('{Backspace}150');
+    expect(input.value).toBe('150');
+    expect(document.activeElement).toBe(input);
+
+    // External EventSettings echo arrives — store flips to 1400.
+    // Without the activeElement gate, the effect would overwrite "150"
+    // with "1400" mid-edit and the user would lose their typing.
+    rerender(<MtuField storeValue={1400} onCommit={onCommit} />);
+    expect(input.value).toBe('150');
+
+    // After blur the invalid draft reverts to the LATEST canonical
+    // value (1400, not the pre-rerender 1500), proving the rerender
+    // delivered fresh storeValue and only the typing window was gated.
+    await user.tab();
+    expect(input.value).toBe('1400');
+  });
+
+  it('still mirrors external store changes when the input is not focused', async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    const { rerender } = render(<MtuField storeValue={1500} onCommit={onCommit} />);
+    const input = screen.getByTestId('mtu') as HTMLInputElement;
+
+    // Focus then blur — mirrors the lifecycle the gate cares about.
+    await user.click(input);
+    await user.tab();
+    expect(document.activeElement).not.toBe(input);
+
+    rerender(<MtuField storeValue={1400} onCommit={onCommit} />);
+    expect(input.value).toBe('1400');
   });
 });
 

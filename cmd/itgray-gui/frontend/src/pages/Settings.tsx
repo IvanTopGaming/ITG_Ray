@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, type Variants } from 'framer-motion';
 import { useSettings } from '@/lib/settings';
 import { cn } from '@/lib/cn';
@@ -89,15 +89,29 @@ export function Settings() {
   const [socksPortDraft, setSocksPortDraft] = useState(String(s.socksPort));
   const [httpPortDraft, setHttpPortDraft] = useState(String(s.httpPort));
 
+  // Refs gate the EventSettings → draft sync below: when the user is
+  // mid-typing in one of these inputs, an external store push (cross-
+  // process settings change, debounced echo of a different field) must
+  // not clobber what they have on screen. The activeElement check skips
+  // the sync only for the focused field; the others sync as before. On
+  // blur the existing onBlur logic resets invalid drafts, so any
+  // divergence opened by the gate closes itself.
+  const tunMtuRef = useRef<HTMLInputElement>(null);
+  const socksPortRef = useRef<HTMLInputElement>(null);
+  const httpPortRef = useRef<HTMLInputElement>(null);
+
   // Sync the drafts when the canonical store value changes from the
   // outside (backend EventSettings push, post-flush re-fetch, navigation).
   useEffect(() => {
+    if (document.activeElement === tunMtuRef.current) return;
     setTunMtuDraft(String(s.tunMtu));
   }, [s.tunMtu]);
   useEffect(() => {
+    if (document.activeElement === socksPortRef.current) return;
     setSocksPortDraft(String(s.socksPort));
   }, [s.socksPort]);
   useEffect(() => {
+    if (document.activeElement === httpPortRef.current) return;
     setHttpPortDraft(String(s.httpPort));
   }, [s.httpPort]);
 
@@ -236,6 +250,7 @@ export function Settings() {
         </SettingRow>
         <SettingRow label="SOCKS port" hint="Local SOCKS5 proxy port. Default 1080.">
           <input
+            ref={socksPortRef}
             type="text"
             inputMode="numeric"
             value={socksPortDraft}
@@ -263,6 +278,7 @@ export function Settings() {
         </SettingRow>
         <SettingRow label="HTTP port" hint="Local HTTP proxy port. Default 8888.">
           <input
+            ref={httpPortRef}
             type="text"
             inputMode="numeric"
             value={httpPortDraft}
@@ -342,6 +358,7 @@ export function Settings() {
                   </SettingRow>
                   <SettingRow label="MTU" hint="TUN interface MTU in bytes. Default 1500. Range 576–9000.">
                     <input
+                      ref={tunMtuRef}
                       type="text"
                       inputMode="numeric"
                       value={tunMtuDraft}

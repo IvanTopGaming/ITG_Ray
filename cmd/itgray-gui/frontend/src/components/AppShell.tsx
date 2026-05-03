@@ -2,7 +2,7 @@ import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { TitleBar } from "./TitleBar";
 import { useNetworkChangedSinceConnect, getConnectSnapshot } from "@/lib/settings";
-import { Connect, Disconnect } from "../../wailsjs/go/bindings/RunService";
+import { dashReconnect } from "@/lib/dashStore";
 
 export function AppShell() {
   const networkChanged = useNetworkChangedSinceConnect();
@@ -11,10 +11,9 @@ export function AppShell() {
     const snap = getConnectSnapshot();
     if (!snap) return;
     try {
-      await Disconnect();
-      await Connect(snap.serverId, snap.mode);
-    } catch (err) {
-      console.warn('AppShell reconnect failed:', err);
+      await dashReconnect(snap.serverId, snap.mode);
+    } catch {
+      // dashStore set lastError; Dashboard's Reveal surfaces it.
     }
   };
 

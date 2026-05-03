@@ -337,6 +337,44 @@ async function doSwitchMode(targetId: string, mode: Mode): Promise<void> {
   }
 }
 
+// dashReconnect is the AppShell "Reconnect to apply settings" path:
+// disconnect-then-connect with an explicit serverId+mode pair sourced
+// from the last-connected snapshot. Routes through the existing
+// connectInFlight mutex and surfaces failures via lastError so a Connect
+// rejection after a successful Disconnect doesn't leave the user
+// stranded with only a console.warn.
+export async function dashReconnect(serverId: string, mode: Mode): Promise<void> {
+  if (connectInFlight) return connectInFlight;
+  connectInFlight = doReconnect(serverId, mode);
+  try {
+    await connectInFlight;
+  } finally {
+    connectInFlight = null;
+  }
+}
+
+async function doReconnect(serverId: string, mode: Mode): Promise<void> {
+  try {
+    if (state.status === "connected") {
+      await Disconnect();
+      await waitForIdle();
+    }
+    if (state.mode !== mode) setState({ ...state, mode });
+    await Connect(serverId, mode);
+  } catch (err: any) {
+    if (err?.message === "superseded") return;
+    setState({
+      ...state,
+      lastError: {
+        kind: "reconnect_failed",
+        message: err?.message ?? String(err),
+        at: Date.now(),
+      },
+    });
+    throw err;
+  }
+}
+
 export function clearLastError(): void {
   setState({ ...state, lastError: null });
 }
