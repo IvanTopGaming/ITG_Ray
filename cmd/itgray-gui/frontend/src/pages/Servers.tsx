@@ -23,16 +23,16 @@ import {
   serverRemove,
   useServers,
 } from "@/lib/serversStore";
-import { effectiveStatus, useDash } from "@/lib/dashStore";
 import {
-  TestLatency,
-  ToggleFavorite,
-} from "../../wailsjs/go/bindings/ServersService";
-import { EventsOn } from "../../wailsjs/runtime/runtime";
+  effectiveStatus,
+  useDash,
+  dashProbeOne,
+  dashProbeAll,
+} from "@/lib/dashStore";
+import { ToggleFavorite } from "../../wailsjs/go/bindings/ServersService";
 import type { hub } from "../../wailsjs/go/models";
 
 type Sort = "latency" | "name";
-type ProbeState = "idle" | "probing" | "ok" | "error";
 
 type Server = hub.ServerView;
 
@@ -71,36 +71,12 @@ export function Servers() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<Sort>("name");
   const [favoritesFirst, setFavoritesFirst] = useState(true);
-  const [probe, setProbe] = useState<Map<string, ProbeState>>(new Map());
   const [modal, setModal] = useState<ModalState>({ kind: "closed" });
   const [reconnectBanner, setReconnectBanner] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const servers = dash.allServers;
   const activeServerId = dash.currentServer?.id ?? null;
-
-  // Listen for probe:result events to flip the per-row probing UI back to
-  // idle/ok/error. dashStore patches latencies in dash.allServers (and the
-  // backend's servers:changed re-bootstrap follows), but the row's "probing…"
-  // pill needs an explicit settle signal.
-  useEffect(() => {
-    const off = EventsOn("probe:result", (payload: any) => {
-      if (!payload || !Array.isArray(payload.results)) return;
-      setProbe((prev) => {
-        const m = new Map(prev);
-        for (const r of payload.results) {
-          if (r && typeof r.id === "string") {
-            m.set(r.id, r.error ? "error" : "ok");
-          }
-        }
-        return m;
-      });
-    });
-    return () => {
-      // Wails EventsOn returns a cleanup function (or void in some shims).
-      if (typeof off === "function") off();
-    };
-  }, []);
 
   // The Reconnect banner is a one-shot signal: vlessChanged on Edit while
   // a connection is active. Auto-clear once the chain transitions to idle
@@ -180,44 +156,6 @@ export function Servers() {
     }
     return out;
   }, [filtered, sort, favoritesFirst]);
-
-  function setProbing(id: string) {
-    setProbe((prev) => {
-      const m = new Map(prev);
-      m.set(id, "probing");
-      return m;
-    });
-  }
-
-  function probeOne(id: string) {
-    setProbing(id);
-    void TestLatency(id).catch(() => {
-      // Non-fatal — backend still publishes probe:result for individual
-      // failures (with `error` field). The catch covers ID-not-found and
-      // store-load errors which won't fire probe:result; reset the pill.
-      setProbe((prev) => {
-        const m = new Map(prev);
-        m.set(id, "error");
-        return m;
-      });
-    });
-  }
-
-  function probeAll() {
-    setProbe((prev) => {
-      const m = new Map(prev);
-      for (const s of servers) m.set(s.id, "probing");
-      return m;
-    });
-    void TestLatency("").catch(() => {
-      // Reset all to error on full-batch failure.
-      setProbe((prev) => {
-        const m = new Map(prev);
-        for (const s of servers) m.set(s.id, "error");
-        return m;
-      });
-    });
-  }
 
   async function toggleFavorite(id: string) {
     try {
@@ -304,7 +242,7 @@ export function Servers() {
               onChange={setFavoritesFirst}
             />
             <AddServerButton onClick={() => setModal({ kind: "add" })} />
-            <ProbeAllButton onClick={probeAll} />
+            <ProbeAllButton onClick={() => void dashProbeAll()} />
           </div>
         </motion.div>
 
@@ -377,10 +315,10 @@ export function Servers() {
                       <ServerRow
                         server={server}
                         active={server.id === activeServerId}
-                        probing={probe.get(server.id) === "probing"}
+                        probing={dash.probeState.get(server.id) === "probing"}
                         isLast={idx === group.rows.length - 1}
                         onToggleFavorite={() => void toggleFavorite(server.id)}
-                        onProbe={() => probeOne(server.id)}
+                        onProbe={() => void dashProbeOne(server.id)}
                         onAction={() =>
                           setModal({
                             kind:

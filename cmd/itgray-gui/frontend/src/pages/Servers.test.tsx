@@ -8,6 +8,9 @@ const serverAddMock = vi.fn();
 const serverEditMock = vi.fn();
 const serverRemoveMock = vi.fn();
 const clearLastErrorMock = vi.fn();
+const dashConnectMock = vi.fn();
+const dashProbeOneMock = vi.fn();
+const dashProbeAllMock = vi.fn();
 
 vi.mock("@/lib/serversStore", () => ({
   useServers: () => useServersMock(),
@@ -21,12 +24,13 @@ vi.mock("@/lib/dashStore", () => ({
   useDash: () => useDashMock(),
   effectiveStatus: (s: any) =>
     s.status === "idle" && s.lastError ? "error" : s.status,
+  dashConnect: (...args: any[]) => dashConnectMock(...args),
+  dashProbeOne: (...args: any[]) => dashProbeOneMock(...args),
+  dashProbeAll: (...args: any[]) => dashProbeAllMock(...args),
 }));
 
-const testLatencyMock = vi.fn();
 const toggleFavoriteMock = vi.fn();
 vi.mock("../../wailsjs/go/bindings/ServersService", () => ({
-  TestLatency: (...args: any[]) => testLatencyMock(...args),
   ToggleFavorite: (...args: any[]) => toggleFavoriteMock(...args),
 }));
 
@@ -65,6 +69,7 @@ const baseDash = {
   connectedAt: null,
   lastError: null,
   bootstrapped: true,
+  probeState: new Map<string, "probing" | "ok" | "error">(),
 };
 
 beforeEach(() => {
@@ -80,8 +85,10 @@ beforeEach(() => {
   serverEditMock.mockReset().mockResolvedValue({ vlessChanged: false });
   serverRemoveMock.mockReset().mockResolvedValue(undefined);
   clearLastErrorMock.mockReset();
-  testLatencyMock.mockReset().mockResolvedValue(undefined);
   toggleFavoriteMock.mockReset().mockResolvedValue(undefined);
+  dashConnectMock.mockReset().mockResolvedValue(undefined);
+  dashProbeOneMock.mockReset().mockResolvedValue(undefined);
+  dashProbeAllMock.mockReset().mockResolvedValue(undefined);
 });
 
 describe("Servers page", () => {
@@ -245,7 +252,7 @@ describe("Servers page", () => {
     expect(screen.queryByRole("button", { name: /^Save$/ })).toBeNull();
   });
 
-  it("Probe-all triggers TestLatency with empty id", async () => {
+  it("Probe-all triggers dashProbeAll", async () => {
     useDashMock.mockReturnValue({
       ...baseDash,
       allServers: [makeServer({ id: "m1" })],
@@ -253,7 +260,7 @@ describe("Servers page", () => {
     const user = userEvent.setup();
     render(<Servers />);
     await user.click(screen.getByRole("button", { name: /Probe all/i }));
-    expect(testLatencyMock).toHaveBeenCalledWith("");
+    expect(dashProbeAllMock).toHaveBeenCalled();
   });
 
   it("Toggling favorite calls ToggleFavorite", async () => {

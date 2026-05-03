@@ -464,3 +464,66 @@ describe("dashStore — concurrency guards", () => {
     expect(getSnapshotMock).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("probeState", () => {
+  beforeEach(() => {
+    __resetForTest();
+    getSnapshotMock.mockResolvedValue({
+      status: "idle",
+      mode: "tun",
+      currentServer: null,
+      helperState: "running",
+      servers: [
+        { id: "a", name: "A", country: "", address: "h:443", transport: "tcp",
+          security: "none", latencyMs: 0, origin: "manual", favorite: false,
+          tags: [], uri: "" },
+        { id: "b", name: "B", country: "", address: "h:443", transport: "tcp",
+          security: "none", latencyMs: 0, origin: "manual", favorite: false,
+          tags: [], uri: "" },
+      ],
+    });
+  });
+
+  it("dashSetProbing marks given ids as probing", async () => {
+    const { dashSetProbing } = await import("./dashStore");
+    await __bootstrapForTest();
+    dashSetProbing(["a", "b"]);
+    const s = getDashState();
+    expect(s.probeState.get("a")).toBe("probing");
+    expect(s.probeState.get("b")).toBe("probing");
+  });
+
+  it("onProbeResult sets probeState to ok or error", async () => {
+    await __bootstrapForTest();
+    eventHandlers["probe:result"]({
+      results: [
+        { id: "a", latencyMs: 25 },
+        { id: "b", error: "timeout" },
+      ],
+    });
+    const s = getDashState();
+    expect(s.probeState.get("a")).toBe("ok");
+    expect(s.probeState.get("b")).toBe("error");
+    expect(s.allServers.find((x) => x.id === "a")!.latencyMs).toBe(25);
+    // 'b' had an error → latencyMs stays untouched (0).
+    expect(s.allServers.find((x) => x.id === "b")!.latencyMs).toBe(0);
+  });
+
+  it("dashProbeOne sets error on TestLatency rejection", async () => {
+    const { dashProbeOne } = await import("./dashStore");
+    await __bootstrapForTest();
+    testLatencyMock.mockRejectedValueOnce(new Error("nope"));
+    await dashProbeOne("a");
+    expect(getDashState().probeState.get("a")).toBe("error");
+  });
+
+  it("dashProbeAll sets error for every loaded id on rejection", async () => {
+    const { dashProbeAll } = await import("./dashStore");
+    await __bootstrapForTest();
+    testLatencyMock.mockRejectedValueOnce(new Error("nope"));
+    await dashProbeAll();
+    const s = getDashState();
+    expect(s.probeState.get("a")).toBe("error");
+    expect(s.probeState.get("b")).toBe("error");
+  });
+});
