@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	statsservice "github.com/xtls/xray-core/app/stats/command"
 	"google.golang.org/grpc"
@@ -37,14 +36,11 @@ func (c *Client) Counters(ctx context.Context) (up, down uint64, err error) {
 	defer c.mu.Unlock()
 
 	if c.client == nil {
-		dialCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-		defer cancel()
-		conn, err := grpc.DialContext(dialCtx, c.addr,
+		conn, err := grpc.NewClient(c.addr,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithBlock(),
 		)
 		if err != nil {
-			return 0, 0, fmt.Errorf("dial xray api: %w", err)
+			return 0, 0, fmt.Errorf("create xray api client: %w", err)
 		}
 		c.conn = conn
 		c.client = statsservice.NewStatsServiceClient(conn)
