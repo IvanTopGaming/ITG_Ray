@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
@@ -34,6 +34,7 @@ import { AppShell } from './AppShell';
 import {
   snapshotFromConnectedPayload,
   clearConnectSnapshot,
+  markActiveServerEdited,
   __resetForTests,
 } from '@/lib/settings';
 
@@ -154,5 +155,40 @@ describe('AppShell reconnect pill', () => {
       await userEvent.click(screen.getByRole('button', { name: /reconnect/i }));
     });
     expect(dashReconnectMock).toHaveBeenCalledOnce();
+  });
+
+  it('renders dismiss button on the toast (key differentiator from old pill)', async () => {
+    snapshotFromConnectedPayload({
+      serverId: 's1',
+      mode: 'tun',
+      network: {
+        tunCidr: '198.18.0.1/15',
+        tunMtu: 9999,
+        socksPort: 1080,
+        httpPort: 8888,
+        allowLan: false,
+        ipv6Mode: 'prefer-v4',
+        dns: { mode: 'auto' },
+      },
+    });
+    await renderShell();
+    expect(screen.getByRole('button', { name: /dismiss/i })).toBeInTheDocument();
+  });
+
+  it('shows toast when active server has been edited (no snapshot needed)', async () => {
+    markActiveServerEdited();
+    await renderShell();
+    expect(screen.getByRole('status')).toBeInTheDocument();
+  });
+
+  it('dismiss clears active-edit signal and hides toast', async () => {
+    markActiveServerEdited();
+    const user = userEvent.setup();
+    await renderShell();
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: /dismiss/i }));
+    });
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
   });
 });

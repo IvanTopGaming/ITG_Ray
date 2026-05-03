@@ -34,6 +34,11 @@ vi.mock("../../wailsjs/go/bindings/ServersService", () => ({
   ToggleFavorite: (...args: any[]) => toggleFavoriteMock(...args),
 }));
 
+const markActiveServerEditedMock = vi.fn();
+vi.mock("@/lib/settings", () => ({
+  markActiveServerEdited: () => markActiveServerEditedMock(),
+}));
+
 vi.mock("../../wailsjs/runtime/runtime", () => ({
   EventsOn: () => () => {},
 }));
@@ -86,6 +91,7 @@ beforeEach(() => {
   serverRemoveMock.mockReset().mockResolvedValue(undefined);
   clearLastErrorMock.mockReset();
   toggleFavoriteMock.mockReset().mockResolvedValue(undefined);
+  markActiveServerEditedMock.mockReset();
   dashConnectMock.mockReset().mockResolvedValue(undefined);
   dashProbeOneMock.mockReset().mockResolvedValue(undefined);
   dashProbeAllMock.mockReset().mockResolvedValue(undefined);
@@ -182,7 +188,7 @@ describe("Servers page", () => {
     expect(await screen.findByText(/invalid URI/)).toBeInTheDocument();
   });
 
-  it("Edit with vlessChanged on the active connected server shows Reconnect banner", async () => {
+  it("Edit with vlessChanged on the active connected server marks active-edited", async () => {
     const active = makeServer({
       id: "m1",
       name: "Toronto",
@@ -206,9 +212,9 @@ describe("Servers page", () => {
     await user.click(screen.getByRole("button", { name: /^Save$/ }));
     expect(serverEditMock).toHaveBeenCalledTimes(1);
 
-    expect(
-      await screen.findByText(/Reconnect to apply the updated server URI\./i),
-    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(markActiveServerEditedMock).toHaveBeenCalledTimes(1),
+    );
   });
 
   it("Delete error surfaces in the modal without closing", async () => {

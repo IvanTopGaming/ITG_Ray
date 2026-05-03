@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
   AlertTriangle,
@@ -30,6 +30,7 @@ import {
   dashProbeOne,
   dashProbeAll,
 } from "@/lib/dashStore";
+import { markActiveServerEdited } from "@/lib/settings";
 import { ToggleFavorite } from "../../wailsjs/go/bindings/ServersService";
 import type { hub } from "../../wailsjs/go/models";
 
@@ -73,23 +74,10 @@ export function Servers() {
   const [sort, setSort] = useState<Sort>("name");
   const [favoritesFirst, setFavoritesFirst] = useState(true);
   const [modal, setModal] = useState<ModalState>({ kind: "closed" });
-  const [reconnectBanner, setReconnectBanner] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const servers = dash.allServers;
   const activeServerId = dash.currentServer?.id ?? null;
-
-  // The Reconnect banner is a one-shot signal: vlessChanged on Edit while
-  // a connection is active. Auto-clear once the chain transitions to idle
-  // (the user disconnected; a fresh Connect with the new URI is implied
-  // when they next connect). Manual Dismiss also clears it.
-  const wasConnectedRef = useRef(false);
-  useEffect(() => {
-    if (status === "idle" && wasConnectedRef.current && reconnectBanner) {
-      setReconnectBanner(false);
-    }
-    wasConnectedRef.current = status === "connected" || status === "connecting";
-  }, [status, reconnectBanner]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -192,7 +180,7 @@ export function Servers() {
         activeServerId === id &&
         (status === "connected" || status === "connecting")
       ) {
-        setReconnectBanner(true);
+        markActiveServerEdited();
       }
     } catch (err: any) {
       setSubmitError(err?.message ?? String(err));
@@ -252,10 +240,6 @@ export function Servers() {
             message={errorMessage}
             onDismiss={dismissLastError}
           />
-        )}
-
-        {reconnectBanner && (
-          <ReconnectBanner onDismiss={() => setReconnectBanner(false)} />
         )}
 
         {!dash.bootstrapped ? null : grouped.length === 0 ? (
@@ -385,31 +369,6 @@ function ErrorBanner({
         onClick={onDismiss}
         className="rounded p-1 text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white"
         aria-label="Dismiss error"
-      >
-        <X className="h-3.5 w-3.5" />
-      </button>
-    </motion.div>
-  );
-}
-
-function ReconnectBanner({ onDismiss }: { onDismiss: () => void }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.22, ease: SNAP_EASE }}
-      role="status"
-      className="flex items-start gap-3 rounded-xl border border-warn/40 bg-warn/[0.10] px-4 py-3"
-    >
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
-      <div className="flex-1 text-[12px] text-white/85">
-        Reconnect to apply the updated server URI.
-      </div>
-      <button
-        onClick={onDismiss}
-        className="rounded p-1 text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white"
-        aria-label="Dismiss reconnect notice"
       >
         <X className="h-3.5 w-3.5" />
       </button>
