@@ -14,7 +14,6 @@ import (
 
 	"golang.org/x/net/proxy"
 
-	"github.com/itg-team/itg-ray/cmd/itgray-gui/chainctl"
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
 )
 
@@ -57,12 +56,12 @@ func (a *AppService) GetPublicIP() (string, error) {
 	if a.d.Chain == nil {
 		return "", ErrNotConnected
 	}
-	st, _, mode := a.d.Chain.Status()
+	st, _, _ := a.d.Chain.Status()
 	if st != hub.StatusConnected {
 		return "", ErrNotConnected
 	}
 
-	client, err := a.publicIPClient(mode)
+	client, err := publicIPClient(a.d)
 	if err != nil {
 		return "", err
 	}
@@ -93,22 +92,21 @@ func (a *AppService) GetPublicIP() (string, error) {
 	return ip, nil
 }
 
-// publicIPClient builds an HTTP client wired to the right transport for
-// the given mode. TUN → direct; sysproxy → SOCKS5 via 127.0.0.1:SOCKSPort.
-func (a *AppService) publicIPClient(mode chainctl.Mode) (*http.Client, error) {
-	if mode == chainctl.ModeTUN {
-		return &http.Client{Timeout: publicIPRequestTO}, nil
-	}
-	if a.d.NetworkLoader == nil {
-		return nil, errors.New("network loader not configured")
-	}
-	netCfg, err := a.d.NetworkLoader()
-	if err != nil {
-		return nil, fmt.Errorf("load network config: %w", err)
+// publicIPClient is a package-level test seam: production builds a SOCKS5
+// http.Client routing via xray's local inbound; tests swap it (see
+// withPublicIPClient) to use a bare client when the endpoint is an
+// httptest server. Same code path in TUN and SysProxy: xray resolves the
+// hostname remotely and egresses through the proxy chain. We deliberately
+// do NOT use a bare http.Client (Go runtime DNS) — on Windows the pure-Go
+// resolver opens DNS servers in order, and the TUN adapter's hijack-dns
+// endpoint (198.18.0.2) is unresponsive, hanging the whole publicIPRequestTO.
+var publicIPClient = func(d *AppDeps) (*http.Client, error) {
+	if d.XraySOCKSPort <= 0 {
+		return nil, errors.New("xray socks port not configured")
 	}
 	socksURL := &url.URL{
 		Scheme: "socks5",
-		Host:   fmt.Sprintf("127.0.0.1:%d", netCfg.SysProxy.SOCKSPort),
+		Host:   fmt.Sprintf("127.0.0.1:%d", d.XraySOCKSPort),
 	}
 	dialer, err := proxy.FromURL(socksURL, proxy.Direct)
 	if err != nil {

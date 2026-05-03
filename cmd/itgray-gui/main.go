@@ -152,7 +152,7 @@ func main() {
 		AppCtx:        func() context.Context { return app.ctx },
 		Chain:         chainCtrl,
 		ConfigViewer:  settingsStore,
-		NetworkLoader: networkLoader,
+		XraySOCKSPort: defaultXrayPort,
 	})
 	runSvc := bindings.NewRunService(bindings.RunDeps{
 		Chain: chainCtrl,

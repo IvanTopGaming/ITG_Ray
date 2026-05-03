@@ -69,8 +69,7 @@ type ConfigViewer interface {
 }
 
 // NetworkLoader is the closure AppService uses to read the persisted
-// Network section (for GetPublicIP's SOCKS5 dialer in sysproxy mode).
-// main.go provides a closure over config.Load(configPath); tests mock it.
+// Network section. Reserved for future use (no current consumer).
 type NetworkLoader func() (config.Network, error)
 
 // AppDeps groups the dependencies passed in from main.go.
@@ -89,9 +88,13 @@ type AppDeps struct {
 	// Chain is the source of live status/server/mode for GetSnapshot. Nil
 	// is tolerated (yields StatusIdle / Mode("tun")); production wiring
 	// guarantees non-nil.
-	Chain         ChainStatuser
-	ConfigViewer  ConfigViewer  // NEW: source of SettingsView (replaces hardcoded collectSettings)
-	NetworkLoader NetworkLoader // NEW: source of Network for GetPublicIP sysproxy dialer
+	Chain        ChainStatuser
+	ConfigViewer ConfigViewer // source of SettingsView (replaces hardcoded collectSettings)
+	// XraySOCKSPort is the port of xray's local SOCKS5 inbound. GetPublicIP
+	// dials this regardless of mode so the request is resolved+egressed by
+	// the proxy chain — bypassing Go runtime's pure-Go DNS resolver, which
+	// hangs on the TUN adapter's broken hijack-dns endpoint (198.18.0.2).
+	XraySOCKSPort int
 }
 
 // AppService implements the App.* bindings (GetSnapshot, GetVersion, Quit).

@@ -1,7 +1,6 @@
 package bindings
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -9,12 +8,11 @@ import (
 
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/chainctl"
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
-	"github.com/itg-team/itg-ray/internal/config"
 
 	"github.com/stretchr/testify/require"
 )
 
-func newAppWithChain(t *testing.T, chain ChainStatuser, netLoad NetworkLoader) *AppService {
+func newAppWithChain(t *testing.T, chain ChainStatuser, xraySocksPort int) *AppService {
 	t.Helper()
 	dir := t.TempDir()
 	return NewAppService(&AppDeps{
@@ -26,21 +24,21 @@ func newAppWithChain(t *testing.T, chain ChainStatuser, netLoad NetworkLoader) *
 		HelperProber:  func() string { return "running" },
 		ConfigViewer:  fakeConfigViewer{},
 		Chain:         chain,
-		NetworkLoader: netLoad,
+		XraySOCKSPort: xraySocksPort,
 	})
 }
 
 func TestGetPublicIP_NotConnected(t *testing.T) {
 	app := newAppWithChain(t,
 		fakeChain{status: hub.StatusIdle, mode: chainctl.ModeTUN},
-		nil,
+		1081,
 	)
 	_, err := app.GetPublicIP()
 	require.ErrorIs(t, err, ErrNotConnected)
 }
 
 func TestGetPublicIP_NilChain(t *testing.T) {
-	app := newAppWithChain(t, nil, nil)
+	app := newAppWithChain(t, nil, 1081)
 	_, err := app.GetPublicIP()
 	require.ErrorIs(t, err, ErrNotConnected)
 }
@@ -53,46 +51,59 @@ func withPublicIPEndpoint(t *testing.T, url string) {
 	t.Cleanup(func() { publicIPEndpoint = prev })
 }
 
-func TestGetPublicIP_TUN_Direct(t *testing.T) {
+// withBarePublicIPClient swaps publicIPClient for the duration of t to
+// return a bare http.Client (no SOCKS5). Tests that point publicIPEndpoint
+// at httptest.NewServer use this to bypass the SOCKS5 transport — the
+// httptest server has no SOCKS5 stub in front of it.
+func withBarePublicIPClient(t *testing.T) {
+	t.Helper()
+	prev := publicIPClient
+	publicIPClient = func(_ *AppDeps) (*http.Client, error) {
+		return &http.Client{Timeout: publicIPRequestTO}, nil
+	}
+	t.Cleanup(func() { publicIPClient = prev })
+}
+
+func TestGetPublicIP_FetchesAndParses(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("203.0.113.45"))
 	}))
 	defer srv.Close()
 	withPublicIPEndpoint(t, srv.URL)
+	withBarePublicIPClient(t)
 
 	app := newAppWithChain(t,
 		fakeChain{status: hub.StatusConnected, mode: chainctl.ModeTUN},
-		nil,
+		1081,
 	)
 	ip, err := app.GetPublicIP()
 	require.NoError(t, err)
 	require.Equal(t, "203.0.113.45", ip)
 }
 
-func TestGetPublicIP_SysProxy_BuildsSocksTransport(t *testing.T) {
+// TestPublicIPClient_BuildsSocksTransport asserts the production builder
+// emits a SOCKS5-wired http.Transport pointing at xray's local inbound.
+// The same code path serves both TUN and SysProxy — mode isn't an input.
+func TestPublicIPClient_BuildsSocksTransport(t *testing.T) {
 	app := newAppWithChain(t,
-		fakeChain{status: hub.StatusConnected, mode: chainctl.ModeSysProxy},
-		func() (config.Network, error) {
-			return config.Network{SysProxy: config.SysProxy{SOCKSPort: 1080}}, nil
-		},
+		fakeChain{status: hub.StatusConnected, mode: chainctl.ModeTUN},
+		1081,
 	)
-	client, err := app.publicIPClient(chainctl.ModeSysProxy)
+	client, err := publicIPClient(app.d)
 	require.NoError(t, err)
-	require.NotNil(t, client.Transport)
+	require.NotNil(t, client.Transport, "must use SOCKS5 transport via xray local inbound")
 	tr := client.Transport.(*http.Transport)
 	require.NotNil(t, tr.DialContext)
 }
 
-func TestGetPublicIP_SysProxy_NetworkLoaderError(t *testing.T) {
+func TestPublicIPClient_NoXraySOCKSPort_ReturnsError(t *testing.T) {
 	app := newAppWithChain(t,
-		fakeChain{status: hub.StatusConnected, mode: chainctl.ModeSysProxy},
-		func() (config.Network, error) {
-			return config.Network{}, errors.New("disk read failed")
-		},
+		fakeChain{status: hub.StatusConnected, mode: chainctl.ModeTUN},
+		0,
 	)
-	_, err := app.GetPublicIP()
+	_, err := publicIPClient(app.d)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "load network config")
+	require.Contains(t, err.Error(), "xray socks port not configured")
 }
 
 func TestGetPublicIP_InvalidBody(t *testing.T) {
@@ -102,9 +113,10 @@ func TestGetPublicIP_InvalidBody(t *testing.T) {
 	defer srv.Close()
 	withPublicIPEndpoint(t, srv.URL)
 
+	withBarePublicIPClient(t)
 	app := newAppWithChain(t,
 		fakeChain{status: hub.StatusConnected, mode: chainctl.ModeTUN},
-		nil,
+		1081,
 	)
 	_, err := app.GetPublicIP()
 	require.Error(t, err)
@@ -120,9 +132,10 @@ func TestGetPublicIP_CacheHit(t *testing.T) {
 	defer srv.Close()
 	withPublicIPEndpoint(t, srv.URL)
 
+	withBarePublicIPClient(t)
 	app := newAppWithChain(t,
 		fakeChain{status: hub.StatusConnected, mode: chainctl.ModeTUN},
-		nil,
+		1081,
 	)
 	ip1, err := app.GetPublicIP()
 	require.NoError(t, err)
@@ -145,9 +158,10 @@ func TestGetPublicIP_CacheExpiry(t *testing.T) {
 	defer srv.Close()
 	withPublicIPEndpoint(t, srv.URL)
 
+	withBarePublicIPClient(t)
 	app := newAppWithChain(t,
 		fakeChain{status: hub.StatusConnected, mode: chainctl.ModeTUN},
-		nil,
+		1081,
 	)
 	ip1, err := app.GetPublicIP()
 	require.NoError(t, err)
