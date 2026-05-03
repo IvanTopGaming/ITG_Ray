@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Copy,
   Eye,
+  Globe,
   Pencil,
   Plus,
   Search,
@@ -142,7 +143,11 @@ export function Servers() {
           // 0 = unprobed → sort to bottom
           const al = a.latencyMs > 0 ? a.latencyMs : Number.MAX_SAFE_INTEGER;
           const bl = b.latencyMs > 0 ? b.latencyMs : Number.MAX_SAFE_INTEGER;
-          return al - bl;
+          if (al !== bl) return al - bl;
+          // Stable secondary sort by name when latencies tie (e.g. unprobed
+          // batch). Without this, the visible order falls back to insertion
+          // order from disk and looks like "by name".
+          return a.name.localeCompare(b.name);
         }
         return a.name.localeCompare(b.name);
       });
@@ -230,10 +235,11 @@ export function Servers() {
       setModal({ kind: "closed" });
       setSubmitError(null);
     } catch (err: any) {
-      // Keep the modal open — lastError banner will surface the message.
-      // Also stash a local copy so the modal-level UX isn't tied to the
-      // global banner timing.
+      // Keep the modal open — the modal owns the error display.
+      // Suppress the page-level banner (the store also surfaces lastError
+      // for non-modal callers, but here the modal is dominant).
       setSubmitError(err?.message ?? String(err));
+      clearLastError();
     }
   }
 
@@ -251,6 +257,7 @@ export function Servers() {
       }
     } catch (err: any) {
       setSubmitError(err?.message ?? String(err));
+      clearLastError();
     }
   }
 
@@ -261,6 +268,7 @@ export function Servers() {
       setSubmitError(null);
     } catch (err: any) {
       setSubmitError(err?.message ?? String(err));
+      clearLastError();
     }
   }
 
@@ -269,10 +277,11 @@ export function Servers() {
     setSubmitError(null);
   }
 
-  // Prefer the store's lastError (set on failed mutations), fall back to
-  // local submitError (covers ToggleFavorite + raw probe failures that
-  // don't go through the store).
-  const errorMessage = lastError ?? submitError;
+  // The page-level banner shows lastError (for non-modal mutations like
+  // ToggleFavorite, or raw probe failures). When a mutation fails inside an
+  // open modal, the handler stores submitError and calls clearLastError() —
+  // the modal renders submitError inline so the banner stays clean.
+  const errorMessage = lastError;
 
   return (
     <>
@@ -394,6 +403,7 @@ export function Servers() {
         {modal.kind !== "closed" && (
           <ServerModal
             modal={modal}
+            submitError={submitError}
             onClose={() => {
               setModal({ kind: "closed" });
               setSubmitError(null);
@@ -599,10 +609,6 @@ function ServerRow({
   const ActionIcon = isManual ? Pencil : Eye;
   const actionTitle = isManual ? "Edit" : "View details";
 
-  // Country code from ServerView; CountryFlag accepts ISO-2 alpha or emoji.
-  // When missing, render a neutral globe placeholder to preserve layout.
-  const flagCode = server.country || "🌐";
-
   return (
     <div
       className={cn(
@@ -630,10 +636,17 @@ function ServerRow({
         />
       </span>
 
-      <CountryFlag
-        code={flagCode}
-        className="relative z-10 h-[14px] w-[21px] shrink-0 rounded-[2px] object-cover shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
-      />
+      {server.country ? (
+        <CountryFlag
+          code={server.country}
+          className="relative z-10 h-[14px] w-[21px] shrink-0 rounded-[2px] object-cover shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
+        />
+      ) : (
+        <Globe
+          className="relative z-10 h-[14px] w-[14px] shrink-0 text-white/40"
+          aria-hidden
+        />
+      )}
 
       <div className="relative z-10 flex min-w-0 flex-1 items-baseline gap-3">
         <span className="text-[13px] font-medium">{server.name}</span>
@@ -817,12 +830,14 @@ const FLOWS = [
 
 function ServerModal({
   modal,
+  submitError,
   onClose,
   onAdd,
   onSaveEdit,
   onDelete,
 }: {
   modal: Exclude<ModalState, { kind: "closed" }>;
+  submitError: string | null;
   onClose: () => void;
   onAdd: (name: string, uri: string) => void | Promise<void>;
   onSaveEdit: (id: string, name: string, uri: string) => void | Promise<void>;
@@ -1179,6 +1194,16 @@ function ServerModal({
             </Section>
           )}
         </div>
+
+        {submitError && (
+          <div
+            role="alert"
+            className="mx-6 mb-3 flex items-start gap-2 rounded-lg border border-danger/40 bg-danger/[0.08] px-3 py-2 text-[12px] text-danger"
+          >
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span className="break-words">{submitError}</span>
+          </div>
+        )}
 
         <div className="flex items-center justify-between gap-3 border-t border-white/[0.08] px-6 py-4">
           {isEdit && server ? (
