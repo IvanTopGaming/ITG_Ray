@@ -36,6 +36,7 @@ import {
   dashConnect,
   dashDisconnect,
   dashSwitchMode,
+  dashReconnect,
   clearLastError,
   type ChainStatus,
 } from "./dashStore";
@@ -369,6 +370,44 @@ describe("dashSwitchMode", () => {
     expect(runDisconnectMock).toHaveBeenCalled();
     expect(runConnectMock).toHaveBeenCalledWith("s1", "sysproxy");
     expect(getDashState().mode).toBe("sysproxy");
+  });
+});
+
+describe("dashReconnect", () => {
+  it("does Disconnect → Connect with explicit serverId+mode when connected", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    fireEvent("vpn:status", { status: "connected", serverId: "old" });
+    runDisconnectMock.mockImplementation(async () => {
+      setTimeout(() => fireEvent("vpn:status", { status: "idle" }), 0);
+    });
+    runConnectMock.mockResolvedValue(undefined);
+    await dashReconnect("snap-server", "sysproxy");
+    expect(runDisconnectMock).toHaveBeenCalled();
+    expect(runConnectMock).toHaveBeenCalledWith("snap-server", "sysproxy");
+    expect(getDashState().mode).toBe("sysproxy");
+  });
+
+  it("surfaces Connect failure via lastError after a successful Disconnect", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    fireEvent("vpn:status", { status: "connected", serverId: "old" });
+    runDisconnectMock.mockImplementation(async () => {
+      setTimeout(() => fireEvent("vpn:status", { status: "idle" }), 0);
+    });
+    runConnectMock.mockRejectedValue(new Error("helper down"));
+    await expect(dashReconnect("s1", "tun")).rejects.toThrow("helper down");
+    expect(getDashState().lastError?.kind).toBe("reconnect_failed");
+    expect(getDashState().lastError?.message).toBe("helper down");
+  });
+
+  it("skips the Disconnect step when not currently connected", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    runConnectMock.mockResolvedValue(undefined);
+    await dashReconnect("s1", "tun");
+    expect(runDisconnectMock).not.toHaveBeenCalled();
+    expect(runConnectMock).toHaveBeenCalledWith("s1", "tun");
   });
 });
 

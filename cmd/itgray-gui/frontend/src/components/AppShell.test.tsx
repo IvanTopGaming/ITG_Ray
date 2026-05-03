@@ -3,9 +3,12 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
-vi.mock('../../wailsjs/go/bindings/RunService', () => ({
-  Connect: vi.fn().mockResolvedValue(undefined),
-  Disconnect: vi.fn().mockResolvedValue(undefined),
+const { dashReconnectMock } = vi.hoisted(() => ({
+  dashReconnectMock: vi.fn(),
+}));
+
+vi.mock('@/lib/dashStore', () => ({
+  dashReconnect: (id: string, mode: string) => dashReconnectMock(id, mode),
 }));
 
 vi.mock('../../wailsjs/go/bindings/SettingsService', () => ({
@@ -33,7 +36,6 @@ import {
   clearConnectSnapshot,
   __resetForTests,
 } from '@/lib/settings';
-import * as RunService from '../../wailsjs/go/bindings/RunService';
 
 const renderShell = async () => {
   const utils = render(
@@ -70,6 +72,8 @@ describe('AppShell reconnect pill', () => {
     __resetForTests();
     clearConnectSnapshot();
     vi.clearAllMocks();
+    dashReconnectMock.mockReset();
+    dashReconnectMock.mockResolvedValue(undefined);
     const originalConsoleError = console.error;
     vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
       const msg = args[0];
@@ -107,7 +111,7 @@ describe('AppShell reconnect pill', () => {
     expect(screen.getByRole('button', { name: /reconnect/i })).toBeInTheDocument();
   });
 
-  it('clicking Reconnect calls Disconnect then Connect with snapshot args', async () => {
+  it('clicking Reconnect routes through dashReconnect with snapshot args', async () => {
     snapshotFromConnectedPayload({
       serverId: 's1',
       mode: 'tun',
@@ -125,7 +129,30 @@ describe('AppShell reconnect pill', () => {
     await act(async () => {
       await userEvent.click(screen.getByRole('button', { name: /reconnect/i }));
     });
-    expect(RunService.Disconnect).toHaveBeenCalledOnce();
-    expect(RunService.Connect).toHaveBeenCalledWith('s1', 'tun');
+    expect(dashReconnectMock).toHaveBeenCalledWith('s1', 'tun');
+  });
+
+  it('Reconnect rejection is swallowed (dashStore surfaces error via lastError)', async () => {
+    dashReconnectMock.mockRejectedValueOnce(new Error('helper down'));
+    snapshotFromConnectedPayload({
+      serverId: 's1',
+      mode: 'tun',
+      network: {
+        tunCidr: '198.18.0.1/15',
+        tunMtu: 9999,
+        socksPort: 1080,
+        httpPort: 8888,
+        allowLan: false,
+        ipv6Mode: 'prefer-v4',
+        dns: { mode: 'auto' },
+      },
+    });
+    await renderShell();
+    // Click must not throw uncaught — AppShell's try/catch swallows after
+    // dashStore has already populated lastError.
+    await act(async () => {
+      await userEvent.click(screen.getByRole('button', { name: /reconnect/i }));
+    });
+    expect(dashReconnectMock).toHaveBeenCalledOnce();
   });
 });
