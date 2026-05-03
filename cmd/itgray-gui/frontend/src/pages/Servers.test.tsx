@@ -329,4 +329,24 @@ describe("Servers page", () => {
     expect(dashConnectMock).not.toHaveBeenCalled();
     expect(toggleFavoriteMock).toHaveBeenCalledWith("s1");
   });
+
+  it("does not render empty-state copy before bootstrap completes", () => {
+    useDashMock.mockReturnValue({
+      ...baseDash,
+      allServers: [],
+      bootstrapped: false,
+    });
+    render(<Servers />);
+    expect(screen.queryByText(/no servers yet/i)).toBeNull();
+  });
+
+  it("renders empty-state copy after bootstrap with no servers", () => {
+    useDashMock.mockReturnValue({
+      ...baseDash,
+      allServers: [],
+      bootstrapped: true,
+    });
+    render(<Servers />);
+    expect(screen.getByText(/no servers yet/i)).toBeInTheDocument();
+  });
 });

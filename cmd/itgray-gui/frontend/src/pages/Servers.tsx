@@ -258,7 +258,7 @@ export function Servers() {
           <ReconnectBanner onDismiss={() => setReconnectBanner(false)} />
         )}
 
-        {grouped.length === 0 ? (
+        {!dash.bootstrapped ? null : grouped.length === 0 ? (
           <motion.div
             variants={itemVariants}
             className="glass-regular rounded-2xl p-10 text-center text-[13px] text-white/55"
