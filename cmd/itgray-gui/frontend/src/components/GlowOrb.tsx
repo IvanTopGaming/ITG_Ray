@@ -1,3 +1,4 @@
+import React from "react";
 import { Zap } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -73,7 +74,7 @@ const STYLES: Record<OrbStatus, OrbStyle> = {
 
 const TRANSITION = "all 480ms cubic-bezier(0.16, 1, 0.3, 1)";
 
-export function GlowOrb({
+export const GlowOrb = React.memo(function GlowOrb({
   status,
   size = 104,
   onClick,
@@ -166,4 +167,4 @@ export function GlowOrb({
       {content}
     </button>
   );
-}
+});
