@@ -335,6 +335,60 @@ describe("dashConnect", () => {
   });
 });
 
+describe("dashConnect optimistic UI", () => {
+  beforeEach(() => {
+    __resetForTest();
+    getSnapshotMock.mockResolvedValue({
+      ...baseSnapshot,
+      servers: [
+        { id: "a", name: "A", country: "", address: "h:443", transport: "tcp",
+          security: "none", latencyMs: 0, origin: "manual", favorite: false,
+          tags: [], uri: "" },
+        { id: "b", name: "B", country: "", address: "h:443", transport: "tcp",
+          security: "none", latencyMs: 0, origin: "manual", favorite: false,
+          tags: [], uri: "" },
+      ],
+    });
+  });
+
+  it("flips currentServer immediately on dashConnect, before backend resolves", async () => {
+    await __bootstrapForTest();
+    // Hold Connect indefinitely so we can observe the optimistic state.
+    let resolveConnect: () => void = () => {};
+    runConnectMock.mockImplementationOnce(() => new Promise<void>((res) => { resolveConnect = res; }));
+    const p = dashConnect("a");
+    // Immediately after the call, currentServer should already be 'a' even
+    // though Connect() has not resolved.
+    expect(getDashState().currentServer?.id).toBe("a");
+    resolveConnect();
+    await p;
+  });
+
+  it("does not setState when target equals currentServer (no-op optimistic branch)", async () => {
+    await __bootstrapForTest();
+    // Set currentServer to 'a' but NOT status=connected by firing connected
+    // then immediately firing connecting (which preserves currentServer but
+    // changes status away from "connected"). Actually onVpnStatus on the
+    // dashStore only sets currentServer on the connected event; subsequent
+    // events keep it. So: fire connected to set currentServer=a, then fire
+    // connecting to leave status non-connected so dashConnect's idle branch
+    // is taken (no Disconnect+waitForIdle).
+    fireEvent("vpn:status", { status: "connected", serverId: "a", mode: "tun" });
+    fireEvent("vpn:status", { status: "connecting" });
+    const beforeRef = getDashState().currentServer;
+    expect(beforeRef?.id).toBe("a");
+    // Hold Connect indefinitely so the optimistic branch is the only thing
+    // that could have mutated currentServer before the await.
+    let resolveConnect: () => void = () => {};
+    runConnectMock.mockImplementationOnce(() => new Promise<void>((res) => { resolveConnect = res; }));
+    const p = dashConnect("a");
+    // Optimistic branch should be a no-op: currentServer reference unchanged.
+    expect(getDashState().currentServer).toBe(beforeRef);
+    resolveConnect();
+    await p;
+  });
+});
+
 describe("dashDisconnect", () => {
   it("calls Disconnect", async () => {
     getSnapshotMock.mockResolvedValue(baseSnapshot);

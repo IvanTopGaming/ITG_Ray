@@ -278,6 +278,15 @@ export async function dashConnect(serverId: string): Promise<void> {
 }
 
 async function doConnect(serverId: string): Promise<void> {
+  // Optimistic UI: immediately reflect the user's chosen server so the
+  // active-row indicator flips before the backend completes Disconnect+
+  // Connect. The vpn:status connected event will set the same value;
+  // on failure the chain falls back to idle/error but currentServer
+  // continues to reflect the user's intent (clearer than reverting).
+  const target = state.allServers.find((s) => s.id === serverId);
+  if (target && state.currentServer?.id !== serverId) {
+    setState({ ...state, currentServer: target });
+  }
   try {
     if (state.status === "connected") {
       await Disconnect();
