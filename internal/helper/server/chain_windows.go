@@ -113,15 +113,37 @@ var (
 	activeSess *chainState
 )
 
-// binaryPath looks up the Helper's adjacent binary by name. Helper.exe lives
-// at C:\Program Files\ITG Ray\itgray-helper.exe and sing-box.exe / xray.exe
-// are deployed beside it.
+// binaryPath looks up an adjacent binary by name. Two layouts are
+// supported because both Wails (per-machine) and Electron NSIS
+// (per-user) builds ship today:
+//
+//   - Wails: helper.exe + sing-box.exe + xray.exe siblings in
+//     C:\Program Files\ITG Ray\
+//   - Electron NSIS: helper.exe at resources/helper/, cores at
+//     resources/cores/ per BUNDLE_LAYOUT in src/main/paths.ts
+//
+// Try the sibling layout first (matches existing Wails deployments),
+// then fall back to ../cores/ for the Electron bundle.
 func binaryPath(name string) (string, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(filepath.Dir(exe), name), nil
+	dir := filepath.Dir(exe)
+	if sibling := filepath.Join(dir, name); fileExists(sibling) {
+		return sibling, nil
+	}
+	if bundled := filepath.Join(dir, "..", "cores", name); fileExists(bundled) {
+		return bundled, nil
+	}
+	// Fall back to the sibling path so the spawn error surfaces a
+	// recognisable location instead of an arbitrary %PATH% lookup.
+	return filepath.Join(dir, name), nil
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }
 
 // newSessionID returns a 16-char hex session id from 8 random bytes.
