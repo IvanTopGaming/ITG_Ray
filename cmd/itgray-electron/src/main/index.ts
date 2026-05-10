@@ -4,9 +4,11 @@ import path from "node:path";
 import { BridgeSupervisor } from "./bridge";
 import { wireIPC } from "./ipc";
 import { isDevMode } from "./paths";
+import { createTray } from "./tray";
 
 let mainWindow: BrowserWindow | null = null;
 let supervisor: BridgeSupervisor | null = null;
+let tray: ReturnType<typeof createTray> | null = null;
 
 app.setName("ITG Ray");
 app.setPath("userData", path.join(app.getPath("appData"), "ITG Ray"));
@@ -54,11 +56,17 @@ function createWindow(): void {
 app.whenReady().then(() => {
   supervisor = new BridgeSupervisor();
   supervisor.start();
-  wireIPC(supervisor, () => mainWindow);
   createWindow();
+  tray = createTray(() => mainWindow);
+  wireIPC(supervisor, () => mainWindow, (s) => tray?.setStatus(s));
 });
 
-app.on("window-all-closed", async () => {
+app.on("window-all-closed", () => {
+  // Tray-only mode — do NOT quit when last window closes. Window can
+  // be brought back via the tray. app.quit() is the only path that
+  // triggers actual shutdown (via the before-quit hook below).
+});
+
+app.on("before-quit", async () => {
   if (supervisor) await supervisor.stop();
-  app.quit();
 });
