@@ -7,7 +7,7 @@ package forwarder
 import (
 	"context"
 
-	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
+	"github.com/itg-team/itg-ray/internal/hub"
 )
 
 // Emitter is the surface Forwarder needs from cmd/itgray-bridge/bus.

@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
+	"github.com/itg-team/itg-ray/internal/hub"
 )
 
 // Version is overridden at build time via -ldflags "-X .../handlers.Version=...".

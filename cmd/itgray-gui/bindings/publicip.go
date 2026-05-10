@@ -14,7 +14,7 @@ import (
 
 	"golang.org/x/net/proxy"
 
-	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
+	"github.com/itg-team/itg-ray/internal/hub"
 )
 
 // ErrNotConnected is returned by GetPublicIP when no chain is up; the

@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/chainctl"
-	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
+	"github.com/itg-team/itg-ray/internal/hub"
 )
 
 // RunDeps groups the dependencies for RunService. Hub is captured so

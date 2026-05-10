@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
+	"github.com/itg-team/itg-ray/internal/hub"
 )
 
 // runPoller is the 1-Hz goroutine spawned after a successful bringUp (or

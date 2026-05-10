@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
+	"github.com/itg-team/itg-ray/internal/hub"
 )
 
 func TestAppPingReturnsTimestamp(t *testing.T) {

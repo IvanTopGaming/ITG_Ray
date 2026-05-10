@@ -1,6 +1,6 @@
 package protocol
 
-import "github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
+import "github.com/itg-team/itg-ray/internal/hub"
 
 // Each method's argument struct ends in "Params"; result type either ends
 // in "Result" or is a domain type re-exported from another package

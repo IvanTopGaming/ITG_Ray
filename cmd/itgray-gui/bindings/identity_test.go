@@ -3,7 +3,7 @@ package bindings
 import (
 	"testing"
 
-	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
+	"github.com/itg-team/itg-ray/internal/hub"
 	"github.com/itg-team/itg-ray/internal/hwid"
 	"github.com/itg-team/itg-ray/internal/subscription"
 	"github.com/stretchr/testify/require"
