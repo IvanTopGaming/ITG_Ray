@@ -6,10 +6,10 @@ import (
 
 	"github.com/itg-team/itg-ray/internal/chainctl"
 	"github.com/itg-team/itg-ray/internal/hub"
-	"github.com/itg-team/itg-ray/cmd/itgray-gui/icons"
+	"github.com/itg-team/itg-ray/internal/icons"
 )
 
-// Tray icon bytes are owned by cmd/itgray-gui/icons (which sits next to
+// Tray icon bytes are owned by internal/icons (which sits next to
 // the PNGs because //go:embed cannot escape its own package). Wails
 // v2.11 has no first-party SystemTray runtime API — the
 // `pkg/menu/tray.go` TrayMenu struct is wired through the build asset
