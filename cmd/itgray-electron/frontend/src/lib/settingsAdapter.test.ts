@@ -1,0 +1,254 @@
+import { describe, it, expect } from 'vitest';
+import type { hub } from '../../wailsjs/go/models';
+import { backendToFrontend, frontendToBackend } from './settingsAdapter';
+
+function makeView(overrides: Partial<{
+  general: Partial<hub.GeneralSettings>;
+  network: Partial<hub.NetworkSettings>;
+  notifications: Partial<hub.NotificationSettings>;
+  debug: Partial<hub.DebugSettings>;
+}> = {}): hub.SettingsView {
+  return {
+    general: {
+      language: 'en',
+      autostart: false,
+      startMinimized: false,
+      ...overrides.general,
+    },
+    network: {
+      defaultMode: 'tun',
+      tunCidr: '',
+      tunName: '',
+      socksPort: 10808,
+      httpPort: 0,
+      ...overrides.network,
+    },
+    subscriptions: { defaultUpdateInterval: 0, userAgent: '' },
+    notifications: {
+      onConnected: true,
+      onDisconnected: false,
+      quotaLow: false,
+      onSubSynced: true,
+      ...overrides.notifications,
+    },
+    debug: { logLevel: 'info', ...overrides.debug },
+    about: { version: '', gitRev: '', buildDate: '' },
+    security: { method: '', available: false },
+  } as unknown as hub.SettingsView;
+}
+
+describe('backendToFrontend', () => {
+  it('maps all happy-path fields', () => {
+    const view = makeView({
+      general: { language: 'ru', autostart: true, startMinimized: true },
+      network: { defaultMode: 'tun', socksPort: 12345 },
+      notifications: { onConnected: false, onSubSynced: false },
+      debug: { logLevel: 'debug' },
+    });
+    const patch = backendToFrontend(view);
+    expect(patch).toEqual({
+      language: 'ru',
+      autostart: true,
+      startMinimized: true,
+      defaultMode: 'tun',
+      socksPort: 12345,
+      tunCidr: '',
+      httpPort: 0,
+      defaultUpdateInterval: 0,
+      userAgent: '',
+      onConnected: false,
+      onDisconnected: false,
+      onQuotaLow: false,
+      onSubSynced: false,
+      logLevel: 'debug',
+    });
+  });
+
+  it("translates defaultMode 'sysproxy' to defaultMode 'sysproxy'", () => {
+    const view = makeView({ network: { defaultMode: 'sysproxy' } });
+    const patch = backendToFrontend(view);
+    expect(patch.defaultMode).toBe('sysproxy');
+  });
+
+  it("omits defaultMode when defaultMode is 'auto'", () => {
+    const view = makeView({ network: { defaultMode: 'auto' } });
+    const patch = backendToFrontend(view);
+    expect(patch).not.toHaveProperty('defaultMode');
+  });
+
+  it("omits language when general.language is 'auto'", () => {
+    const view = makeView({ general: { language: 'auto' } });
+    const patch = backendToFrontend(view);
+    expect(patch).not.toHaveProperty('language');
+  });
+
+  it("omits logLevel when debug.logLevel is 'warn'", () => {
+    const view = makeView({ debug: { logLevel: 'warn' } });
+    const patch = backendToFrontend(view);
+    expect(patch).not.toHaveProperty('logLevel');
+  });
+
+  it('does not include unmapped frontend keys', () => {
+    const view = makeView();
+    const patch = backendToFrontend(view);
+    // Fields with no corresponding backend value in the makeView baseline.
+    expect(patch).not.toHaveProperty('dnsMode');
+    expect(patch).not.toHaveProperty('dnsCustom');
+    expect(patch).not.toHaveProperty('allowLan');
+    expect(patch).not.toHaveProperty('ipv6Mode');
+    expect(patch).not.toHaveProperty('notifySound');
+    expect(patch).not.toHaveProperty('tunMtu');
+  });
+});
+
+describe('backendToFrontend > network', () => {
+  it('maps the full network shape including DNS', () => {
+    const view = {
+      general: {},
+      network: {
+        defaultMode: 'sysproxy',
+        tunCidr: '10.0.0.1/24',
+        tunMtu: 1400,
+        socksPort: 1080,
+        httpPort: 8888,
+        allowLan: true,
+        ipv6Mode: 'disabled',
+        dns: { mode: 'custom', servers: ['1.1.1.1', '9.9.9.9'] },
+      },
+      notifications: {},
+      debug: {},
+    } as unknown as hub.SettingsView;
+    const patch = backendToFrontend(view);
+    expect(patch.defaultMode).toBe('sysproxy');
+    expect(patch.tunCidr).toBe('10.0.0.1/24');
+    expect(patch.tunMtu).toBe(1400);
+    expect(patch.httpPort).toBe(8888);
+    expect(patch.allowLan).toBe(true);
+    expect(patch.ipv6Mode).toBe('disabled');
+    expect(patch.dnsMode).toBe('custom');
+    expect(patch.dnsCustom).toBe('1.1.1.1, 9.9.9.9');
+  });
+});
+
+describe('backendToFrontend > killSwitch', () => {
+  it('maps killSwitch fields', () => {
+    const view = {
+      general: {},
+      network: {},
+      killSwitch: { enabled: false, alwaysOn: true },
+      notifications: {},
+      debug: {},
+    } as unknown as hub.SettingsView;
+    const patch = backendToFrontend(view);
+    expect(patch.killSwitchEnabled).toBe(false);
+    expect(patch.killSwitchAlwaysOn).toBe(true);
+  });
+});
+
+describe('backendToFrontend > notifications', () => {
+  it('maps the full notifications shape', () => {
+    const view = {
+      general: {},
+      network: {},
+      notifications: {
+        onConnected: true,
+        onDisconnected: false,
+        quotaLow: true,
+        onSubSynced: false,
+        sound: true,
+      },
+      debug: {},
+    } as unknown as hub.SettingsView;
+    const patch = backendToFrontend(view);
+    expect(patch.onConnected).toBe(true);
+    expect(patch.onDisconnected).toBe(false);
+    expect(patch.onQuotaLow).toBe(true);
+    expect(patch.onSubSynced).toBe(false);
+    expect(patch.notifySound).toBe(true);
+  });
+});
+
+describe('backendToFrontend > debug', () => {
+  it('passes through trace log level', () => {
+    const view = {
+      general: {},
+      network: {},
+      notifications: {},
+      debug: { logLevel: 'trace' },
+    } as unknown as hub.SettingsView;
+    const patch = backendToFrontend(view);
+    expect(patch.logLevel).toBe('trace');
+  });
+});
+
+describe('backendToFrontend > general', () => {
+  it('maps general.autostart -> autostart', () => {
+    const view = {
+      general: { language: 'ru', autostart: true, startMinimized: false },
+      network: {},
+      notifications: {},
+      debug: {},
+    } as unknown as hub.SettingsView;
+    const patch = backendToFrontend(view);
+    expect(patch.autostart).toBe(true);
+    expect(patch.language).toBe('ru');
+    expect(patch.startMinimized).toBe(false);
+  });
+});
+
+describe('frontendToBackend', () => {
+  it('returns empty map for empty patch', () => {
+    expect(frontendToBackend({}).size).toBe(0);
+  });
+
+  it('routes a single general field to the general section', () => {
+    const map = frontendToBackend({ language: 'ru' });
+    expect(map.size).toBe(1);
+    expect(map.get('general')).toEqual({ language: 'ru' });
+  });
+
+  it('routes a single network field to the network section', () => {
+    const map = frontendToBackend({ socksPort: 1080 });
+    expect(map.get('network')).toEqual({ socksPort: 1080 });
+  });
+
+  it('splits a multi-section patch into per-section entries', () => {
+    const map = frontendToBackend({
+      language: 'en',
+      socksPort: 1080,
+      onConnected: true,
+    });
+    expect(map.get('general')).toEqual({ language: 'en' });
+    expect(map.get('network')).toEqual({ socksPort: 1080 });
+    expect(map.get('notifications')).toEqual({ onConnected: true });
+  });
+
+  it('transforms dnsCustom CSV into dnsServers array', () => {
+    const map = frontendToBackend({ dnsCustom: '1.1.1.1, 8.8.8.8 ,,1.0.0.1' });
+    expect(map.get('network')).toEqual({
+      dnsServers: ['1.1.1.1', '8.8.8.8', '1.0.0.1'],
+    });
+  });
+
+  it('produces dnsServers: [] when dnsCustom is the empty string', () => {
+    expect(frontendToBackend({ dnsCustom: '' }).get('network')).toEqual({
+      dnsServers: [],
+    });
+  });
+
+  it('routes onQuotaLow (frontend) to quotaLow (backend) under notifications', () => {
+    const map = frontendToBackend({ onQuotaLow: true });
+    expect(map.get('notifications')).toEqual({ quotaLow: true });
+  });
+
+  it('routes killSwitchEnabled to enabled under killswitch section', () => {
+    const map = frontendToBackend({ killSwitchEnabled: false, killSwitchAlwaysOn: true });
+    expect(map.get('killswitch')).toEqual({ enabled: false, alwaysOn: true });
+  });
+
+  it('omits sections with no mapped keys', () => {
+    const map = frontendToBackend({ language: 'en' });
+    expect(map.has('network')).toBe(false);
+    expect(map.has('notifications')).toBe(false);
+  });
+});

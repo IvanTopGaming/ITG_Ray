@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+  }
+  body {
+    font-family: theme("fontFamily.sans");
+    color: rgb(255 255 255 / 0.92);
+    background: theme("backgroundImage.app-bg");
+    background-attachment: fixed;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: rgb(126 212 255 / 0.3);
+  }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+  /* Hide native scrollbars across all overflow containers — the dark glassy
+     theme has no place for a default Chromium WebView2 track. Functionality
+     (mouse wheel, touch, keyboard) is preserved; only the visual indicator
+     is removed. */
+  * {
+    scrollbar-width: none;          /* Firefox / standard */
+    -ms-overflow-style: none;       /* legacy IE/Edge */
+  }
+  *::-webkit-scrollbar {
+    display: none;                  /* WebKit / Chromium / WebView2 */
+  }
+}
