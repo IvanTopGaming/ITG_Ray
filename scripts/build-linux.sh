@@ -13,14 +13,6 @@ LDFLAGS="-s -w -X main.Version=$VERSION"
 echo ">> building itgray-cli (version=$VERSION)"
 GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o "$OUT/itgray-cli" "$ROOT/cmd/itgray-cli"
 
-echo ">> building ITGRay (wails GUI, version=$VERSION)"
-GUI_ARTIFACT="$ROOT/cmd/itgray-gui/build/bin/ITGRay"
-( cd "$ROOT/cmd/itgray-gui" && \
-  wails build -clean -platform linux/amd64 -tags webkit2_41 \
-    -ldflags "-X main.Version=$VERSION" -o "ITGRay" )
-[[ -f "$GUI_ARTIFACT" ]] || { echo "wails build did not produce $GUI_ARTIFACT" >&2; exit 1; }
-mv "$GUI_ARTIFACT" "$OUT/ITGRay"
-
 SINGBOX_TAGS="with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_naive_outbound,with_purego,badlinkname,tfogo_checklinkname0"
 SINGBOX_LDFLAGS="-s -w -buildid= -X internal/godebug.defaultGODEBUG=multipathtcp=0 -checklinkname=0"
 
