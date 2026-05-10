@@ -6,8 +6,8 @@ import {
   Stop as HelperStop,
   Restart as HelperRestart,
   Reinstall as HelperReinstall,
-} from '../../wailsjs/go/bindings/HelperService';
-import { Environment } from '../../wailsjs/runtime/runtime';
+} from '@/lib/itg/HelperService';
+import { Environment } from '@/lib/itg/runtime';
 
 export type HelperState = 'missing' | 'stopped' | 'running' | 'error' | 'pending';
 

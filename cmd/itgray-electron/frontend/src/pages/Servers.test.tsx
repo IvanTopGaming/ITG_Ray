@@ -30,7 +30,7 @@ vi.mock("@/lib/dashStore", () => ({
 }));
 
 const toggleFavoriteMock = vi.fn();
-vi.mock("../../wailsjs/go/bindings/ServersService", () => ({
+vi.mock("@/lib/itg/ServersService", () => ({
   ToggleFavorite: (...args: any[]) => toggleFavoriteMock(...args),
 }));
 
@@ -39,7 +39,7 @@ vi.mock("@/lib/settings", () => ({
   markActiveServerEdited: () => markActiveServerEditedMock(),
 }));
 
-vi.mock("../../wailsjs/runtime/runtime", () => ({
+vi.mock("@/lib/itg/runtime", () => ({
   EventsOn: () => () => {},
 }));
 

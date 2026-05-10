@@ -7,11 +7,11 @@ const updateMock = vi.fn();
 const eventsOnMock = vi.fn();
 const eventsOffMock = vi.fn();
 
-vi.mock('../../wailsjs/go/bindings/SettingsService', () => ({
+vi.mock('@/lib/itg/SettingsService', () => ({
   Get: (...args: unknown[]) => getMock(...args),
   Update: (...args: unknown[]) => updateMock(...args),
 }));
-vi.mock('../../wailsjs/runtime/runtime', () => ({
+vi.mock('@/lib/itg/runtime', () => ({
   EventsOn: (...args: unknown[]) => eventsOnMock(...args),
   EventsOff: (...args: unknown[]) => eventsOffMock(...args),
 }));

@@ -9,7 +9,7 @@ const mockSyncOne = vi.fn();
 const mockSyncAll = vi.fn();
 const mockEventsOn = vi.fn((_eventName: string, _callback: (...data: unknown[]) => void) => () => {});
 
-vi.mock("../../wailsjs/go/bindings/SubsService", () => ({
+vi.mock("@/lib/itg/SubsService", () => ({
   List: (...args: unknown[]) => mockList(...args),
   Add: (...args: unknown[]) => mockAdd(...args),
   Edit: (...args: unknown[]) => mockEdit(...args),
@@ -17,7 +17,7 @@ vi.mock("../../wailsjs/go/bindings/SubsService", () => ({
   SyncOne: (...args: unknown[]) => mockSyncOne(...args),
   SyncAll: (...args: unknown[]) => mockSyncAll(...args),
 }));
-vi.mock("../../wailsjs/runtime/runtime", () => ({
+vi.mock("@/lib/itg/runtime", () => ({
   EventsOn: (eventName: string, callback: (...data: unknown[]) => void) => mockEventsOn(eventName, callback),
 }));
 

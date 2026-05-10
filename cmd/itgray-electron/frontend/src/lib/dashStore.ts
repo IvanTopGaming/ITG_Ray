@@ -1,9 +1,9 @@
 import { useSyncExternalStore } from "react";
-import { GetSnapshot } from "../../wailsjs/go/bindings/AppService";
-import { Connect, Disconnect } from "../../wailsjs/go/bindings/RunService";
-import { TestLatency } from "../../wailsjs/go/bindings/ServersService";
-import { EventsOn } from "../../wailsjs/runtime/runtime";
-import type { hub } from "../../wailsjs/go/models";
+import { GetSnapshot } from "@/lib/itg/AppService";
+import { Connect, Disconnect } from "@/lib/itg/RunService";
+import { TestLatency } from "@/lib/itg/ServersService";
+import { EventsOn } from "@/lib/itg/runtime";
+import type { hub } from "@/lib/itg/models";
 
 type ServerView = hub.ServerView;
 type Snapshot = hub.Snapshot;

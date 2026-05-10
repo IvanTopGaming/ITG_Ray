@@ -1,4 +1,4 @@
-import type { hub } from '../../wailsjs/go/models';
+import type { hub } from '@/lib/itg/models';
 import type { Settings } from './settings';
 
 /**

@@ -10,7 +10,7 @@ const restartMock   = vi.fn();
 const reinstallMock = vi.fn();
 const envMock       = vi.fn();
 
-vi.mock('../../wailsjs/go/bindings/HelperService', () => ({
+vi.mock('@/lib/itg/HelperService', () => ({
   Status:    (...args: unknown[]) => statusMock(...args),
   Install:   (...args: unknown[]) => installMock(...args),
   Start:     (...args: unknown[]) => startMock(...args),
@@ -18,7 +18,7 @@ vi.mock('../../wailsjs/go/bindings/HelperService', () => ({
   Restart:   (...args: unknown[]) => restartMock(...args),
   Reinstall: (...args: unknown[]) => reinstallMock(...args),
 }));
-vi.mock('../../wailsjs/runtime/runtime', () => ({
+vi.mock('@/lib/itg/runtime', () => ({
   Environment: (...args: unknown[]) => envMock(...args),
 }));
 

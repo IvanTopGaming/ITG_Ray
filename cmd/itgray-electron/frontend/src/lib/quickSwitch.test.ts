@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { pickQuickSwitch } from "./quickSwitch";
-import type { hub } from "../../wailsjs/go/models";
+import type { hub } from "@/lib/itg/models";
 
 type ServerView = hub.ServerView;
 

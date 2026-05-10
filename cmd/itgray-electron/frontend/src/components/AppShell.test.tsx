@@ -11,7 +11,7 @@ vi.mock('@/lib/dashStore', () => ({
   dashReconnect: (id: string, mode: string) => dashReconnectMock(id, mode),
 }));
 
-vi.mock('../../wailsjs/go/bindings/SettingsService', () => ({
+vi.mock('@/lib/itg/SettingsService', () => ({
   Get: vi.fn().mockResolvedValue({
     general: {},
     network: {},
@@ -21,7 +21,7 @@ vi.mock('../../wailsjs/go/bindings/SettingsService', () => ({
   Update: vi.fn().mockResolvedValue({}),
 }));
 
-vi.mock('../../wailsjs/runtime/runtime', () => ({
+vi.mock('@/lib/itg/runtime', () => ({
   EventsOn: vi.fn(),
   EventsOff: vi.fn(),
   WindowMinimise: vi.fn(),

@@ -1,6 +1,6 @@
 import { useSyncExternalStore, useCallback } from 'react';
-import { Get as GetSettings, Update as UpdateSettings } from '../../wailsjs/go/bindings/SettingsService';
-import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime';
+import { Get as GetSettings, Update as UpdateSettings } from '@/lib/itg/SettingsService';
+import { EventsOn, EventsOff } from '@/lib/itg/runtime';
 import { backendToFrontend, frontendToBackend } from './settingsAdapter';
 
 const HUB_EVENT_SETTINGS = 'settings:changed'; // mirrors hub.EventSettings in cmd/itgray-gui/hub/events.go

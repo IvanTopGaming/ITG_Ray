@@ -26,7 +26,7 @@ import {
 import { useIp, ipRefresh, ipReset } from "@/lib/ipStore";
 import { useSettings } from "@/lib/settings";
 import { pickQuickSwitch } from "@/lib/quickSwitch";
-import type { hub } from "../../wailsjs/go/models";
+import type { hub } from "@/lib/itg/models";
 
 type ServerView = hub.ServerView;
 

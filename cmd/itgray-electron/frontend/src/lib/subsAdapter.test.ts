@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hub } from "../../wailsjs/go/models";
+import { hub } from "@/lib/itg/models";
 import { backendToFrontend } from "./subsAdapter";
 
 function makeView(overrides: Partial<hub.SubView> = {}): hub.SubView {

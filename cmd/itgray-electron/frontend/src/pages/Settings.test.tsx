@@ -200,7 +200,7 @@ describe('numeric draft pattern (MTU input)', () => {
 // getComputedStyle in jsdom, which is harmless and matches the rest of
 // the suite.
 
-vi.mock('../../wailsjs/go/bindings/SettingsService', () => ({
+vi.mock('@/lib/itg/SettingsService', () => ({
   Get: vi.fn().mockResolvedValue({
     general: { language: 'en', autostart: false, startMinimized: false },
     network: {
@@ -236,7 +236,7 @@ vi.mock('../../wailsjs/go/bindings/SettingsService', () => ({
   Update: vi.fn().mockResolvedValue({}),
 }));
 
-vi.mock('../../wailsjs/runtime/runtime', () => ({
+vi.mock('@/lib/itg/runtime', () => ({
   EventsOn: vi.fn(),
   EventsOff: vi.fn(),
   Environment: vi.fn().mockResolvedValue({ platform: 'linux' }),
@@ -246,7 +246,7 @@ vi.mock('../../wailsjs/runtime/runtime', () => ({
   Quit: vi.fn(),
 }));
 
-vi.mock('../../wailsjs/go/bindings/HelperService', () => ({
+vi.mock('@/lib/itg/HelperService', () => ({
   Status: vi.fn().mockResolvedValue({ state: 'unsupported' }),
   Install: vi.fn(),
   Start: vi.fn(),
@@ -258,7 +258,7 @@ vi.mock('../../wailsjs/go/bindings/HelperService', () => ({
 
 import { Settings as SettingsPage } from './Settings';
 import { __resetForTests } from '@/lib/settings';
-import * as SettingsService from '../../wailsjs/go/bindings/SettingsService';
+import * as SettingsService from '@/lib/itg/SettingsService';
 
 class MockIntersectionObserver {
   observe = vi.fn();

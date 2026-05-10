@@ -5,9 +5,9 @@ import {
   Edit,
   List,
   Remove,
-} from "../../wailsjs/go/bindings/ServersService";
-import { EventsOn } from "../../wailsjs/runtime/runtime";
-import type { hub } from "../../wailsjs/go/models";
+} from "@/lib/itg/ServersService";
+import { EventsOn } from "@/lib/itg/runtime";
+import type { hub } from "@/lib/itg/models";
 
 export type ServersState = {
   servers: hub.ServerView[];

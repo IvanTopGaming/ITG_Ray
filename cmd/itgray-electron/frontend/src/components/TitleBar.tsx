@@ -4,7 +4,7 @@ import {
   WindowToggleMaximise,
   WindowIsMaximised,
   WindowClose,
-} from "../../wailsjs/runtime/runtime";
+} from "@/lib/itg/runtime";
 
 // Custom 32px title bar for the frameless Wails window. Provides a
 // drag region (CSS --wails-draggable: drag) and Windows-style

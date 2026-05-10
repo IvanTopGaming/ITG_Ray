@@ -8,23 +8,23 @@ const { eventHandlers, getSnapshotMock, runConnectMock, runDisconnectMock, testL
   testLatencyMock: vi.fn(),
 }));
 
-vi.mock("../../wailsjs/runtime/runtime", () => ({
+vi.mock("@/lib/itg/runtime", () => ({
   EventsOn: (name: string, cb: (...args: any[]) => void) => {
     eventHandlers[name] = cb;
     return () => { delete eventHandlers[name]; };
   },
 }));
 
-vi.mock("../../wailsjs/go/bindings/AppService", () => ({
+vi.mock("@/lib/itg/AppService", () => ({
   GetSnapshot: () => getSnapshotMock(),
 }));
 
-vi.mock("../../wailsjs/go/bindings/RunService", () => ({
+vi.mock("@/lib/itg/RunService", () => ({
   Connect: (id: string, mode: string) => runConnectMock(id, mode),
   Disconnect: () => runDisconnectMock(),
 }));
 
-vi.mock("../../wailsjs/go/bindings/ServersService", () => ({
+vi.mock("@/lib/itg/ServersService", () => ({
   TestLatency: (id: string) => testLatencyMock(id),
 }));
 

@@ -6,8 +6,8 @@ import {
   Remove as RemoveSub,
   SyncOne as SyncOneSub,
   SyncAll as SyncAllSubs,
-} from "../../wailsjs/go/bindings/SubsService";
-import { EventsOn } from "../../wailsjs/runtime/runtime";
+} from "@/lib/itg/SubsService";
+import { EventsOn } from "@/lib/itg/runtime";
 import { backendToFrontend, type Sub } from "./subsAdapter";
 
 export type LoadState =

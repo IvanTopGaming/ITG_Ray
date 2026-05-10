@@ -13,8 +13,8 @@ import { StatusPill } from '@/components/controls/StatusPill';
 import { useHelperState } from '@/lib/helperAdapter';
 import type { HelperState } from '@/lib/helperAdapter';
 import { ScrollSpy, useScrollSpy, scrollToSection } from '@/components/controls/ScrollSpy';
-import { Get as GetSettings } from '../../wailsjs/go/bindings/SettingsService';
-import type { hub } from '../../wailsjs/go/models';
+import { Get as GetSettings } from '@/lib/itg/SettingsService';
+import type { hub } from '@/lib/itg/models';
 
 const pageVariants: Variants = {
   hidden: { opacity: 0 },

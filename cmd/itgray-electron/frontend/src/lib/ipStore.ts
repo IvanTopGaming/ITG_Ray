@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { GetPublicIP } from "../../wailsjs/go/bindings/AppService";
+import { GetPublicIP } from "@/lib/itg/AppService";
 
 export type IpState = {
   value: string | null;

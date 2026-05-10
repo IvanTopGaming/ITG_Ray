@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const getPublicIPMock = vi.fn();
-vi.mock("../../wailsjs/go/bindings/AppService", () => ({
+vi.mock("@/lib/itg/AppService", () => ({
   GetPublicIP: () => getPublicIPMock(),
 }));
 

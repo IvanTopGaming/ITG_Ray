@@ -31,8 +31,8 @@ import {
   dashProbeAll,
 } from "@/lib/dashStore";
 import { markActiveServerEdited } from "@/lib/settings";
-import { ToggleFavorite } from "../../wailsjs/go/bindings/ServersService";
-import type { hub } from "../../wailsjs/go/models";
+import { ToggleFavorite } from "@/lib/itg/ServersService";
+import type { hub } from "@/lib/itg/models";
 
 type Sort = "latency" | "name";
 

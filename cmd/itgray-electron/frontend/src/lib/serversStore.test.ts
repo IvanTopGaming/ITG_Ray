@@ -15,7 +15,7 @@ const addMock = vi.fn();
 const editMock = vi.fn();
 const removeMock = vi.fn();
 
-vi.mock("../../wailsjs/go/bindings/ServersService", () => ({
+vi.mock("@/lib/itg/ServersService", () => ({
   List: (...args: any[]) => listMock(...args),
   Add: (...args: any[]) => addMock(...args),
   Edit: (...args: any[]) => editMock(...args),
@@ -24,7 +24,7 @@ vi.mock("../../wailsjs/go/bindings/ServersService", () => ({
 
 const eventListeners = new Map<string, ((data: any) => void)[]>();
 
-vi.mock("../../wailsjs/runtime/runtime", () => ({
+vi.mock("@/lib/itg/runtime", () => ({
   EventsOn: (name: string, cb: (data: any) => void) => {
     const list = eventListeners.get(name) ?? [];
     list.push(cb);
