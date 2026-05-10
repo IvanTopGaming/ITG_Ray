@@ -108,3 +108,11 @@ export function WindowIsMaximised(): Promise<boolean> {
   const ns = (window.itg as any).window;
   return ns?.isMaximised ? ns.isMaximised() : Promise.resolve(false);
 }
+
+// WindowClose closes the visible window (NOT the app). With Phase 5's
+// tray-only mode (window-all-closed is a no-op), this hides the UI to
+// the tray; the user re-summons via tray click. To actually quit the
+// app, use the tray's "Quit" menu item (which calls app.quit).
+export function WindowClose(): void {
+  void (window.itg as any).window?.close?.();
+}

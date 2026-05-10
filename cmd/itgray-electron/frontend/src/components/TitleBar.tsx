@@ -3,7 +3,7 @@ import {
   WindowMinimise,
   WindowToggleMaximise,
   WindowIsMaximised,
-  Quit,
+  WindowClose,
 } from "../../wailsjs/runtime/runtime";
 
 // Custom 32px title bar for the frameless Wails window. Provides a
@@ -98,7 +98,7 @@ export function TitleBar() {
         </button>
         <button
           type="button"
-          onClick={() => void Quit()}
+          onClick={() => void WindowClose()}
           aria-label="Close"
           className="flex h-full w-12 items-center justify-center text-white/55 transition-colors hover:bg-danger hover:text-white"
         >
