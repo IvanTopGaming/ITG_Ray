@@ -1,0 +1,21 @@
+// cmd/itgray-electron/src/preload/preload.ts
+import { contextBridge, ipcRenderer } from "electron";
+import type { RpcMethod, RpcParams, RpcResult } from "../shared/protocol";
+
+function rpc<M extends RpcMethod>(method: M, params?: RpcParams<M>): Promise<RpcResult<M>> {
+  return ipcRenderer.invoke("rpc", method, params ?? null);
+}
+
+function on(topic: string, cb: (payload: unknown) => void): () => void {
+  const channel = `event:${topic}`;
+  const handler = (_e: Electron.IpcRendererEvent, payload: unknown) => cb(payload);
+  ipcRenderer.on(channel, handler);
+  return () => ipcRenderer.off(channel, handler);
+}
+
+contextBridge.exposeInMainWorld("itg", {
+  app: {
+    ping: () => rpc("app.ping"),
+  },
+  on,
+});
