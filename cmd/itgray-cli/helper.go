@@ -163,11 +163,26 @@ func newHelperCmd() *cobra.Command {
 	return h
 }
 
-// defaultHelperPath returns the typical install location alongside itgray-cli.
+// defaultHelperPath returns the typical install location of itgray-helper.exe.
+// Tries the Wails GUI sibling layout first (helper next to cli in the same
+// dir), then the Electron NSIS bundled layout (cli at resources/cli/, helper
+// at resources/helper/, per BUNDLE_LAYOUT in src/main/paths.ts).
 func defaultHelperPath() string {
 	exe, err := os.Executable()
 	if err != nil {
 		return "itgray-helper.exe"
 	}
-	return filepath.Join(filepath.Dir(exe), "itgray-helper.exe")
+	dir := filepath.Dir(exe)
+	if sibling := filepath.Join(dir, "itgray-helper.exe"); fileExists(sibling) {
+		return sibling
+	}
+	if bundled := filepath.Join(dir, "..", "helper", "itgray-helper.exe"); fileExists(bundled) {
+		return bundled
+	}
+	return filepath.Join(dir, "itgray-helper.exe")
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }

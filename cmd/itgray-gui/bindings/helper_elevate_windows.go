@@ -28,7 +28,29 @@ func defaultCLIPath() string {
 	if err != nil {
 		return "itgray-cli.exe"
 	}
-	return filepath.Join(filepath.Dir(exe), "itgray-cli.exe")
+	dir := filepath.Dir(exe)
+	// Wails GUI layout: itgray-cli.exe is a sibling of ITGRay.exe in
+	// %ProgramFiles%\ITG Ray\ (or %LOCALAPPDATA%\Programs\ITG Ray\ for
+	// per-user installs). Try this first.
+	if sibling := filepath.Join(dir, "itgray-cli.exe"); fileExists(sibling) {
+		return sibling
+	}
+	// Electron NSIS layout: bridge runs from
+	// %LOCALAPPDATA%\Programs\ITG Ray\resources\bridge\itgray-bridge.exe;
+	// cli is bundled at ..\cli\itgray-cli.exe per BUNDLE_LAYOUT in
+	// cmd/itgray-electron/src/main/paths.ts.
+	if bundled := filepath.Join(dir, "..", "cli", "itgray-cli.exe"); fileExists(bundled) {
+		return bundled
+	}
+	// Fall back to the Wails-style path so elevateCLI returns a clear
+	// "not found at <path>" error rather than silently picking something
+	// arbitrary from %PATH%.
+	return filepath.Join(dir, "itgray-cli.exe")
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }
 
 // elevateCLI runs `itgray-cli.exe <args...>` via PowerShell with the RunAs

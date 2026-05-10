@@ -81,12 +81,25 @@ function toBridgeTopic(name: string): string {
 // query and a Quit() shortcut. The Electron build does not currently need real values
 // here — Phase 5 (native shell) will replace these via window.itg if anything depends
 // on them. helperAdapter.ts caches the result, so a stable async resolver is fine.
+function detectPlatform(): string {
+  // Map navigator.platform to the canonical Wails-style strings the
+  // renderer expects ("windows" / "linux" / "darwin"). Raw navigator.
+  // platform returns "Win32" / "Linux x86_64" / "MacIntel" — using the
+  // raw value broke helperAdapter's `platform === 'windows'` check
+  // (Settings → Helper showed "uses native APIs on this platform" on
+  // actual Windows builds because "win32" !== "windows").
+  if (typeof navigator === "undefined") return "unknown";
+  const p = String((navigator as any).platform ?? "").toLowerCase();
+  if (p.startsWith("win")) return "windows";
+  if (p.startsWith("mac")) return "darwin";
+  if (p.startsWith("linux")) return "linux";
+  return p || "unknown";
+}
+
 export function Environment(): Promise<{ buildType: string; platform: string; arch: string }> {
   return Promise.resolve({
     buildType: "production",
-    platform: typeof navigator !== "undefined" && (navigator as any).platform
-      ? String((navigator as any).platform).toLowerCase()
-      : "unknown",
+    platform: detectPlatform(),
     arch: "unknown",
   });
 }
