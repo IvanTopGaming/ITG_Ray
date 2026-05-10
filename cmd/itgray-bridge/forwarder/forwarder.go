@@ -53,10 +53,53 @@ func (f Forwarder) Run(ctx context.Context) {
 	ch := f.Hub.Subscribe(64)
 	defer f.Hub.Unsubscribe(ch)
 
+	f.drain(ctx, ch)
+}
+
+// Start subscribes to the hub synchronously (so no events are missed
+// between Start returning and the first Publish), then launches a
+// goroutine that forwards until ctx is cancelled. The returned function
+// blocks until the forwarder has flushed all buffered events and exited;
+// call it (e.g. defer fwd()) after d.Serve returns so in-flight events
+// are not lost when main exits. Use this from main instead of
+// "go f.Run(ctx)" to eliminate the subscribe-before-publish race.
+func (f Forwarder) Start(ctx context.Context) (wait func()) {
+	if f.Hub == nil || f.Bus == nil {
+		return func() {}
+	}
+	ch := f.Hub.Subscribe(64)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer f.Hub.Unsubscribe(ch)
+		f.drain(ctx, ch)
+	}()
+	return func() { <-done }
+}
+
+// drain reads from ch until ctx is done or ch is closed. When ctx is
+// cancelled, any events already buffered in ch are flushed before
+// returning so in-flight hub publishes are not silently dropped.
+func (f Forwarder) drain(ctx context.Context, ch <-chan hub.Event) {
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			// Flush remaining buffered events before exiting.
+			for {
+				select {
+				case ev, ok := <-ch:
+					if !ok {
+						return
+					}
+					topic, known := hubToProtocol[ev.Name]
+					if !known {
+						continue
+					}
+					f.Bus.Emit(topic, ev.Payload)
+				default:
+					return
+				}
+			}
 		case ev, ok := <-ch:
 			if !ok {
 				return

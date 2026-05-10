@@ -16,6 +16,7 @@ import (
 
 	"github.com/itg-team/itg-ray/cmd/itgray-bridge/bus"
 	"github.com/itg-team/itg-ray/cmd/itgray-bridge/dispatcher"
+	"github.com/itg-team/itg-ray/cmd/itgray-bridge/forwarder"
 	"github.com/itg-team/itg-ray/cmd/itgray-bridge/handlers"
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/bindings"
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/chainctl"
@@ -245,10 +246,8 @@ func main() {
 	d.Register("run.connect", run.Connect)
 	d.Register("run.disconnect", run.Disconnect)
 
-	// Bus + hub are held in scope so Phase 4 can attach a forwarder that
-	// subscribes to h's events and emits JSON-RPC notifications via bus.
-	_ = bus.New(out)
-	_ = h
+	// Bus serializes outbound JSON-RPC notifications onto stdout.
+	b := bus.New(out)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -259,8 +258,26 @@ func main() {
 		cancel()
 	}()
 
+	// Start the hub→bus forwarder. Subscribes synchronously (so no
+	// events are lost if the dispatcher delivers a request immediately),
+	// then drains in a goroutine until ctx is cancelled. waitFwd blocks
+	// until the goroutine has flushed any buffered events — call it after
+	// d.Serve so in-flight notifications reach stdout before main exits.
+	waitFwd := forwarder.Forwarder{Hub: h, Bus: b}.Start(ctx)
+
+	// Announce bridge readiness. Renderer gates mutation buttons on
+	// this state; "restarting"/"failed" are emitted by Electron main
+	// (it owns the spawn lifecycle), not by the bridge itself.
+	b.Emit("bridge.state", map[string]string{"state": "running"})
+
 	if err := d.Serve(ctx, os.Stdin, out); err != nil {
 		fmt.Fprintln(os.Stderr, "bridge: serve:", err)
 		os.Exit(1)
 	}
+
+	// Cancel context so the forwarder goroutine exits its drain loop,
+	// then wait for it to flush any buffered hub events before main
+	// returns (avoids silent drop of notifications queued mid-request).
+	cancel()
+	waitFwd()
 }
