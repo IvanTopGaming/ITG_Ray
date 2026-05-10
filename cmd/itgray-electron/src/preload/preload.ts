@@ -37,5 +37,24 @@ contextBridge.exposeInMainWorld("itg", {
     restart: () => rpc("helper.restart"),
     reinstall: () => rpc("helper.reinstall"),
   },
+  servers: {
+    list: () => rpc("servers.list"),
+    add: (params: { uri: string; name: string }) => rpc("servers.add", params),
+    edit: (params: { id: string; uri: string; name: string }) =>
+      rpc("servers.edit", params),
+    remove: (params: { id: string }) => rpc("servers.remove", params),
+    toggleFavorite: (params: { id: string }) =>
+      rpc("servers.toggleFavorite", params),
+    testLatency: (params: { id: string }) => rpc("servers.testLatency", params),
+  },
+  subs: {
+    list: () => rpc("subs.list"),
+    add: (params: { url: string; name: string }) => rpc("subs.add", params),
+    edit: (params: { id: string; url: string; name: string }) =>
+      rpc("subs.edit", params),
+    remove: (params: { id: string }) => rpc("subs.remove", params),
+    syncOne: (params: { id: string }) => rpc("subs.syncOne", params),
+    syncAll: () => rpc("subs.syncAll"),
+  },
   on,
 });
