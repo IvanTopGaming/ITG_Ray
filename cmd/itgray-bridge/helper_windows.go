@@ -17,12 +17,6 @@ import (
 // build graph.
 const helperPipe = `\\.\pipe\ITGRay.Helper.v1`
 
-// defaultTunName is the fixed TUN adapter name used when dialing the
-// helper service. Mirrors cmd/itgray-gui/configbuilder.go and
-// cmd/itgray-gui/chainctl/ctrl.go — defined locally so the bridge does
-// not depend on the Wails GUI main package.
-const defaultTunName = "ITGRay-TUN"
-
 // newHelperClient dials the helper named pipe and returns it wrapped in
 // a chainctl.HelperClient adapter. If the helper isn't running yet
 // (e.g. user hasn't installed the service), we return a "missing helper"

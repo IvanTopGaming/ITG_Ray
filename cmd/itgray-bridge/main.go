@@ -49,6 +49,25 @@ type serversFileStore struct{ path string }
 func (s serversFileStore) Load() ([]server.Server, error)  { return server.Load(s.path) }
 func (s serversFileStore) Save(list []server.Server) error { return server.Save(s.path, list) }
 
+// serverStoreGetter adapts the bindings.ServerStore (Load/Save) shape to
+// chainctl's per-id Get surface. Mirrors cmd/itgray-gui/main.go:246.
+type serverStoreGetter struct{ ss serversFileStore }
+
+// Get returns the server matching id, or (nil, nil) if not found. Errors
+// from Load propagate. Mirrors cmd/itgray-gui/main.go:250.
+func (g serverStoreGetter) Get(id string) (*server.Server, error) {
+	list, err := g.ss.Load()
+	if err != nil {
+		return nil, err
+	}
+	for i := range list {
+		if list[i].ID == id {
+			return &list[i], nil
+		}
+	}
+	return nil, nil
+}
+
 func defaultDataDir() string {
 	if v := os.Getenv("ITGRAY_DATA_DIR"); v != "" {
 		return v
