@@ -181,7 +181,9 @@ func TestSubsHandlersNilSvc(t *testing.T) {
 	}{
 		{"List", func() (any, error) { return h.List(context.Background(), nil) }},
 		{"Add", func() (any, error) { return h.Add(context.Background(), json.RawMessage(`{"url":"x","name":"y"}`)) }},
-		{"Edit", func() (any, error) { return h.Edit(context.Background(), json.RawMessage(`{"id":"a","url":"x","name":"y"}`)) }},
+		{"Edit", func() (any, error) {
+			return h.Edit(context.Background(), json.RawMessage(`{"id":"a","url":"x","name":"y"}`))
+		}},
 		{"Remove", func() (any, error) { return h.Remove(context.Background(), json.RawMessage(`{"id":"a"}`)) }},
 		{"SyncOne", func() (any, error) { return h.SyncOne(context.Background(), json.RawMessage(`{"id":"a"}`)) }},
 		{"SyncAll", func() (any, error) { return h.SyncAll(context.Background(), nil) }},

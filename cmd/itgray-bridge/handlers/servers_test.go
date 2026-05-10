@@ -11,20 +11,20 @@ import (
 )
 
 type fakeServers struct {
-	listOut  []hub.ServerView
-	listErr  error
-	addOut   hub.ServerView
-	addErr   error
-	editOut  hub.ServerView
-	editChg  bool
-	editErr  error
+	listOut   []hub.ServerView
+	listErr   error
+	addOut    hub.ServerView
+	addErr    error
+	editOut   hub.ServerView
+	editChg   bool
+	editErr   error
 	removeErr error
-	togErr   error
-	testErr  error
+	togErr    error
+	testErr   error
 
-	gotAddURI, gotAddName string
+	gotAddURI, gotAddName              string
 	gotEditID, gotEditURI, gotEditName string
-	gotRemoveID, gotTogID, gotTestID string
+	gotRemoveID, gotTogID, gotTestID   string
 }
 
 func (f *fakeServers) List() ([]hub.ServerView, error) {
@@ -161,7 +161,9 @@ func TestServersHandlersNilSvc(t *testing.T) {
 	}{
 		{"List", func() (any, error) { return h.List(context.Background(), nil) }},
 		{"Add", func() (any, error) { return h.Add(context.Background(), json.RawMessage(`{"uri":"x","name":"y"}`)) }},
-		{"Edit", func() (any, error) { return h.Edit(context.Background(), json.RawMessage(`{"id":"a","uri":"x","name":"y"}`)) }},
+		{"Edit", func() (any, error) {
+			return h.Edit(context.Background(), json.RawMessage(`{"id":"a","uri":"x","name":"y"}`))
+		}},
 		{"Remove", func() (any, error) { return h.Remove(context.Background(), json.RawMessage(`{"id":"a"}`)) }},
 		{"ToggleFavorite", func() (any, error) { return h.ToggleFavorite(context.Background(), json.RawMessage(`{"id":"a"}`)) }},
 		{"TestLatency", func() (any, error) { return h.TestLatency(context.Background(), json.RawMessage(`{"id":"a"}`)) }},
