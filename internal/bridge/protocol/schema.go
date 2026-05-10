@@ -112,8 +112,14 @@ type SettingsService interface {
 	Update(p SettingsUpdateParams) (hub.SettingsView, error)
 }
 
+// SettingsUpdateParams is a per-section partial update. Section is the
+// settings group name (matches hub.SettingsView field json tags:
+// "general", "network", "killSwitch", "subscriptions", "notifications",
+// "debug", "about", "security", "dns"). Patch is a flat object of the
+// fields to merge into that section. Mirrors bindings.SettingsService.Update.
 type SettingsUpdateParams struct {
-	Patch hub.SettingsView `json:"patch"`
+	Section string         `json:"section"`
+	Patch   map[string]any `json:"patch"`
 }
 
 // HelperService — methods under "helper." namespace (Win-only logic;

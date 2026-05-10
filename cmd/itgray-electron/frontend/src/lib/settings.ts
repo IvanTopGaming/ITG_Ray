@@ -136,7 +136,7 @@ function notifyListeners(): void {
 function loadFromBackend(): void {
   if (backendFetchStarted) return;
   backendFetchStarted = true;
-  if (typeof window === 'undefined' || !(window as any).go) return;
+  if (typeof window === 'undefined' || (!(window as any).go && !(window as any).itg)) return;
   let p;
   try {
     p = GetSettings();
@@ -164,7 +164,7 @@ function loadFromBackend(): void {
 // ──────────────────────────────────────────────────────────────────────
 
 function onSettingsEvent(): void {
-  if (typeof window === 'undefined' || !(window as any).go) return;
+  if (typeof window === 'undefined' || (!(window as any).go && !(window as any).itg)) return;
   // Short-circuit if a local optimistic patch is mid-debounce, or any
   // Update RPC is still in flight. flushNow itself issues a post-flush
   // GetSettings when the counter drops to zero, so dropping the echo
@@ -183,7 +183,7 @@ function onSettingsEvent(): void {
 
 function ensureEventsRegistered(): void {
   if (eventsRegistered) return;
-  if (typeof window === 'undefined' || !(window as any).go) return;
+  if (typeof window === 'undefined' || (!(window as any).go && !(window as any).itg)) return;
   EventsOn(HUB_EVENT_SETTINGS, onSettingsEvent);
   EventsOn('vpn:status', (payload: unknown) => {
     if (!payload || typeof payload !== 'object') return;

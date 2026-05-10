@@ -123,7 +123,8 @@ export interface ServersToggleFavoriteParams {
 }
 
 export interface SettingsUpdateParams {
-  patch: SettingsView;
+  section: string;
+  patch: Record<string, unknown>;
 }
 
 export interface SettingsView {
