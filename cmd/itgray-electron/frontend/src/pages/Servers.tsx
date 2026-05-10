@@ -666,15 +666,22 @@ const EMPTY_VLESS: VlessConfig = {
 function parseVless(uri: string): VlessConfig {
   const c: VlessConfig = { ...EMPTY_VLESS };
   if (!uri) return c;
+  // The WHATWG URL parser treats vless:// as a non-special scheme and does
+  // NOT extract userinfo/hostname into url.username/url.hostname (returns
+  // empty strings for both). Wails' bundled WebKit was more lenient; Chromium
+  // in Electron strictly follows the spec. Parse manually with a regex that
+  // tolerates the optional port, query, and fragment.
+  //   vless://<uuid>@<host>[:<port>][?<query>][#<fragment>]
+  const m = uri.trim().match(
+    /^vless:\/\/([^@]+)@([^:/?#]+)(?::(\d+))?(?:\?([^#]*))?(?:#(.*))?$/,
+  );
+  if (!m) return c;
   try {
-    // URL constructor only handles a few schemes well — vless:// is RFC-compliant
-    const url = new URL(uri.trim());
-    if (url.protocol !== "vless:") return c;
-    c.uuid = decodeURIComponent(url.username);
-    c.host = url.hostname;
-    c.port = url.port || "443";
-    c.name = decodeURIComponent(url.hash.slice(1));
-    const p = url.searchParams;
+    c.uuid = decodeURIComponent(m[1]);
+    c.host = m[2];
+    c.port = m[3] || "443";
+    c.name = m[5] ? decodeURIComponent(m[5]) : "";
+    const p = new URLSearchParams(m[4] || "");
     c.type = p.get("type") || "tcp";
     c.path = p.get("path") ? decodeURIComponent(p.get("path")!) : "";
     c.hostHeader = p.get("host") || "";
@@ -685,7 +692,7 @@ function parseVless(uri: string): VlessConfig {
     c.shortId = p.get("sid") || "";
     c.flow = p.get("flow") || "";
   } catch {
-    /* invalid — keep empty */
+    /* malformed encoding — keep empty */
   }
   return c;
 }
@@ -831,11 +838,13 @@ function ServerModal({
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
+      // initial={false} skips the enter animation: backdrop is fully
+      // visible immediately, avoiding Chromium's 1-frame backdrop-filter
+      // compositor lag. Exit fades out smoothly with the inner modal.
+      initial={false}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.18, ease: SNAP_EASE }}
+      className="fixed inset-0 z-50 flex items-center justify-center"
     >
       <button
         onClick={onClose}

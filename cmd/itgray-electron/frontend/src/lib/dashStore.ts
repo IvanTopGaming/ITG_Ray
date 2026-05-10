@@ -93,11 +93,19 @@ async function doBootstrap(): Promise<void> {
   try {
     const snap: Snapshot = await GetSnapshot();
     const servers = snap.servers ?? [];
+    const nextStatus = (snap.status as ChainStatus) || "idle";
+    // Preserve optimistic currentServer (set by dashConnect) when the chain
+    // is not actually connected — bootstrap is also triggered by mutation
+    // events (servers:changed from probes / favourites), and overwriting
+    // a user-selected card with backend's null on every probe-all batch
+    // visibly clears the "selected" highlight.
+    const preserveOptimistic =
+      nextStatus !== "connected" && state.currentServer && !snap.currentServer;
     setState({
       ...state,
-      status: (snap.status as ChainStatus) || "idle",
+      status: nextStatus,
       mode: (snap.mode as Mode) || "tun",
-      currentServer: snap.currentServer ?? null,
+      currentServer: preserveOptimistic ? state.currentServer : (snap.currentServer ?? null),
       helperState: (snap.helperState as DashState["helperState"]) || "missing",
       allServers: servers,
       bootstrapped: true,

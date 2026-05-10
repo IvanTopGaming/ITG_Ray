@@ -38,8 +38,12 @@ export function ConfirmDialog({
     <AnimatePresence>
       {open && (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
+          // initial={false} skips the enter animation: the backdrop appears
+          // instantly with backdrop-blur-md ready, dodging Chromium's 1-frame
+          // backdrop-filter compositor lag that made blur feel like it kicks
+          // in after the modal. Exit fades out smoothly so the close has the
+          // expected graceful animation.
+          initial={false}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
           className="fixed inset-0 z-50 flex items-center justify-center bg-bg-0/60 backdrop-blur-md"

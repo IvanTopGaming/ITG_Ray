@@ -510,11 +510,11 @@ function SubModal({
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
+      // initial={false} skips the enter animation — see Servers.tsx ServerModal.
+      initial={false}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.18, ease: SNAP_EASE }}
+      className="fixed inset-0 z-50 flex items-center justify-center"
     >
       <button
         onClick={onClose}
