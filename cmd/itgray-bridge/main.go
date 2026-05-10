@@ -18,10 +18,13 @@ import (
 	"github.com/itg-team/itg-ray/cmd/itgray-bridge/dispatcher"
 	"github.com/itg-team/itg-ray/cmd/itgray-bridge/handlers"
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/bindings"
+	"github.com/itg-team/itg-ray/cmd/itgray-gui/chainctl"
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
+	"github.com/itg-team/itg-ray/internal/config"
 	"github.com/itg-team/itg-ray/internal/hwid"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/subscription"
+	"github.com/itg-team/itg-ray/internal/sysproxy"
 )
 
 // BuildDate is overridden at build time via -ldflags "-X main.BuildDate=...".
@@ -91,16 +94,6 @@ func main() {
 	subStore := subscription.FileStore{Path: filepath.Join(dataDir, "subscriptions.json")}
 
 	configStore := bindings.NewConfigStore(configPath, handlers.Version, BuildDate)
-	appSvc := bindings.NewAppService(&bindings.AppDeps{
-		DataDir:      dataDir,
-		Version:      handlers.Version,
-		ServerStore:  serverStore,
-		SubStore:     subStore,
-		ConfigViewer: configStore,
-		// Chain, HelperProber, AppCtx are nil for Phase 3.A — Phase 3.C
-		// wires the live chain controller and helper prober. GetSnapshot
-		// tolerates nil and returns StatusIdle / "tun" / "missing".
-	})
 	onboardingSvc := bindings.NewOnboardingService(bindings.OnboardingDeps{DataDir: dataDir})
 
 	settingsSvc := bindings.NewSettingsService(bindings.SettingsDeps{
@@ -126,15 +119,6 @@ func main() {
 	}
 	deviceInfo := hwid.Info()
 
-	serversSvc := bindings.NewServersService(bindings.ServersDeps{
-		ServerStore: serverStore,
-		Hub:         h,
-		// ActiveServer is nil — Phase 3.C.2 wires chainctl. With nil,
-		// Remove cannot block deletion of the active server; the renderer
-		// disconnects first via run.disconnect (not yet wired) before
-		// removing, so this is safe for Phase 3.C.1.
-		ActiveServer: nil,
-	})
 	subsSvc := bindings.NewSubsService(bindings.SubsDeps{
 		SubStore:    subStore,
 		ServerStore: serverStore,
@@ -150,11 +134,79 @@ func main() {
 		DeviceInfo: deviceInfo,
 	})
 
+	// helperProber wraps HelperService.Status: bindings.AppService uses
+	// it to populate Snapshot.HelperState. SCM error or non-Windows stub
+	// collapses to "missing" so the renderer wizard fires on a fresh box.
+	helperProber := func() string {
+		state, err := helperSvc.Status()
+		if err != nil {
+			return "missing"
+		}
+		return state
+	}
+
+	// chainctl needs a Get-by-id surface; wrap the existing serverStore
+	// via serverStoreGetter (defined in main.go above). helperBootCtx is
+	// a short-lived context used only by the Windows named-pipe dial
+	// inside newHelperClient; the helper client itself does not capture
+	// it, so we cancel inline. Mirrors cmd/itgray-gui/main.go:104-110.
+	helperBootCtx, cancelHelperBoot := context.WithCancel(context.Background())
+	helperClient := newHelperClient(helperBootCtx)
+	cancelHelperBoot()
+
+	// networkLoader reads the user's persisted config.json on every
+	// Connect cycle — same closure as cmd/itgray-gui/main.go:121-126
+	// so chainctl reads exactly what SettingsService.Update writes.
+	networkLoader := func() (config.Network, error) {
+		c, err := config.Load(configPath)
+		if err != nil {
+			return config.Network{}, err
+		}
+		return c.Network, nil
+	}
+
+	chainCtrl := chainctl.New(&chainctl.Deps{
+		DataDir:      dataDir,
+		ServerStore:  serverStoreGetter{ss: serverStore},
+		Helper:       helperClient,
+		Sysproxy:     sysproxy.New(),
+		Hub:          h,
+		BuildConfigs: buildConfigs(dataDir),
+		Network:      networkLoader,
+	})
+
+	// AppService now wired with live Chain, HelperProber, and the SOCKS
+	// port GetPublicIP uses to route the HTTP request via xray. AppCtx
+	// remains nil — Quit lives on the Electron main process side
+	// (separate ipcMain channel), bridge has no Wails app context.
+	appSvc := bindings.NewAppService(&bindings.AppDeps{
+		DataDir:       dataDir,
+		Version:       handlers.Version,
+		ServerStore:   serverStore,
+		SubStore:      subStore,
+		ConfigViewer:  configStore,
+		HelperProber:  helperProber,
+		Chain:         chainCtrl,
+		XraySOCKSPort: defaultXrayPort,
+	})
+
+	runSvc := bindings.NewRunService(bindings.RunDeps{
+		Chain: chainCtrl,
+		Hub:   h,
+	})
+
+	serversSvc := bindings.NewServersService(bindings.ServersDeps{
+		ServerStore:  serverStore,
+		Hub:          h,
+		ActiveServer: chainCtrl,
+	})
+
 	d := dispatcher.New()
 
 	app := handlers.AppHandlers{Snap: appSvc}
 	d.Register("app.ping", app.Ping)
 	d.Register("app.getSnapshot", app.GetSnapshot)
+	d.Register("app.getPublicIP", app.GetPublicIP)
 
 	onboarding := handlers.OnboardingHandlers{Svc: onboardingSvc}
 	d.Register("onboarding.getState", onboarding.GetState)
@@ -188,6 +240,10 @@ func main() {
 	d.Register("subs.remove", subs.Remove)
 	d.Register("subs.syncOne", subs.SyncOne)
 	d.Register("subs.syncAll", subs.SyncAll)
+
+	run := handlers.RunHandlers{Svc: runSvc}
+	d.Register("run.connect", run.Connect)
+	d.Register("run.disconnect", run.Disconnect)
 
 	// Bus + hub are held in scope so Phase 4 can attach a forwarder that
 	// subscribes to h's events and emits JSON-RPC notifications via bus.
