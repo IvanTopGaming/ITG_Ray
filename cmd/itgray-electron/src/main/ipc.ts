@@ -1,5 +1,5 @@
 // cmd/itgray-electron/src/main/ipc.ts
-import { ipcMain, BrowserWindow } from "electron";
+import { app, ipcMain, BrowserWindow } from "electron";
 import type { BridgeSupervisor } from "./bridge";
 import type { RpcMethod, EventTopic } from "../shared/protocol";
 
@@ -24,6 +24,11 @@ const BRIDGE_TOPICS: Exclude<EventTopic, "bridge.state">[] = [
 export function wireIPC(supervisor: BridgeSupervisor, getWindow: () => BrowserWindow | null): void {
   ipcMain.handle("rpc", async (_event, method: RpcMethod, params: unknown) => {
     return supervisor.rpc().call(method, params as never);
+  });
+
+  // app.quit — Electron-native (does NOT go through the bridge).
+  ipcMain.handle("app.quit", () => {
+    app.quit();
   });
 
   // Supervisor lifecycle → renderer (only path for bridge.state).
