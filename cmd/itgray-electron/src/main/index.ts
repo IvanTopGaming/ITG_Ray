@@ -57,7 +57,12 @@ app.whenReady().then(() => {
   supervisor = new BridgeSupervisor();
   supervisor.start();
   createWindow();
-  tray = createTray(() => mainWindow);
+  tray = createTray(
+    () => mainWindow,
+    () => {
+      void createWindow();
+    },
+  );
   wireIPC(supervisor, () => mainWindow, (s) => tray?.setStatus(s));
 });
 

@@ -27,7 +27,10 @@ function resourcePath(file: string): string {
  * alive — losing the reference triggers GC and the icon disappears on
  * Linux) plus a setStatus(s) updater.
  */
-export function createTray(getWindow: () => BrowserWindow | null): {
+export function createTray(
+  getWindow: () => BrowserWindow | null,
+  summonWindow: () => void,
+): {
   tray: Tray;
   setStatus: (s: Status) => void;
 } {
@@ -37,7 +40,12 @@ export function createTray(getWindow: () => BrowserWindow | null): {
 
   const showOrHide = () => {
     const win = getWindow();
-    if (!win) return;
+    if (!win) {
+      // Window was closed (X button) but app stayed alive in tray.
+      // Re-create the window so the user can bring the UI back.
+      summonWindow();
+      return;
+    }
     if (win.isVisible()) win.hide();
     else {
       win.show();
