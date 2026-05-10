@@ -5,6 +5,7 @@ import { BridgeSupervisor } from "./bridge";
 import { wireIPC } from "./ipc";
 import { isDevMode } from "./paths";
 import { createTray } from "./tray";
+import { loadState, attachStatePersister } from "./window-state";
 
 let mainWindow: BrowserWindow | null = null;
 let supervisor: BridgeSupervisor | null = null;
@@ -27,10 +28,15 @@ if (!gotLock) {
   });
 }
 
-function createWindow(): void {
+async function createWindow(): Promise<void> {
+  const stateFile = path.join(app.getPath("userData"), "window-state.json");
+  const state = await loadState(stateFile);
+
   mainWindow = new BrowserWindow({
-    width: 1024,
-    height: 720,
+    x: state.x ?? undefined,
+    y: state.y ?? undefined,
+    width: state.width,
+    height: state.height,
     title: "ITG Ray",
     frame: false,
     webPreferences: {
@@ -40,6 +46,9 @@ function createWindow(): void {
       sandbox: false,
     },
   });
+
+  if (state.maximised) mainWindow.maximize();
+  attachStatePersister(mainWindow, stateFile);
 
   if (isDevMode()) {
     mainWindow.loadURL("http://localhost:34115");
@@ -53,10 +62,10 @@ function createWindow(): void {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   supervisor = new BridgeSupervisor();
   supervisor.start();
-  createWindow();
+  await createWindow();
   tray = createTray(
     () => mainWindow,
     () => {
