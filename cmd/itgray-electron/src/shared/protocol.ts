@@ -63,6 +63,7 @@ export interface PingResult {
 
 export interface RunConnectParams {
   serverId: string;
+  mode: string;
 }
 
 export interface RunReconnectParams {
@@ -202,6 +203,7 @@ export interface SubscriptionSettings {
 }
 
 export interface RpcMethods {
+  "app.getPublicIP": { params: Empty; result: string };
   "app.getSnapshot": { params: Empty; result: Snapshot };
   "app.ping": { params: Empty; result: PingResult };
   "helper.install": { params: Empty; result: Empty };

@@ -11,6 +11,7 @@ type Empty struct{}
 type AppService interface {
 	Ping(p Empty) (PingResult, error)
 	GetSnapshot(p Empty) (hub.Snapshot, error)
+	GetPublicIP(p Empty) (string, error)
 }
 
 type PingResult struct {
@@ -28,6 +29,7 @@ type RunService interface {
 
 type RunConnectParams struct {
 	ServerID string `json:"serverId"`
+	Mode     string `json:"mode"`
 }
 
 type RunReconnectParams struct {
