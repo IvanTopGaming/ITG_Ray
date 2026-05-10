@@ -16,12 +16,24 @@ declare global {
 
 type Callback = (payload: unknown) => void;
 
-const offByPair = new WeakMap<Callback, () => void>();
+// Keyed on Wails-style event name (with `:` separator) so that EventsOff
+// can match by (topic, callback) pair. Same callback can be registered
+// for multiple topics independently.
+const offByTopic = new Map<string, Map<Callback, () => void>>();
 
 export function EventsOn(eventName: string, cb: Callback): () => void {
   const off = window.itg.on(toBridgeTopic(eventName), cb);
-  offByPair.set(cb, off);
-  return off;
+  let perTopic = offByTopic.get(eventName);
+  if (!perTopic) {
+    perTopic = new Map();
+    offByTopic.set(eventName, perTopic);
+  }
+  perTopic.set(cb, off);
+  return () => {
+    off();
+    perTopic!.delete(cb);
+    if (perTopic!.size === 0) offByTopic.delete(eventName);
+  };
 }
 
 export function EventsOnMultiple(eventName: string, cb: Callback, _maxCallbacks = 0): () => void {
@@ -29,15 +41,22 @@ export function EventsOnMultiple(eventName: string, cb: Callback, _maxCallbacks 
 }
 
 export function EventsOff(eventName: string, ...callbacks: Callback[]): void {
-  if (callbacks.length === 0) return;
+  const perTopic = offByTopic.get(eventName);
+  if (!perTopic) return;
+  if (callbacks.length === 0) {
+    // Wails behavior: no callbacks → unsubscribe ALL listeners on this topic.
+    for (const off of perTopic.values()) off();
+    offByTopic.delete(eventName);
+    return;
+  }
   for (const cb of callbacks) {
-    const off = offByPair.get(cb);
+    const off = perTopic.get(cb);
     if (off) {
       off();
-      offByPair.delete(cb);
+      perTopic.delete(cb);
     }
   }
-  void eventName;
+  if (perTopic.size === 0) offByTopic.delete(eventName);
 }
 
 export function EventsEmit(_eventName: string, ..._data: unknown[]): void {
@@ -56,4 +75,22 @@ export function LogFatal(..._args: unknown[]): void {}
 // Wails event names use ":" as separator; bridge uses ".".
 function toBridgeTopic(name: string): string {
   return name.replace(/:/g, ".");
+}
+
+// Wails runtime additionally exposes a synchronous Environment(buildType, platform, arch)
+// query and a Quit() shortcut. The Electron build does not currently need real values
+// here — Phase 5 (native shell) will replace these via window.itg if anything depends
+// on them. helperAdapter.ts caches the result, so a stable async resolver is fine.
+export function Environment(): Promise<{ buildType: string; platform: string; arch: string }> {
+  return Promise.resolve({
+    buildType: "production",
+    platform: typeof navigator !== "undefined" && (navigator as any).platform
+      ? String((navigator as any).platform).toLowerCase()
+      : "unknown",
+    arch: "unknown",
+  });
+}
+
+export function Quit(): void {
+  // No-op in Phase 2. Phase 5 wires this to Electron's app.quit() via window.itg.
 }
