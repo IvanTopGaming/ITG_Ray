@@ -11,6 +11,7 @@ import { defaultAutostart } from "./autostart";
 let mainWindow: BrowserWindow | null = null;
 let supervisor: BridgeSupervisor | null = null;
 let tray: ReturnType<typeof createTray> | null = null;
+let quitting = false;
 
 app.setName("ITG Ray");
 app.setPath("userData", path.join(app.getPath("appData"), "ITG Ray"));
@@ -97,6 +98,19 @@ app.on("window-all-closed", () => {
   // triggers actual shutdown (via the before-quit hook below).
 });
 
-app.on("before-quit", async () => {
-  if (supervisor) await supervisor.stop();
+app.on("before-quit", (event) => {
+  if (quitting) return;
+  // First invocation: defer the actual exit so we can await supervisor
+  // teardown — Electron does not await async before-quit listeners.
+  event.preventDefault();
+  quitting = true;
+  void (async () => {
+    try {
+      if (supervisor) await supervisor.stop();
+    } catch (err) {
+      console.warn("supervisor.stop failed during shutdown:", err);
+    } finally {
+      app.exit(0);
+    }
+  })();
 });
