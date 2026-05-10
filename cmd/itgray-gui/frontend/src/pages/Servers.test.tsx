@@ -8,6 +8,9 @@ const serverAddMock = vi.fn();
 const serverEditMock = vi.fn();
 const serverRemoveMock = vi.fn();
 const clearLastErrorMock = vi.fn();
+const dashConnectMock = vi.fn();
+const dashProbeOneMock = vi.fn();
+const dashProbeAllMock = vi.fn();
 
 vi.mock("@/lib/serversStore", () => ({
   useServers: () => useServersMock(),
@@ -21,13 +24,19 @@ vi.mock("@/lib/dashStore", () => ({
   useDash: () => useDashMock(),
   effectiveStatus: (s: any) =>
     s.status === "idle" && s.lastError ? "error" : s.status,
+  dashConnect: (...args: any[]) => dashConnectMock(...args),
+  dashProbeOne: (...args: any[]) => dashProbeOneMock(...args),
+  dashProbeAll: (...args: any[]) => dashProbeAllMock(...args),
 }));
 
-const testLatencyMock = vi.fn();
 const toggleFavoriteMock = vi.fn();
 vi.mock("../../wailsjs/go/bindings/ServersService", () => ({
-  TestLatency: (...args: any[]) => testLatencyMock(...args),
   ToggleFavorite: (...args: any[]) => toggleFavoriteMock(...args),
+}));
+
+const markActiveServerEditedMock = vi.fn();
+vi.mock("@/lib/settings", () => ({
+  markActiveServerEdited: () => markActiveServerEditedMock(),
 }));
 
 vi.mock("../../wailsjs/runtime/runtime", () => ({
@@ -65,6 +74,7 @@ const baseDash = {
   connectedAt: null,
   lastError: null,
   bootstrapped: true,
+  probeState: new Map<string, "probing" | "ok" | "error">(),
 };
 
 beforeEach(() => {
@@ -80,8 +90,11 @@ beforeEach(() => {
   serverEditMock.mockReset().mockResolvedValue({ vlessChanged: false });
   serverRemoveMock.mockReset().mockResolvedValue(undefined);
   clearLastErrorMock.mockReset();
-  testLatencyMock.mockReset().mockResolvedValue(undefined);
   toggleFavoriteMock.mockReset().mockResolvedValue(undefined);
+  markActiveServerEditedMock.mockReset();
+  dashConnectMock.mockReset().mockResolvedValue(undefined);
+  dashProbeOneMock.mockReset().mockResolvedValue(undefined);
+  dashProbeAllMock.mockReset().mockResolvedValue(undefined);
 });
 
 describe("Servers page", () => {
@@ -175,7 +188,7 @@ describe("Servers page", () => {
     expect(await screen.findByText(/invalid URI/)).toBeInTheDocument();
   });
 
-  it("Edit with vlessChanged on the active connected server shows Reconnect banner", async () => {
+  it("Edit with vlessChanged on the active connected server marks active-edited", async () => {
     const active = makeServer({
       id: "m1",
       name: "Toronto",
@@ -199,9 +212,9 @@ describe("Servers page", () => {
     await user.click(screen.getByRole("button", { name: /^Save$/ }));
     expect(serverEditMock).toHaveBeenCalledTimes(1);
 
-    expect(
-      await screen.findByText(/Reconnect to apply the updated server URI\./i),
-    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(markActiveServerEditedMock).toHaveBeenCalledTimes(1),
+    );
   });
 
   it("Delete error surfaces in the modal without closing", async () => {
@@ -245,7 +258,7 @@ describe("Servers page", () => {
     expect(screen.queryByRole("button", { name: /^Save$/ })).toBeNull();
   });
 
-  it("Probe-all triggers TestLatency with empty id", async () => {
+  it("Probe-all triggers dashProbeAll", async () => {
     useDashMock.mockReturnValue({
       ...baseDash,
       allServers: [makeServer({ id: "m1" })],
@@ -253,7 +266,7 @@ describe("Servers page", () => {
     const user = userEvent.setup();
     render(<Servers />);
     await user.click(screen.getByRole("button", { name: /Probe all/i }));
-    expect(testLatencyMock).toHaveBeenCalledWith("");
+    expect(dashProbeAllMock).toHaveBeenCalled();
   });
 
   it("Toggling favorite calls ToggleFavorite", async () => {
@@ -266,5 +279,80 @@ describe("Servers page", () => {
     render(<Servers />);
     await user.click(screen.getByTitle("Favourite"));
     expect(toggleFavoriteMock).toHaveBeenCalledWith("m1");
+  });
+
+  it("row click switches active server when not active", async () => {
+    const user = userEvent.setup();
+    useDashMock.mockReturnValue({
+      ...baseDash,
+      allServers: [makeServer({ id: "s1", name: "A" })],
+      currentServer: null,
+      bootstrapped: true,
+    });
+    render(<Servers />);
+    await user.click(screen.getByText("A"));
+    expect(dashConnectMock).toHaveBeenCalledWith("s1");
+  });
+
+  it("row click does nothing when already active", async () => {
+    const user = userEvent.setup();
+    const active = makeServer({ id: "s1", name: "A" });
+    useDashMock.mockReturnValue({
+      ...baseDash,
+      allServers: [active],
+      currentServer: active,
+      status: "connected",
+      bootstrapped: true,
+    });
+    render(<Servers />);
+    await user.click(screen.getByText("A"));
+    expect(dashConnectMock).not.toHaveBeenCalled();
+  });
+
+  it("row click does nothing during connecting/disconnecting", async () => {
+    const user = userEvent.setup();
+    useDashMock.mockReturnValue({
+      ...baseDash,
+      allServers: [makeServer({ id: "s1", name: "A" })],
+      currentServer: null,
+      status: "connecting",
+      bootstrapped: true,
+    });
+    render(<Servers />);
+    await user.click(screen.getByText("A"));
+    expect(dashConnectMock).not.toHaveBeenCalled();
+  });
+
+  it("row click is suppressed when clicking inner buttons", async () => {
+    const user = userEvent.setup();
+    useDashMock.mockReturnValue({
+      ...baseDash,
+      allServers: [makeServer({ id: "s1", name: "A", favorite: false })],
+      bootstrapped: true,
+    });
+    render(<Servers />);
+    await user.click(screen.getByTitle("Favourite"));
+    expect(dashConnectMock).not.toHaveBeenCalled();
+    expect(toggleFavoriteMock).toHaveBeenCalledWith("s1");
+  });
+
+  it("does not render empty-state copy before bootstrap completes", () => {
+    useDashMock.mockReturnValue({
+      ...baseDash,
+      allServers: [],
+      bootstrapped: false,
+    });
+    render(<Servers />);
+    expect(screen.queryByText(/no servers yet/i)).toBeNull();
+  });
+
+  it("renders empty-state copy after bootstrap with no servers", () => {
+    useDashMock.mockReturnValue({
+      ...baseDash,
+      allServers: [],
+      bootstrapped: true,
+    });
+    render(<Servers />);
+    expect(screen.getByText(/no servers yet/i)).toBeInTheDocument();
   });
 });

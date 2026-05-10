@@ -1,16 +1,23 @@
 import {
-  CA,
-  CH,
-  DE,
-  ES,
-  FI,
-  FR,
-  GB,
+  AE, AR, AT, AU, BE, BG, BR, BY,
+  CA, CH, CL, CN, CO, CY, CZ,
+  DE, DK,
+  EE, ES,
+  FI, FR,
+  GB, GE, GR,
+  HK, HR, HU,
+  ID, IE, IL, IN, IS, IT,
   JP,
-  NL,
-  SE,
-  SG,
-  US,
+  KR, KZ,
+  LT, LU, LV,
+  MD, MK, MX, MY,
+  NL, NO, NZ,
+  PE, PH, PL, PT,
+  RO, RS, RU,
+  SE, SG, SI, SK,
+  TH, TR, TW,
+  UA, US,
+  VN, ZA,
 } from "country-flag-icons/react/3x2";
 
 // Convert a unicode regional-indicator emoji flag (e.g. "🇳🇱") to its
@@ -35,21 +42,28 @@ type FlagComponent = typeof NL;
 // single index that bundlers can't tree-shake reliably (the re-export indirects
 // through `../../modules/react/3x2/index.js`, so `import *` pulls everything,
 // adding ~240 KB raw to the bundle). Named imports DO tree-shake, which means
-// we must enumerate the countries we actually use. Mock data currently uses
-// 12 of these — add new ones here as new servers appear.
+// we must enumerate the countries we actually use. The list below covers the
+// most common VPN exit-node countries; add more here as new servers appear.
 const FLAGS: Record<string, FlagComponent> = {
-  CA,
-  CH,
-  DE,
-  ES,
-  FI,
-  FR,
-  GB,
+  AE, AR, AT, AU, BE, BG, BR, BY,
+  CA, CH, CL, CN, CO, CY, CZ,
+  DE, DK,
+  EE, ES,
+  FI, FR,
+  GB, GE, GR,
+  HK, HR, HU,
+  ID, IE, IL, IN, IS, IT,
   JP,
-  NL,
-  SE,
-  SG,
-  US,
+  KR, KZ,
+  LT, LU, LV,
+  MD, MK, MX, MY,
+  NL, NO, NZ,
+  PE, PH, PL, PT,
+  RO, RS, RU,
+  SE, SG, SI, SK,
+  TH, TR, TW,
+  UA, US,
+  VN, ZA,
 };
 
 export type CountryFlagProps = {

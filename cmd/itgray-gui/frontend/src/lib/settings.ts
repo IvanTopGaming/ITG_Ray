@@ -117,6 +117,12 @@ let eventsRegistered = false;
 // leave it stuck above zero.
 let inFlightUpdates = 0;
 let lastConnectSnapshot: NetworkSnapshot | null = null;
+let activeServerEdited = false;
+// networkDiffDismissed: user clicked Dismiss on a network-diff toast and
+// has not edited any field since. Cleared on any settings update, on
+// snapshot rebuild (re-Connect), and on snapshot clear (idle/error) so
+// a fresh diff re-arms the toast. Active-edit signal is independent.
+let networkDiffDismissed = false;
 const listeners = new Set<() => void>();
 
 function notifyListeners(): void {
@@ -186,6 +192,7 @@ function ensureEventsRegistered(): void {
       snapshotFromConnectedPayload(payload as Parameters<typeof snapshotFromConnectedPayload>[0]);
     } else if (p.status === 'idle' || p.status === 'error') {
       clearConnectSnapshot();
+      clearActiveServerEdited();
     }
   });
   eventsRegistered = true;
@@ -228,12 +235,15 @@ export function snapshotFromConnectedPayload(payload: {
       dnsCustom: (n.dns?.servers ?? []).join(', '),
     },
   };
+  // Fresh snapshot — any prior dismiss is no longer relevant.
+  networkDiffDismissed = false;
   notifyListeners();
 }
 
 export function clearConnectSnapshot(): void {
-  if (lastConnectSnapshot === null) return;
+  if (lastConnectSnapshot === null && !networkDiffDismissed) return;
   lastConnectSnapshot = null;
+  networkDiffDismissed = false;
   notifyListeners();
 }
 
@@ -259,6 +269,36 @@ function networkDiffersFromSnapshot(): boolean {
 
 export function useNetworkChangedSinceConnect(): boolean {
   return useSyncExternalStore(subscribe, networkDiffersFromSnapshot, networkDiffersFromSnapshot);
+}
+
+export function markActiveServerEdited(): void {
+  if (activeServerEdited) return;
+  activeServerEdited = true;
+  notifyListeners();
+}
+
+export function clearActiveServerEdited(): void {
+  if (!activeServerEdited) return;
+  activeServerEdited = false;
+  notifyListeners();
+}
+
+// dismissNetworkDiff hides the network-diff signal until the next
+// settings edit (which clears the flag in useSettings.update) or a
+// snapshot rebuild. Active-edit signal is unaffected — that path has
+// its own clearActiveServerEdited().
+export function dismissNetworkDiff(): void {
+  if (networkDiffDismissed) return;
+  networkDiffDismissed = true;
+  notifyListeners();
+}
+
+function reconnectNeeded(): boolean {
+  return (networkDiffersFromSnapshot() && !networkDiffDismissed) || activeServerEdited;
+}
+
+export function useReconnectNeeded(): boolean {
+  return useSyncExternalStore(subscribe, reconnectNeeded, reconnectNeeded);
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -337,6 +377,8 @@ export function __resetForTests(): void {
   backendFetchStarted = false;
   inFlightUpdates = 0;
   lastConnectSnapshot = null;
+  activeServerEdited = false;
+  networkDiffDismissed = false;
   if (eventsRegistered) {
     EventsOff(HUB_EVENT_SETTINGS);
     EventsOff('vpn:status');
@@ -369,6 +411,9 @@ export function useSettings(): [Settings, (patch: Partial<Settings>) => void] {
     if (prevSnapshot === null) prevSnapshot = currentState;
     currentState = { ...currentState, ...patch };
     pendingPatch = { ...(pendingPatch ?? {}), ...patch };
+    // Any settings edit cancels the dismissed state so a fresh diff
+    // (re-)arms the toast.
+    if (networkDiffDismissed) networkDiffDismissed = false;
     notifyListeners();
     scheduleFlush();
   }, []);

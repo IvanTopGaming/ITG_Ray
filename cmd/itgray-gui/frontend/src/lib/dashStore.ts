@@ -25,6 +25,7 @@ export type DashState = {
   connectedAt: number | null;
   lastError: { kind: string; message: string; at: number } | null;
   bootstrapped: boolean;
+  probeState: Map<string, "probing" | "ok" | "error">;
 };
 
 const HISTORY_CAP = 60;
@@ -42,6 +43,7 @@ const initialState = (): DashState => ({
   connectedAt: null,
   lastError: null,
   bootstrapped: false,
+  probeState: new Map(),
 });
 
 let state: DashState = initialState();
@@ -197,22 +199,34 @@ function onSubSynced() {
   void bootstrap();
 }
 
-// onProbeResult patches latencies into allServers in place so QuickSwitch's
-// sort key updates without waiting for the next snapshot reload.
+// onProbeResult patches both latencies into allServers (so QuickSwitch's
+// sort key updates without waiting for the next snapshot reload) AND
+// probeState (so the per-row "probing…" pill in Servers settles to ok
+// or error). A single backend probe:result event drives both updates.
 function onProbeResult(payload: any) {
   if (!payload || !Array.isArray(payload.results)) return;
-  const byId = new Map<string, number>();
+  const latencyById = new Map<string, number>();
+  const probeUpdates = new Map<string, "ok" | "error">();
   for (const r of payload.results) {
-    if (r && typeof r.id === "string" && typeof r.latencyMs === "number" && !r.error) {
-      byId.set(r.id, r.latencyMs);
+    if (!r || typeof r.id !== "string") continue;
+    if (r.error) {
+      probeUpdates.set(r.id, "error");
+    } else if (typeof r.latencyMs === "number") {
+      latencyById.set(r.id, r.latencyMs);
+      probeUpdates.set(r.id, "ok");
     }
   }
-  if (byId.size === 0) return;
-  const next = state.allServers.map((s) => {
-    const ms = byId.get(s.id);
-    return ms === undefined ? s : { ...s, latencyMs: ms };
-  });
-  setState({ ...state, allServers: next });
+  if (probeUpdates.size === 0) return;
+  const nextServers =
+    latencyById.size === 0
+      ? state.allServers
+      : state.allServers.map((s) => {
+          const ms = latencyById.get(s.id);
+          return ms === undefined ? s : { ...s, latencyMs: ms };
+        });
+  const nextProbe = new Map(state.probeState);
+  for (const [id, st] of probeUpdates) nextProbe.set(id, st);
+  setState({ ...state, allServers: nextServers, probeState: nextProbe });
 }
 
 function registerEventHandlers() {
@@ -264,6 +278,15 @@ export async function dashConnect(serverId: string): Promise<void> {
 }
 
 async function doConnect(serverId: string): Promise<void> {
+  // Optimistic UI: immediately reflect the user's chosen server so the
+  // active-row indicator flips before the backend completes Disconnect+
+  // Connect. The vpn:status connected event will set the same value;
+  // on failure the chain falls back to idle/error but currentServer
+  // continues to reflect the user's intent (clearer than reverting).
+  const target = state.allServers.find((s) => s.id === serverId);
+  if (target && state.currentServer?.id !== serverId) {
+    setState({ ...state, currentServer: target });
+  }
   try {
     if (state.status === "connected") {
       await Disconnect();
@@ -377,6 +400,36 @@ async function doReconnect(serverId: string, mode: Mode): Promise<void> {
 
 export function clearLastError(): void {
   setState({ ...state, lastError: null });
+}
+
+export function dashSetProbing(ids: string[]): void {
+  if (ids.length === 0) return;
+  const next = new Map(state.probeState);
+  for (const id of ids) next.set(id, "probing");
+  setState({ ...state, probeState: next });
+}
+
+export async function dashProbeOne(id: string): Promise<void> {
+  dashSetProbing([id]);
+  try {
+    await TestLatency(id);
+  } catch {
+    const next = new Map(state.probeState);
+    next.set(id, "error");
+    setState({ ...state, probeState: next });
+  }
+}
+
+export async function dashProbeAll(): Promise<void> {
+  const ids = state.allServers.map((s) => s.id);
+  dashSetProbing(ids);
+  try {
+    await TestLatency("");
+  } catch {
+    const next = new Map(state.probeState);
+    for (const id of ids) next.set(id, "error");
+    setState({ ...state, probeState: next });
+  }
 }
 
 // Test-only: __resetForTest only resets state. It does NOT auto-call bootstrap, so

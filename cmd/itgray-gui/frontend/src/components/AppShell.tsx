@@ -1,11 +1,17 @@
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { TitleBar } from "./TitleBar";
-import { useNetworkChangedSinceConnect, getConnectSnapshot } from "@/lib/settings";
+import {
+  useReconnectNeeded,
+  getConnectSnapshot,
+  clearActiveServerEdited,
+  dismissNetworkDiff,
+} from "@/lib/settings";
 import { dashReconnect } from "@/lib/dashStore";
+import { ReconnectToast } from "./ReconnectToast";
 
 export function AppShell() {
-  const networkChanged = useNetworkChangedSinceConnect();
+  const reconnectNeeded = useReconnectNeeded();
 
   const handleReconnect = async () => {
     const snap = getConnectSnapshot();
@@ -15,6 +21,17 @@ export function AppShell() {
     } catch {
       // dashStore set lastError; Dashboard's Reveal surfaces it.
     }
+  };
+
+  const handleDismiss = () => {
+    // Clear the active-edit signal AND mark the current network-diff as
+    // dismissed. We do NOT drop lastConnectSnapshot here — keeping it
+    // means networkDiffersFromSnapshot() can still flip back to true on
+    // a future edit, which clears networkDiffDismissed in useSettings
+    // .update() and re-arms the toast. Dropping the snapshot would
+    // disarm network-diff detection until the next reconnect.
+    clearActiveServerEdited();
+    dismissNetworkDiff();
   };
 
   return (
@@ -37,23 +54,16 @@ export function AppShell() {
       <div className="relative z-10 flex w-full min-h-0 flex-1">
         <Sidebar />
         <main className="relative flex-1 overflow-y-auto px-8 py-8">
-          {networkChanged && (
-            <div
-              role="status"
-              className="sticky top-0 z-20 -mx-2 mb-4 px-3 py-2 rounded-[10px] bg-amber-500/15 border border-amber-500/30 text-[12px] text-amber-100 flex items-center justify-between gap-3 backdrop-blur-md"
-            >
-              <span>Settings will apply after reconnect.</span>
-              <button
-                onClick={handleReconnect}
-                className="px-2 py-1 rounded bg-amber-500/30 hover:bg-amber-500/45 text-amber-50 transition-colors"
-              >
-                Reconnect
-              </button>
-            </div>
-          )}
           <Outlet />
         </main>
       </div>
+
+      <ReconnectToast
+        visible={reconnectNeeded}
+        message="Settings changed — reconnect to apply."
+        onReconnect={handleReconnect}
+        onDismiss={handleDismiss}
+      />
     </div>
   );
 }

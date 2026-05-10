@@ -205,10 +205,11 @@ func toServerViews(in []server.Server, originByID map[string]string) []hub.Serve
 			// unknown SourceID also fall through to "manual" as a safe label.
 			origin = "manual"
 		}
+		country, displayName := extractLeadingFlagEmoji(s.Name)
 		out = append(out, hub.ServerView{
 			ID:        s.ID,
-			Name:      s.Name,
-			Country:   "", // TODO(plan-c-geoip): populate from server.Server once geo-IP enrichment lands
+			Name:      displayName,
+			Country:   country, // From flag-emoji prefix in name; geo-IP enrichment (plan-c-geoip) can override later.
 			Address:   hostPort(s.Vless.Address, s.Vless.Port),
 			Transport: s.Vless.Transport.String(),
 			Security:  s.Vless.Security.String(),

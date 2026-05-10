@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
   AlertTriangle,
@@ -23,16 +23,18 @@ import {
   serverRemove,
   useServers,
 } from "@/lib/serversStore";
-import { effectiveStatus, useDash } from "@/lib/dashStore";
 import {
-  TestLatency,
-  ToggleFavorite,
-} from "../../wailsjs/go/bindings/ServersService";
-import { EventsOn } from "../../wailsjs/runtime/runtime";
+  effectiveStatus,
+  useDash,
+  dashConnect,
+  dashProbeOne,
+  dashProbeAll,
+} from "@/lib/dashStore";
+import { markActiveServerEdited } from "@/lib/settings";
+import { ToggleFavorite } from "../../wailsjs/go/bindings/ServersService";
 import type { hub } from "../../wailsjs/go/models";
 
 type Sort = "latency" | "name";
-type ProbeState = "idle" | "probing" | "ok" | "error";
 
 type Server = hub.ServerView;
 
@@ -71,48 +73,11 @@ export function Servers() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<Sort>("name");
   const [favoritesFirst, setFavoritesFirst] = useState(true);
-  const [probe, setProbe] = useState<Map<string, ProbeState>>(new Map());
   const [modal, setModal] = useState<ModalState>({ kind: "closed" });
-  const [reconnectBanner, setReconnectBanner] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const servers = dash.allServers;
   const activeServerId = dash.currentServer?.id ?? null;
-
-  // Listen for probe:result events to flip the per-row probing UI back to
-  // idle/ok/error. dashStore patches latencies in dash.allServers (and the
-  // backend's servers:changed re-bootstrap follows), but the row's "probing…"
-  // pill needs an explicit settle signal.
-  useEffect(() => {
-    const off = EventsOn("probe:result", (payload: any) => {
-      if (!payload || !Array.isArray(payload.results)) return;
-      setProbe((prev) => {
-        const m = new Map(prev);
-        for (const r of payload.results) {
-          if (r && typeof r.id === "string") {
-            m.set(r.id, r.error ? "error" : "ok");
-          }
-        }
-        return m;
-      });
-    });
-    return () => {
-      // Wails EventsOn returns a cleanup function (or void in some shims).
-      if (typeof off === "function") off();
-    };
-  }, []);
-
-  // The Reconnect banner is a one-shot signal: vlessChanged on Edit while
-  // a connection is active. Auto-clear once the chain transitions to idle
-  // (the user disconnected; a fresh Connect with the new URI is implied
-  // when they next connect). Manual Dismiss also clears it.
-  const wasConnectedRef = useRef(false);
-  useEffect(() => {
-    if (status === "idle" && wasConnectedRef.current && reconnectBanner) {
-      setReconnectBanner(false);
-    }
-    wasConnectedRef.current = status === "connected" || status === "connecting";
-  }, [status, reconnectBanner]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -181,44 +146,6 @@ export function Servers() {
     return out;
   }, [filtered, sort, favoritesFirst]);
 
-  function setProbing(id: string) {
-    setProbe((prev) => {
-      const m = new Map(prev);
-      m.set(id, "probing");
-      return m;
-    });
-  }
-
-  function probeOne(id: string) {
-    setProbing(id);
-    void TestLatency(id).catch(() => {
-      // Non-fatal — backend still publishes probe:result for individual
-      // failures (with `error` field). The catch covers ID-not-found and
-      // store-load errors which won't fire probe:result; reset the pill.
-      setProbe((prev) => {
-        const m = new Map(prev);
-        m.set(id, "error");
-        return m;
-      });
-    });
-  }
-
-  function probeAll() {
-    setProbe((prev) => {
-      const m = new Map(prev);
-      for (const s of servers) m.set(s.id, "probing");
-      return m;
-    });
-    void TestLatency("").catch(() => {
-      // Reset all to error on full-batch failure.
-      setProbe((prev) => {
-        const m = new Map(prev);
-        for (const s of servers) m.set(s.id, "error");
-        return m;
-      });
-    });
-  }
-
   async function toggleFavorite(id: string) {
     try {
       await ToggleFavorite(id);
@@ -253,7 +180,7 @@ export function Servers() {
         activeServerId === id &&
         (status === "connected" || status === "connecting")
       ) {
-        setReconnectBanner(true);
+        markActiveServerEdited();
       }
     } catch (err: any) {
       setSubmitError(err?.message ?? String(err));
@@ -304,7 +231,7 @@ export function Servers() {
               onChange={setFavoritesFirst}
             />
             <AddServerButton onClick={() => setModal({ kind: "add" })} />
-            <ProbeAllButton onClick={probeAll} />
+            <ProbeAllButton onClick={() => void dashProbeAll()} />
           </div>
         </motion.div>
 
@@ -315,11 +242,7 @@ export function Servers() {
           />
         )}
 
-        {reconnectBanner && (
-          <ReconnectBanner onDismiss={() => setReconnectBanner(false)} />
-        )}
-
-        {grouped.length === 0 ? (
+        {!dash.bootstrapped ? null : grouped.length === 0 ? (
           <motion.div
             variants={itemVariants}
             className="glass-regular rounded-2xl p-10 text-center text-[13px] text-white/55"
@@ -377,10 +300,10 @@ export function Servers() {
                       <ServerRow
                         server={server}
                         active={server.id === activeServerId}
-                        probing={probe.get(server.id) === "probing"}
+                        probing={dash.probeState.get(server.id) === "probing"}
                         isLast={idx === group.rows.length - 1}
                         onToggleFavorite={() => void toggleFavorite(server.id)}
-                        onProbe={() => probeOne(server.id)}
+                        onProbe={() => void dashProbeOne(server.id)}
                         onAction={() =>
                           setModal({
                             kind:
@@ -388,6 +311,12 @@ export function Servers() {
                             server,
                           })
                         }
+                        onSelectActive={() => {
+                          if (status === "connecting" || status === "disconnecting") return;
+                          void dashConnect(server.id).catch(() => {
+                            /* dashStore sets lastError; banner shows it */
+                          });
+                        }}
                       />
                     </motion.div>
                   ))}
@@ -440,31 +369,6 @@ function ErrorBanner({
         onClick={onDismiss}
         className="rounded p-1 text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white"
         aria-label="Dismiss error"
-      >
-        <X className="h-3.5 w-3.5" />
-      </button>
-    </motion.div>
-  );
-}
-
-function ReconnectBanner({ onDismiss }: { onDismiss: () => void }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.22, ease: SNAP_EASE }}
-      role="status"
-      className="flex items-start gap-3 rounded-xl border border-warn/40 bg-warn/[0.10] px-4 py-3"
-    >
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
-      <div className="flex-1 text-[12px] text-white/85">
-        Reconnect to apply the updated server URI.
-      </div>
-      <button
-        onClick={onDismiss}
-        className="rounded p-1 text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white"
-        aria-label="Dismiss reconnect notice"
       >
         <X className="h-3.5 w-3.5" />
       </button>
@@ -584,6 +488,7 @@ function ServerRow({
   onToggleFavorite,
   onProbe,
   onAction,
+  onSelectActive,
 }: {
   server: Server;
   active: boolean;
@@ -592,6 +497,7 @@ function ServerRow({
   onToggleFavorite: () => void;
   onProbe: () => void;
   onAction: () => void;
+  onSelectActive: () => void;
 }) {
   const ping = server.latencyMs;
   const pingColor =
@@ -611,10 +517,15 @@ function ServerRow({
 
   return (
     <div
+      onClick={() => {
+        if (!active) onSelectActive();
+      }}
       className={cn(
         "group relative flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-instant ease-snap",
         !isLast && "border-b border-white/[0.05]",
-        active ? "bg-success/[0.06]" : "hover:bg-white/[0.03]",
+        active
+          ? "cursor-default bg-success/[0.06]"
+          : "cursor-pointer hover:bg-white/[0.03]",
       )}
     >
       {active && (

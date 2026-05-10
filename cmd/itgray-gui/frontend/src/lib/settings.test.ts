@@ -18,12 +18,16 @@ vi.mock('../../wailsjs/runtime/runtime', () => ({
 
 import {
   useSettings,
+  useReconnectNeeded,
   flushSettings,
   __resetForTests,
   DEFAULTS,
   snapshotFromConnectedPayload,
   clearConnectSnapshot,
   getConnectSnapshot,
+  markActiveServerEdited,
+  clearActiveServerEdited,
+  dismissNetworkDiff,
 } from './settings';
 
 beforeEach(() => {
@@ -355,5 +359,158 @@ describe('reconnect snapshot', () => {
   it('snapshotFromConnectedPayload(undefined network) is a no-op', () => {
     snapshotFromConnectedPayload({ serverId: 's1', mode: 'tun' });
     expect(getConnectSnapshot()).toBeNull();
+  });
+});
+
+describe('reconnectNeeded union & auto-clear', () => {
+  beforeEach(() => {
+    __resetForTests();
+    // Bootstrap-Get default — useReconnectNeeded subscribes to the same
+    // store, so the first listener triggers loadFromBackend(). Without a
+    // resolved Get mock the .then() chain throws on undefined.
+    getMock.mockResolvedValue({ general: {}, network: {}, notifications: {}, debug: {} });
+    updateMock.mockResolvedValue({});
+  });
+
+  it('reflects activeServerEdited even without a snapshot', async () => {
+    const { result } = renderHook(() => useReconnectNeeded());
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current).toBe(false);
+    act(() => {
+      markActiveServerEdited();
+    });
+    expect(result.current).toBe(true);
+  });
+
+  it('markActiveServerEdited is idempotent (second call is no-op)', async () => {
+    const { result } = renderHook(() => useReconnectNeeded());
+    await act(async () => { await Promise.resolve(); });
+    act(() => {
+      markActiveServerEdited();
+    });
+    expect(result.current).toBe(true);
+    // A second call must not throw or flip the state — it's a no-op
+    // because activeServerEdited is already true.
+    act(() => {
+      markActiveServerEdited();
+    });
+    expect(result.current).toBe(true);
+  });
+
+  it('dismissNetworkDiff does not affect activeServerEdited signal', async () => {
+    const { result } = renderHook(() => useReconnectNeeded());
+    await act(async () => { await Promise.resolve(); });
+    act(() => {
+      markActiveServerEdited();
+      dismissNetworkDiff();
+    });
+    // Active-edit signal still active even after dismissNetworkDiff.
+    expect(result.current).toBe(true);
+    act(() => {
+      clearActiveServerEdited();
+    });
+    expect(result.current).toBe(false);
+  });
+
+  it('dismissNetworkDiff suppresses the network-diff signal until next edit', async () => {
+    const settings = renderHook(() => useSettings());
+    const reconnect = renderHook(() => useReconnectNeeded());
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Snapshot reflects the current state — diff should be false.
+    act(() => {
+      snapshotFromConnectedPayload({
+        serverId: 's1',
+        mode: 'tun',
+        network: {
+          tunCidr: DEFAULTS.tunCidr,
+          tunMtu: DEFAULTS.tunMtu,
+          socksPort: DEFAULTS.socksPort,
+          httpPort: DEFAULTS.httpPort,
+          allowLan: DEFAULTS.allowLan,
+          ipv6Mode: DEFAULTS.ipv6Mode,
+          dns: { mode: 'auto' },
+        },
+      });
+    });
+    expect(reconnect.result.current).toBe(false);
+
+    // Edit a network field — diff is true, toast is armed.
+    act(() => {
+      settings.result.current[1]({ tunMtu: 1400 });
+    });
+    expect(reconnect.result.current).toBe(true);
+
+    // Dismiss — toast is suppressed even though the diff still exists.
+    act(() => {
+      dismissNetworkDiff();
+    });
+    expect(reconnect.result.current).toBe(false);
+
+    // Another edit — dismiss flag clears, toast re-arms.
+    act(() => {
+      settings.result.current[1]({ tunMtu: 1300 });
+    });
+    expect(reconnect.result.current).toBe(true);
+  });
+
+  it('snapshotFromConnectedPayload re-clears networkDiffDismissed', async () => {
+    const { result } = renderHook(() => useReconnectNeeded());
+    await act(async () => { await Promise.resolve(); });
+    // Seed a snapshot, dismiss is set, then a fresh connect rebuilds the
+    // snapshot — dismiss must reset so future edits arm the toast.
+    act(() => {
+      snapshotFromConnectedPayload({
+        serverId: 's1',
+        mode: 'tun',
+        network: {
+          tunCidr: DEFAULTS.tunCidr,
+          tunMtu: DEFAULTS.tunMtu,
+          socksPort: DEFAULTS.socksPort,
+          httpPort: DEFAULTS.httpPort,
+          allowLan: DEFAULTS.allowLan,
+          ipv6Mode: DEFAULTS.ipv6Mode,
+          dns: { mode: 'auto' },
+        },
+      });
+      dismissNetworkDiff();
+    });
+    expect(result.current).toBe(false);
+    // New connect snapshot rebuilds — dismiss should reset implicitly.
+    act(() => {
+      snapshotFromConnectedPayload({
+        serverId: 's2',
+        mode: 'tun',
+        network: {
+          tunCidr: '10.0.0.1/15', // different snapshot — current state diverges
+          tunMtu: DEFAULTS.tunMtu,
+          socksPort: DEFAULTS.socksPort,
+          httpPort: DEFAULTS.httpPort,
+          allowLan: DEFAULTS.allowLan,
+          ipv6Mode: DEFAULTS.ipv6Mode,
+          dns: { mode: 'auto' },
+        },
+      });
+    });
+    // currentState.tunCidr is DEFAULTS.tunCidr ('198.18.0.1/15') which
+    // != snapshot '10.0.0.1/15', so the diff flips true and the toast
+    // is no longer suppressed.
+    expect(result.current).toBe(true);
+  });
+
+  it('__resetForTests zeroes activeServerEdited', async () => {
+    const { result, rerender } = renderHook(() => useReconnectNeeded());
+    await act(async () => { await Promise.resolve(); });
+    act(() => {
+      markActiveServerEdited();
+    });
+    expect(result.current).toBe(true);
+    act(() => {
+      __resetForTests();
+    });
+    rerender();
+    expect(result.current).toBe(false);
   });
 });

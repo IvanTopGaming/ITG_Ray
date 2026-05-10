@@ -275,3 +275,22 @@ func TestAppService_GetSnapshot_ConfigViewerError(t *testing.T) {
 	require.Contains(t, err.Error(), "settings.View")
 	require.Contains(t, err.Error(), "disk read failed")
 }
+
+func TestToServerViews_ExtractsCountryFromFlagEmoji(t *testing.T) {
+	t.Parallel()
+	in := []server.Server{
+		{ID: "a", Origin: server.OriginManual, Name: "🇷🇺 Okins-ITG",
+			Vless: vless.Config{Address: "h", Port: 443, Transport: vless.TransportTCP}},
+		{ID: "b", Origin: server.OriginManual, Name: "Plain",
+			Vless: vless.Config{Address: "h", Port: 443, Transport: vless.TransportTCP}},
+	}
+	got := toServerViews(in, nil)
+	if got[0].Name != "Okins-ITG" || got[0].Country != "RU" {
+		t.Errorf("emoji case: got name=%q country=%q, want name=%q country=%q",
+			got[0].Name, got[0].Country, "Okins-ITG", "RU")
+	}
+	if got[1].Name != "Plain" || got[1].Country != "" {
+		t.Errorf("plain case: got name=%q country=%q, want name=%q country=%q",
+			got[1].Name, got[1].Country, "Plain", "")
+	}
+}

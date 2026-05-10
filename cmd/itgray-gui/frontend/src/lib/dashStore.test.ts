@@ -335,6 +335,60 @@ describe("dashConnect", () => {
   });
 });
 
+describe("dashConnect optimistic UI", () => {
+  beforeEach(() => {
+    __resetForTest();
+    getSnapshotMock.mockResolvedValue({
+      ...baseSnapshot,
+      servers: [
+        { id: "a", name: "A", country: "", address: "h:443", transport: "tcp",
+          security: "none", latencyMs: 0, origin: "manual", favorite: false,
+          tags: [], uri: "" },
+        { id: "b", name: "B", country: "", address: "h:443", transport: "tcp",
+          security: "none", latencyMs: 0, origin: "manual", favorite: false,
+          tags: [], uri: "" },
+      ],
+    });
+  });
+
+  it("flips currentServer immediately on dashConnect, before backend resolves", async () => {
+    await __bootstrapForTest();
+    // Hold Connect indefinitely so we can observe the optimistic state.
+    let resolveConnect: () => void = () => {};
+    runConnectMock.mockImplementationOnce(() => new Promise<void>((res) => { resolveConnect = res; }));
+    const p = dashConnect("a");
+    // Immediately after the call, currentServer should already be 'a' even
+    // though Connect() has not resolved.
+    expect(getDashState().currentServer?.id).toBe("a");
+    resolveConnect();
+    await p;
+  });
+
+  it("does not setState when target equals currentServer (no-op optimistic branch)", async () => {
+    await __bootstrapForTest();
+    // Set currentServer to 'a' but NOT status=connected by firing connected
+    // then immediately firing connecting (which preserves currentServer but
+    // changes status away from "connected"). Actually onVpnStatus on the
+    // dashStore only sets currentServer on the connected event; subsequent
+    // events keep it. So: fire connected to set currentServer=a, then fire
+    // connecting to leave status non-connected so dashConnect's idle branch
+    // is taken (no Disconnect+waitForIdle).
+    fireEvent("vpn:status", { status: "connected", serverId: "a", mode: "tun" });
+    fireEvent("vpn:status", { status: "connecting" });
+    const beforeRef = getDashState().currentServer;
+    expect(beforeRef?.id).toBe("a");
+    // Hold Connect indefinitely so the optimistic branch is the only thing
+    // that could have mutated currentServer before the await.
+    let resolveConnect: () => void = () => {};
+    runConnectMock.mockImplementationOnce(() => new Promise<void>((res) => { resolveConnect = res; }));
+    const p = dashConnect("a");
+    // Optimistic branch should be a no-op: currentServer reference unchanged.
+    expect(getDashState().currentServer).toBe(beforeRef);
+    resolveConnect();
+    await p;
+  });
+});
+
 describe("dashDisconnect", () => {
   it("calls Disconnect", async () => {
     getSnapshotMock.mockResolvedValue(baseSnapshot);
@@ -462,5 +516,68 @@ describe("dashStore — concurrency guards", () => {
     resolveSnap(baseSnapshot);
     await Promise.all([p1, p2]);
     expect(getSnapshotMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("probeState", () => {
+  beforeEach(() => {
+    __resetForTest();
+    getSnapshotMock.mockResolvedValue({
+      status: "idle",
+      mode: "tun",
+      currentServer: null,
+      helperState: "running",
+      servers: [
+        { id: "a", name: "A", country: "", address: "h:443", transport: "tcp",
+          security: "none", latencyMs: 0, origin: "manual", favorite: false,
+          tags: [], uri: "" },
+        { id: "b", name: "B", country: "", address: "h:443", transport: "tcp",
+          security: "none", latencyMs: 0, origin: "manual", favorite: false,
+          tags: [], uri: "" },
+      ],
+    });
+  });
+
+  it("dashSetProbing marks given ids as probing", async () => {
+    const { dashSetProbing } = await import("./dashStore");
+    await __bootstrapForTest();
+    dashSetProbing(["a", "b"]);
+    const s = getDashState();
+    expect(s.probeState.get("a")).toBe("probing");
+    expect(s.probeState.get("b")).toBe("probing");
+  });
+
+  it("onProbeResult sets probeState to ok or error", async () => {
+    await __bootstrapForTest();
+    eventHandlers["probe:result"]({
+      results: [
+        { id: "a", latencyMs: 25 },
+        { id: "b", error: "timeout" },
+      ],
+    });
+    const s = getDashState();
+    expect(s.probeState.get("a")).toBe("ok");
+    expect(s.probeState.get("b")).toBe("error");
+    expect(s.allServers.find((x) => x.id === "a")!.latencyMs).toBe(25);
+    // 'b' had an error → latencyMs stays untouched (0).
+    expect(s.allServers.find((x) => x.id === "b")!.latencyMs).toBe(0);
+  });
+
+  it("dashProbeOne sets error on TestLatency rejection", async () => {
+    const { dashProbeOne } = await import("./dashStore");
+    await __bootstrapForTest();
+    testLatencyMock.mockRejectedValueOnce(new Error("nope"));
+    await dashProbeOne("a");
+    expect(getDashState().probeState.get("a")).toBe("error");
+  });
+
+  it("dashProbeAll sets error for every loaded id on rejection", async () => {
+    const { dashProbeAll } = await import("./dashStore");
+    await __bootstrapForTest();
+    testLatencyMock.mockRejectedValueOnce(new Error("nope"));
+    await dashProbeAll();
+    const s = getDashState();
+    expect(s.probeState.get("a")).toBe("error");
+    expect(s.probeState.get("b")).toBe("error");
   });
 });
