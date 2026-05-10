@@ -169,3 +169,96 @@ func TestForwarderNilHubOrBusIsNoop(t *testing.T) {
 		t.Fatalf("Run with nil Bus did not return immediately")
 	}
 }
+
+func TestStartSubscribesBeforeReturn(t *testing.T) {
+	h := hub.New()
+	em := &recordingEmitter{}
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Start MUST call Hub.Subscribe(...) synchronously before returning,
+	// so the very next Publish cannot race the subscribe-in-goroutine
+	// pattern that "go Run(ctx)" would have. No sleep allowed between
+	// Start and Publish — that's the contract being tested.
+	wait := (Forwarder{Hub: h, Bus: em}).Start(ctx)
+	// Cancel must happen before wait, otherwise wait blocks forever
+	// (LIFO defer order would deadlock if both were deferred).
+	defer func() {
+		cancel()
+		wait()
+	}()
+
+	h.Publish(hub.Event{Name: hub.EventVPNStatus, Payload: map[string]any{"status": "connecting"}})
+
+	got := waitForEvents(t, em, 1)
+	if len(got) != 1 || got[0].Topic != "vpn.status" {
+		t.Fatalf("expected single vpn.status event, got %v", got)
+	}
+}
+
+type slowEmitter struct {
+	mu       sync.Mutex
+	events   []emittedEvent
+	released chan struct{} // closed once test releases the emitter
+	gate     chan struct{} // signaled per Emit before recording
+}
+
+func (s *slowEmitter) Emit(topic string, payload any) {
+	// Signal that an Emit is in progress, then block until released so
+	// the test can publish more events into the hub channel buffer
+	// before drain proceeds to read them.
+	select {
+	case s.gate <- struct{}{}:
+	default:
+	}
+	<-s.released
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.events = append(s.events, emittedEvent{Topic: topic, Payload: payload})
+}
+
+func TestStartFlushesBufferedEventsAfterCancel(t *testing.T) {
+	h := hub.New()
+	em := &slowEmitter{released: make(chan struct{}), gate: make(chan struct{}, 1)}
+	ctx, cancel := context.WithCancel(context.Background())
+
+	wait := (Forwarder{Hub: h, Bus: em}).Start(ctx)
+
+	// Publish first event — drain picks it up and blocks inside Emit.
+	h.Publish(hub.Event{Name: hub.EventVPNStatus, Payload: map[string]any{"i": 1}})
+	// Wait until drain is actually inside the first Emit (so the next
+	// publishes definitely land in the channel buffer, not a fast-pickup).
+	select {
+	case <-em.gate:
+	case <-time.After(time.Second):
+		t.Fatalf("drain never entered Emit")
+	}
+
+	// Now buffer up additional events while drain is blocked.
+	h.Publish(hub.Event{Name: hub.EventVPNSpeed, Payload: map[string]any{"i": 2}})
+	h.Publish(hub.Event{Name: hub.EventChainError, Payload: map[string]any{"i": 3}})
+
+	// Cancel and release — drain should flush the buffered events
+	// before exiting (NOT silently drop them).
+	cancel()
+	close(em.released)
+	wait()
+
+	em.mu.Lock()
+	got := append([]emittedEvent(nil), em.events...)
+	em.mu.Unlock()
+
+	if len(got) < 3 {
+		t.Fatalf("expected at least 3 emitted events after flush, got %d: %v", len(got), got)
+	}
+	wantTopics := map[string]bool{"vpn.status": false, "vpn.speed": false, "chain.error": false}
+	for _, e := range got {
+		if _, ok := wantTopics[e.Topic]; ok {
+			wantTopics[e.Topic] = true
+		}
+	}
+	for topic, seen := range wantTopics {
+		if !seen {
+			t.Errorf("missing flushed topic %q", topic)
+		}
+	}
+}
