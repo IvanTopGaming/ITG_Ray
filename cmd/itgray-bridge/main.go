@@ -81,6 +81,16 @@ func main() {
 	})
 	onboardingSvc := bindings.NewOnboardingService(bindings.OnboardingDeps{DataDir: dataDir})
 
+	settingsSvc := bindings.NewSettingsService(bindings.SettingsDeps{
+		Store: configStore,
+		// Hub is nil — Phase 4 wires hub.EventSettings forwarding through
+		// bus.Emit. Without a Hub, Update succeeds but no bridge → main
+		// notification is published. The renderer either uses the returned
+		// SettingsView or calls Get to refresh.
+		Hub: nil,
+	})
+	helperSvc := bindings.NewHelperService()
+
 	d := dispatcher.New()
 
 	app := handlers.AppHandlers{Snap: appSvc}
@@ -91,6 +101,18 @@ func main() {
 	d.Register("onboarding.getState", onboarding.GetState)
 	d.Register("onboarding.complete", onboarding.Complete)
 	d.Register("onboarding.skip", onboarding.Skip)
+
+	settings := handlers.SettingsHandlers{Svc: settingsSvc}
+	d.Register("settings.get", settings.Get)
+	d.Register("settings.update", settings.Update)
+
+	helper := handlers.HelperHandlers{Svc: helperSvc}
+	d.Register("helper.status", helper.Status)
+	d.Register("helper.install", helper.Install)
+	d.Register("helper.start", helper.Start)
+	d.Register("helper.stop", helper.Stop)
+	d.Register("helper.restart", helper.Restart)
+	d.Register("helper.reinstall", helper.Reinstall)
 
 	// Bus is held in scope so later phases (4) can attach it to chainctl,
 	// hub, etc., for outbound notifications.
