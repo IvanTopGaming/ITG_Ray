@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+OUT="$ROOT/dist"
+mkdir -p "$OUT"
+
+VERSION="${VERSION:-$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || echo dev)}"
+LDFLAGS="-s -w -X main.Version=$VERSION"
+
+# itgray-helper is Windows-only (svcmgr / TUN / NRPT). Skipped on Linux.
+
+echo ">> building itgray-cli (version=$VERSION)"
+GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o "$OUT/itgray-cli" "$ROOT/cmd/itgray-cli"
+
+echo ">> building ITGRay (wails GUI, version=$VERSION)"
+GUI_ARTIFACT="$ROOT/cmd/itgray-gui/build/bin/ITGRay"
+( cd "$ROOT/cmd/itgray-gui" && \
+  wails build -clean -platform linux/amd64 -tags webkit2_41 \
+    -ldflags "-X main.Version=$VERSION" -o "ITGRay" )
+[[ -f "$GUI_ARTIFACT" ]] || { echo "wails build did not produce $GUI_ARTIFACT" >&2; exit 1; }
+mv "$GUI_ARTIFACT" "$OUT/ITGRay"
+
+SINGBOX_TAGS="with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_naive_outbound,with_purego,badlinkname,tfogo_checklinkname0"
+SINGBOX_LDFLAGS="-s -w -buildid= -X internal/godebug.defaultGODEBUG=multipathtcp=0 -checklinkname=0"
+
+echo ">> building sing-box (tags=$SINGBOX_TAGS)"
+GOOS=linux GOARCH=amd64 go build -mod=mod -trimpath \
+    -ldflags "$SINGBOX_LDFLAGS" \
+    -tags "$SINGBOX_TAGS" \
+    -o "$OUT/sing-box" \
+    github.com/sagernet/sing-box/cmd/sing-box
+
+echo ">> building xray"
+GOOS=linux GOARCH=amd64 go build -mod=mod -trimpath \
+    -ldflags "-s -w -buildid=" \
+    -o "$OUT/xray" \
+    github.com/xtls/xray-core/main
+
+echo "==> dist/ (linux artifacts)"
+ls -la "$OUT" | grep -vE '\.exe|\.dll' || true
