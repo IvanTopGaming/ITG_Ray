@@ -12,6 +12,7 @@ export class BridgeSupervisor extends EventEmitter {
   private restartCount = 0;
   private restartWindowStart = 0;
   private state: BridgeState = "starting";
+  private restartTimer?: NodeJS.Timeout;
 
   start(): void {
     this.spawnOnce();
@@ -28,6 +29,10 @@ export class BridgeSupervisor extends EventEmitter {
 
   /** Graceful shutdown — closes stdin so the bridge sees EOF and exits. */
   async stop(timeoutMs = 5000): Promise<void> {
+    if (this.restartTimer) {
+      clearTimeout(this.restartTimer);
+      this.restartTimer = undefined;
+    }
     if (!this.child) return;
     const child = this.child;
     this.child = undefined;
@@ -50,6 +55,12 @@ export class BridgeSupervisor extends EventEmitter {
     child.stderr?.on("data", (chunk: Buffer) => {
       // Forward bridge stderr to console for now; later route to a rolling log file.
       process.stderr.write("[bridge] " + chunk.toString());
+    });
+    child.on("error", (err) => {
+      process.stderr.write(`[bridge] spawn error: ${err.message}\n`);
+      if (this.child === child) {
+        this.handleExit(null, null);
+      }
     });
     child.on("exit", (code, signal) => {
       this.handleExit(code, signal);
@@ -74,7 +85,12 @@ export class BridgeSupervisor extends EventEmitter {
     }
     const backoff = [1000, 5000, 30_000][Math.min(this.restartCount - 1, 2)];
     this.setState("restarting", `code=${code} signal=${signal}, retry in ${backoff}ms`);
-    setTimeout(() => this.spawnOnce(), backoff);
+    this.child = undefined;
+    this.client = undefined;
+    this.restartTimer = setTimeout(() => {
+      this.restartTimer = undefined;
+      this.spawnOnce();
+    }, backoff);
   }
 
   private setState(state: BridgeState, reason?: string): void {
