@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld("itg", {
   app: {
     ping: () => rpc("app.ping"),
     getSnapshot: () => rpc("app.getSnapshot"),
+    getPublicIP: () => rpc("app.getPublicIP"),
     quit: () => ipcRenderer.invoke("app.quit"),
   },
   onboarding: {
@@ -55,6 +56,11 @@ contextBridge.exposeInMainWorld("itg", {
     remove: (params: { id: string }) => rpc("subs.remove", params),
     syncOne: (params: { id: string }) => rpc("subs.syncOne", params),
     syncAll: () => rpc("subs.syncAll"),
+  },
+  run: {
+    connect: (params: { serverId: string; mode: string }) =>
+      rpc("run.connect", params),
+    disconnect: () => rpc("run.disconnect"),
   },
   on,
 });
