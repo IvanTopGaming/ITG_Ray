@@ -2,6 +2,11 @@
   "name": "itgray-electron",
   "version": "0.1.0",
   "private": true,
+  "description": "ITG Ray VPN client",
+  "author": {
+    "name": "ITG Ray Team",
+    "email": "noreply@itg-ray.local"
+  },
   "main": "dist-main/main/index.js",
   "scripts": {
     "build:bridge": "go build -o dist-bridge/itgray-bridge ../../cmd/itgray-bridge",
@@ -14,7 +19,11 @@
     "dev:tsc": "tsc -b --watch",
     "dev:electron": "wait-on http://localhost:34115 dist-main/main/index.js && cross-env ELECTRON_DEV=1 electron .",
     "dev": "concurrently -k -n bridge,vite,tsc,electron \"npm:dev:bridge\" \"npm:dev:vite\" \"npm:dev:tsc\" \"npm:dev:electron\"",
-    "start": "electron ."
+    "start": "electron .",
+    "package": "electron-builder",
+    "package:win": "electron-builder --win",
+    "package:linux": "electron-builder --linux",
+    "package:mac": "electron-builder --mac"
   },
   "devDependencies": {
     "@types/auto-launch": "^5.0.5",
@@ -22,10 +31,85 @@
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
     "electron": "^31.0.0",
+    "electron-builder": "^26.8.1",
     "typescript": "^5.6.0",
     "wait-on": "^7.2.0"
   },
   "dependencies": {
     "auto-launch": "^5.0.6"
+  },
+  "build": {
+    "appId": "com.itgray.app",
+    "productName": "ITG Ray",
+    "copyright": "Copyright © 2026 ITG Ray Team",
+    "directories": {
+      "output": "dist-installer",
+      "buildResources": "resources"
+    },
+    "files": [
+      "dist-main/**/*",
+      "dist-preload/**/*",
+      "dist-frontend/**/*",
+      "package.json",
+      "node_modules/**/*",
+      "!node_modules/electron/**/*",
+      "!node_modules/electron-builder/**/*",
+      "!node_modules/@types/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "dist-bridge",
+        "to": "bridge",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "resources",
+        "to": "resources",
+        "filter": ["tray-*.png"]
+      }
+    ],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "extraResources": [
+        { "from": "../../dist/itgray-helper.exe", "to": "helper/itgray-helper.exe" },
+        { "from": "../../dist/itgray-cli.exe", "to": "cli/itgray-cli.exe" },
+        { "from": "../../dist/sing-box.exe", "to": "cores/sing-box.exe" },
+        { "from": "../../dist/xray.exe", "to": "cores/xray.exe" },
+        { "from": "../../dist/wintun.dll", "to": "wintun.dll" }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": false,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "ITGRay-Setup-${version}.${ext}"
+    },
+    "linux": {
+      "target": [{ "target": "AppImage", "arch": ["x64"] }],
+      "category": "Network",
+      "extraResources": [
+        { "from": "../../dist/itgray-cli", "to": "cli/itgray-cli" },
+        { "from": "../../dist/sing-box", "to": "cores/sing-box" },
+        { "from": "../../dist/xray", "to": "cores/xray" }
+      ],
+      "artifactName": "ITGRay-${version}.${ext}"
+    },
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["x64"] }],
+      "category": "public.app-category.utilities",
+      "identity": null,
+      "extraResources": [
+        { "from": "../../dist/itgray-cli-darwin-amd64", "to": "cli/itgray-cli" },
+        { "from": "../../dist/sing-box-darwin-amd64", "to": "cores/sing-box" },
+        { "from": "../../dist/xray-darwin-amd64", "to": "cores/xray" }
+      ],
+      "artifactName": "ITGRay-${version}.${ext}"
+    },
+    "dmg": {
+      "writeUpdateInfo": false,
+      "sign": false
+    }
   }
 }

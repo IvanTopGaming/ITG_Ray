@@ -3,6 +3,7 @@ dist-main/
 dist-preload/
 dist-bridge/
 dist-frontend/
+dist-installer/
 build/
 *.log
 *.tsbuildinfo

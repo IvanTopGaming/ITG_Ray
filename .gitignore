@@ -36,4 +36,5 @@ cmd/itgray-electron/dist-main/
 cmd/itgray-electron/dist-preload/
 cmd/itgray-electron/dist-bridge/
 cmd/itgray-electron/dist-frontend/
+cmd/itgray-electron/dist-installer/
 cmd/itgray-electron/build/
