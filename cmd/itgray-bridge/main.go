@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -17,6 +18,8 @@ import (
 	"github.com/itg-team/itg-ray/cmd/itgray-bridge/dispatcher"
 	"github.com/itg-team/itg-ray/cmd/itgray-bridge/handlers"
 	"github.com/itg-team/itg-ray/cmd/itgray-gui/bindings"
+	"github.com/itg-team/itg-ray/cmd/itgray-gui/hub"
+	"github.com/itg-team/itg-ray/internal/hwid"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/subscription"
 )
@@ -91,6 +94,43 @@ func main() {
 	})
 	helperSvc := bindings.NewHelperService()
 
+	// Bridge owns its own hub. ServersService and SubsService publish
+	// servers.changed / sub.synced events into it; Phase 4 will subscribe
+	// a forwarder that emits them as JSON-RPC notifications over stdout.
+	h := hub.New()
+
+	// HWID + DeviceInfo for SubsService HWID-aware sync. Failure is
+	// non-fatal: SubsService treats empty HWID as "HWID disabled".
+	hwidValue, err := hwid.Get(dataDir)
+	if err != nil {
+		slog.Warn("hwid.Get returned error; using fallback value", "err", err)
+	}
+	deviceInfo := hwid.Info()
+
+	serversSvc := bindings.NewServersService(bindings.ServersDeps{
+		ServerStore: serverStore,
+		Hub:         h,
+		// ActiveServer is nil — Phase 3.C.2 wires chainctl. With nil,
+		// Remove cannot block deletion of the active server; the renderer
+		// disconnects first via run.disconnect (not yet wired) before
+		// removing, so this is safe for Phase 3.C.1.
+		ActiveServer: nil,
+	})
+	subsSvc := bindings.NewSubsService(bindings.SubsDeps{
+		SubStore:    subStore,
+		ServerStore: serverStore,
+		Hub:         h,
+		SettingsView: func() hub.SettingsView {
+			view, verr := configStore.View()
+			if verr != nil {
+				return hub.SettingsView{}
+			}
+			return view
+		},
+		HWID:       hwidValue,
+		DeviceInfo: deviceInfo,
+	})
+
 	d := dispatcher.New()
 
 	app := handlers.AppHandlers{Snap: appSvc}
@@ -114,9 +154,26 @@ func main() {
 	d.Register("helper.restart", helper.Restart)
 	d.Register("helper.reinstall", helper.Reinstall)
 
-	// Bus is held in scope so later phases (4) can attach it to chainctl,
-	// hub, etc., for outbound notifications.
+	servers := handlers.ServersHandlers{Svc: serversSvc}
+	d.Register("servers.list", servers.List)
+	d.Register("servers.add", servers.Add)
+	d.Register("servers.edit", servers.Edit)
+	d.Register("servers.remove", servers.Remove)
+	d.Register("servers.toggleFavorite", servers.ToggleFavorite)
+	d.Register("servers.testLatency", servers.TestLatency)
+
+	subs := handlers.SubsHandlers{Svc: subsSvc}
+	d.Register("subs.list", subs.List)
+	d.Register("subs.add", subs.Add)
+	d.Register("subs.edit", subs.Edit)
+	d.Register("subs.remove", subs.Remove)
+	d.Register("subs.syncOne", subs.SyncOne)
+	d.Register("subs.syncAll", subs.SyncAll)
+
+	// Bus + hub are held in scope so Phase 4 can attach a forwarder that
+	// subscribes to h's events and emits JSON-RPC notifications via bus.
 	_ = bus.New(out)
+	_ = h
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
