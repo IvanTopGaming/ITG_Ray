@@ -16,6 +16,13 @@ function on(topic: string, cb: (payload: unknown) => void): () => void {
 contextBridge.exposeInMainWorld("itg", {
   app: {
     ping: () => rpc("app.ping"),
+    getSnapshot: () => rpc("app.getSnapshot"),
+    quit: () => ipcRenderer.invoke("app.quit"),
+  },
+  onboarding: {
+    getState: () => rpc("onboarding.getState"),
+    complete: () => rpc("onboarding.complete"),
+    skip: () => rpc("onboarding.skip"),
   },
   on,
 });
