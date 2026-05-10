@@ -2,6 +2,7 @@
 import { app, ipcMain, BrowserWindow } from "electron";
 import type { BridgeSupervisor } from "./bridge";
 import type { RpcMethod, EventTopic } from "../shared/protocol";
+import { defaultAutostart } from "./autostart";
 
 // Topics emitted by the bridge subprocess (not the supervisor itself).
 // `bridge.state` is supervisor-driven and forwarded separately below.
@@ -53,6 +54,17 @@ export function wireIPC(
   ipcMain.handle("window.close", () => {
     const win = getWindow();
     if (win) win.close();
+  });
+
+  // Autostart — read or write OS-level autostart entry directly. The
+  // renderer also calls settings.update to persist user intent in
+  // config.json so the reconciler can re-apply on next launch.
+  ipcMain.handle("app.getAutostart", async () => {
+    return defaultAutostart().get();
+  });
+  ipcMain.handle("app.setAutostart", async (_e, enabled: boolean) => {
+    await defaultAutostart().set(enabled);
+    return true;
   });
 
   // Supervisor lifecycle → renderer (only path for bridge.state).

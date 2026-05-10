@@ -6,6 +6,7 @@ import { wireIPC } from "./ipc";
 import { isDevMode } from "./paths";
 import { createTray } from "./tray";
 import { loadState, attachStatePersister } from "./window-state";
+import { defaultAutostart } from "./autostart";
 
 let mainWindow: BrowserWindow | null = null;
 let supervisor: BridgeSupervisor | null = null;
@@ -73,6 +74,21 @@ app.whenReady().then(async () => {
     },
   );
   wireIPC(supervisor, () => mainWindow, (s) => tray?.setStatus(s));
+
+  // Reconcile autostart with persisted user setting. Failure is
+  // non-fatal — the renderer can still toggle via Settings.
+  void (async () => {
+    try {
+      const snap = await supervisor!.rpc().call("app.getSnapshot", undefined);
+      const desired = (snap as { settings?: { general?: { autostart?: boolean } } }).settings
+        ?.general?.autostart;
+      if (typeof desired === "boolean") {
+        await defaultAutostart().reconcile(desired);
+      }
+    } catch (err) {
+      console.warn("autostart reconcile skipped:", err);
+    }
+  })();
 });
 
 app.on("window-all-closed", () => {

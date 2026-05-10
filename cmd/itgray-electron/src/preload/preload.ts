@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld("itg", {
     getSnapshot: () => rpc("app.getSnapshot"),
     getPublicIP: () => rpc("app.getPublicIP"),
     quit: () => ipcRenderer.invoke("app.quit"),
+    getAutostart: () => ipcRenderer.invoke("app.getAutostart") as Promise<boolean>,
+    setAutostart: (enabled: boolean) => ipcRenderer.invoke("app.setAutostart", enabled) as Promise<boolean>,
   },
   onboarding: {
     getState: () => rpc("onboarding.getState"),
