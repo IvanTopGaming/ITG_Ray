@@ -61,3 +61,23 @@ GOOS=windows GOARCH=amd64 go build -mod=mod -trimpath \
 
 echo "==> dist/"
 ls -la "$OUT"
+
+# ----- Electron NSIS installer -----
+echo ">> cross-compiling itgray-bridge for Windows"
+( cd "$ROOT/cmd/itgray-electron" && npm run build:bridge:win )
+
+echo ">> building Electron bundle (main + preload + frontend)"
+( cd "$ROOT/cmd/itgray-electron" && npm run build:main && npm run build:preload && npm run build:frontend )
+
+echo ">> running electron-builder for Windows NSIS"
+( cd "$ROOT/cmd/itgray-electron" && npx electron-builder --win )
+
+INSTALLER=$(ls "$ROOT/cmd/itgray-electron/dist-installer/ITGRay-Setup-"*.exe 2>/dev/null | head -1)
+if [[ -n "$INSTALLER" && -f "$INSTALLER" ]]; then
+    echo ">> copying installer to dist/"
+    cp "$INSTALLER" "$OUT/"
+    echo "==> Electron installer:"
+    ls -la "$OUT/ITGRay-Setup-"*.exe
+else
+    echo "warning: NSIS installer not found in dist-installer/" >&2
+fi
