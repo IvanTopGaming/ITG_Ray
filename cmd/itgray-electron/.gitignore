@@ -1,0 +1,7 @@
+node_modules/
+dist-main/
+dist-preload/
+dist-frontend/
+build/
+*.log
+*.tsbuildinfo
