@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/itg-team/itg-ray/cmd/itgray-gui/chainctl"
+	"github.com/itg-team/itg-ray/internal/chainctl"
 	"github.com/itg-team/itg-ray/internal/hub"
 	"github.com/itg-team/itg-ray/internal/config"
 	"github.com/itg-team/itg-ray/internal/server"

@@ -6,7 +6,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/itg-team/itg-ray/cmd/itgray-gui/chainctl"
+	"github.com/itg-team/itg-ray/internal/chainctl"
 )
 
 // errUnsupported mirrors the Wails GUI sentinel: chainctl receives this
