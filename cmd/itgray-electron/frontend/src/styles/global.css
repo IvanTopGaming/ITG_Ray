@@ -42,3 +42,13 @@
     display: none;                  /* WebKit / Chromium / WebView2 */
   }
 }
+
+/* Phase 5: translate Wails-style --wails-draggable inline style values to
+   Electron's -webkit-app-region attribute so TitleBar.tsx drag region
+   works without changing the React component. */
+[style*="--wails-draggable: drag"] {
+  -webkit-app-region: drag;
+}
+[style*="--wails-draggable: no-drag"] {
+  -webkit-app-region: no-drag;
+}

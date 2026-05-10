@@ -31,6 +31,26 @@ export function wireIPC(supervisor: BridgeSupervisor, getWindow: () => BrowserWi
     app.quit();
   });
 
+  // Window controls — drive the custom frameless title bar.
+  ipcMain.handle("window.minimise", () => {
+    const win = getWindow();
+    if (win) win.minimize();
+  });
+  ipcMain.handle("window.toggleMaximise", () => {
+    const win = getWindow();
+    if (!win) return;
+    if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+  });
+  ipcMain.handle("window.isMaximised", () => {
+    const win = getWindow();
+    return win ? win.isMaximized() : false;
+  });
+  ipcMain.handle("window.close", () => {
+    const win = getWindow();
+    if (win) win.close();
+  });
+
   // Supervisor lifecycle → renderer (only path for bridge.state).
   supervisor.on("state", (payload) => {
     const win = getWindow();

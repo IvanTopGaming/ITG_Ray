@@ -57,6 +57,12 @@ contextBridge.exposeInMainWorld("itg", {
     syncOne: (params: { id: string }) => rpc("subs.syncOne", params),
     syncAll: () => rpc("subs.syncAll"),
   },
+  window: {
+    minimise: () => ipcRenderer.invoke("window.minimise"),
+    toggleMaximise: () => ipcRenderer.invoke("window.toggleMaximise"),
+    isMaximised: () => ipcRenderer.invoke("window.isMaximised") as Promise<boolean>,
+    close: () => ipcRenderer.invoke("window.close"),
+  },
   run: {
     connect: (params: { serverId: string; mode: string }) =>
       rpc("run.connect", params),

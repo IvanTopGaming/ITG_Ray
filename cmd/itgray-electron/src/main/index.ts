@@ -30,6 +30,7 @@ function createWindow(): void {
     width: 1024,
     height: 720,
     title: "ITG Ray",
+    frame: false,
     webPreferences: {
       preload: path.join(__dirname, "..", "..", "dist-preload", "preload", "preload.js"),
       contextIsolation: true,

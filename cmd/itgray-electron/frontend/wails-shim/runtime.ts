@@ -95,11 +95,16 @@ export function Quit(): void {
   void window.itg.app.quit?.();
 }
 
-// Window controls used by the custom frameless title bar. Phase 5 will route
-// these through window.itg to Electron's BrowserWindow methods. For now they
-// are stubs so the renderer can build and run in a non-frameless dev shell.
-export function WindowMinimise(): void {}
-export function WindowToggleMaximise(): void {}
+// Window controls — route through Electron via the preload bridge. The
+// custom frameless title bar (TitleBar.tsx) calls these, so Phase 5 wires
+// them to BrowserWindow.minimize / maximize / isMaximized.
+export function WindowMinimise(): void {
+  void (window.itg as any).window?.minimise?.();
+}
+export function WindowToggleMaximise(): void {
+  void (window.itg as any).window?.toggleMaximise?.();
+}
 export function WindowIsMaximised(): Promise<boolean> {
-  return Promise.resolve(false);
+  const ns = (window.itg as any).window;
+  return ns?.isMaximised ? ns.isMaximised() : Promise.resolve(false);
 }
