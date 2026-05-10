@@ -52,12 +52,8 @@ export interface NotificationSettings {
   sound: boolean;
 }
 
-export interface OnboardingMarkSeenParams {
-  key: string;
-}
-
 export interface OnboardingStateResult {
-  seen: string[];
+  onboarded: boolean;
 }
 
 export interface PingResult {
@@ -213,8 +209,9 @@ export interface RpcMethods {
   "helper.start": { params: Empty; result: Empty };
   "helper.status": { params: Empty; result: HelperStatusResult };
   "helper.stop": { params: Empty; result: Empty };
+  "onboarding.complete": { params: Empty; result: Empty };
   "onboarding.getState": { params: Empty; result: OnboardingStateResult };
-  "onboarding.markSeen": { params: OnboardingMarkSeenParams; result: Empty };
+  "onboarding.skip": { params: Empty; result: Empty };
   "run.connect": { params: RunConnectParams; result: Empty };
   "run.disconnect": { params: Empty; result: Empty };
   "run.reconnect": { params: RunReconnectParams; result: Empty };
