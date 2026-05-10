@@ -18,7 +18,7 @@ import (
 	"github.com/itg-team/itg-ray/cmd/itgray-bridge/dispatcher"
 	"github.com/itg-team/itg-ray/cmd/itgray-bridge/forwarder"
 	"github.com/itg-team/itg-ray/cmd/itgray-bridge/handlers"
-	"github.com/itg-team/itg-ray/cmd/itgray-gui/bindings"
+	"github.com/itg-team/itg-ray/internal/bindings"
 	"github.com/itg-team/itg-ray/internal/chainctl"
 	"github.com/itg-team/itg-ray/internal/hub"
 	"github.com/itg-team/itg-ray/internal/config"
@@ -177,9 +177,9 @@ func main() {
 	})
 
 	// AppService now wired with live Chain, HelperProber, and the SOCKS
-	// port GetPublicIP uses to route the HTTP request via xray. AppCtx
-	// remains nil — Quit lives on the Electron main process side
-	// (separate ipcMain channel), bridge has no Wails app context.
+	// port GetPublicIP uses to route the HTTP request via xray. Quit is
+	// a no-op on the bridge — the Electron main process owns shutdown via
+	// its "app.quit" ipcMain handler.
 	appSvc := bindings.NewAppService(&bindings.AppDeps{
 		DataDir:       dataDir,
 		Version:       handlers.Version,

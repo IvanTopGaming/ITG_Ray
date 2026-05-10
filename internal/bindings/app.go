@@ -3,7 +3,6 @@
 package bindings
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,14 +14,7 @@ import (
 	"github.com/itg-team/itg-ray/internal/config"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/subscription"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
-
-// AppCtxFunc returns the Wails app context captured by App.Startup. The
-// constructor takes a closure rather than the ctx itself because the
-// context only becomes available after Wails calls Startup, while the
-// service is constructed earlier in main.go.
-type AppCtxFunc func() context.Context
 
 // ServerStore is the read/write surface the binding services need from
 // internal/server. The real internal/server package exposes free functions
@@ -80,11 +72,6 @@ type AppDeps struct {
 	ServerStore  ServerStore
 	SubStore     SubStore
 	HelperProber HelperProber // closure that returns helper state ("running"|"stopped"|"missing")
-	// AppCtx returns the Wails app context (App.ctx, set in Startup). Used
-	// by Quit, which must call runtime.Quit with the app's ctx — passing
-	// context.Background() makes the runtime no-op. Nil is tolerated and
-	// causes Quit to fall back to context.Background() (test code path).
-	AppCtx AppCtxFunc
 	// Chain is the source of live status/server/mode for GetSnapshot. Nil
 	// is tolerated (yields StatusIdle / Mode("tun")); production wiring
 	// guarantees non-nil.
@@ -105,7 +92,7 @@ type AppService struct {
 
 // NewAppService constructs a new AppService. AppDeps is taken by pointer so
 // later tasks can grow it without re-introducing gocritic hugeParam
-// suppressions on every binding constructor in cmd/itgray-gui/bindings/.
+// suppressions on every binding constructor in internal/bindings/.
 func NewAppService(d *AppDeps) *AppService {
 	return &AppService{d: d}
 }
@@ -113,26 +100,10 @@ func NewAppService(d *AppDeps) *AppService {
 // GetVersion returns the build version string.
 func (a *AppService) GetVersion() string { return a.d.Version }
 
-// Quit asks the Wails runtime to terminate the app. Idempotent at the
-// runtime layer — calling on an already-stopping app is a no-op.
-//
-// Wails v2.11 does not auto-inject a ctx into bound service methods (only
-// the main App struct), so Quit takes no JS-visible args. The Wails app
-// ctx is sourced from AppDeps.AppCtx (a closure into App.ctx, set during
-// Startup); when nil (unit tests), runtime.Quit is invoked with
-// context.Background() and is a no-op.
-func (a *AppService) Quit() {
-	ctx := context.Background()
-	if a.d.AppCtx != nil {
-		if c := a.d.AppCtx(); c != nil {
-			ctx = c
-		}
-	}
-	if ctx.Err() != nil {
-		return
-	}
-	runtime.Quit(ctx)
-}
+// Quit is a no-op in the Electron build. The Electron main process
+// owns app shutdown via the "app.quit" ipcMain handler — see
+// cmd/itgray-electron/src/main/ipc.ts.
+func (a *AppService) Quit() {}
 
 // GetSnapshot collects the current app state into a Snapshot DTO.
 func (a *AppService) GetSnapshot() (hub.Snapshot, error) {
