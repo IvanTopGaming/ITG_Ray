@@ -39,3 +39,24 @@ GOOS=linux GOARCH=amd64 go build -mod=mod -trimpath \
 
 echo "==> dist/ (linux artifacts)"
 ls -la "$OUT" | grep -vE '\.exe|\.dll' || true
+
+# ----- Electron AppImage -----
+echo ">> building itgray-bridge for Linux (Electron bundle)"
+( cd "$ROOT/cmd/itgray-electron" && npm run build:bridge:linux )
+
+echo ">> building Electron bundle (main + preload + frontend)"
+( cd "$ROOT/cmd/itgray-electron" && npm run build:main && npm run build:preload && npm run build:frontend )
+
+echo ">> running electron-builder for Linux AppImage"
+( cd "$ROOT/cmd/itgray-electron" && npx electron-builder --linux )
+
+APPIMAGE=$(ls "$ROOT/cmd/itgray-electron/dist-installer/ITGRay-"*.AppImage 2>/dev/null | head -1)
+if [[ -n "$APPIMAGE" && -f "$APPIMAGE" ]]; then
+    echo ">> copying AppImage to dist/"
+    cp "$APPIMAGE" "$OUT/"
+    chmod +x "$OUT/$(basename "$APPIMAGE")"
+    echo "==> Electron AppImage:"
+    ls -la "$OUT/ITGRay-"*.AppImage
+else
+    echo "warning: AppImage not found in dist-installer/" >&2
+fi
