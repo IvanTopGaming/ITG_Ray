@@ -134,15 +134,12 @@ type HelperStatusResult struct {
 // OnboardingService — methods under "onboarding." namespace.
 type OnboardingService interface {
 	GetState(p Empty) (OnboardingStateResult, error)
-	MarkSeen(p OnboardingMarkSeenParams) (Empty, error)
+	Complete(p Empty) (Empty, error)
+	Skip(p Empty) (Empty, error)
 }
 
 type OnboardingStateResult struct {
-	Seen []string `json:"seen"`
-}
-
-type OnboardingMarkSeenParams struct {
-	Key string `json:"key"`
+	Onboarded bool `json:"onboarded"`
 }
 
 // EventTopics enumerates the bridge → main notification topics. The
