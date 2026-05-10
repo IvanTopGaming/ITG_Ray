@@ -94,3 +94,12 @@ export function Environment(): Promise<{ buildType: string; platform: string; ar
 export function Quit(): void {
   // No-op in Phase 2. Phase 5 wires this to Electron's app.quit() via window.itg.
 }
+
+// Window controls used by the custom frameless title bar. Phase 5 will route
+// these through window.itg to Electron's BrowserWindow methods. For now they
+// are stubs so the renderer can build and run in a non-frameless dev shell.
+export function WindowMinimise(): void {}
+export function WindowToggleMaximise(): void {}
+export function WindowIsMaximised(): Promise<boolean> {
+  return Promise.resolve(false);
+}

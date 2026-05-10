@@ -17,7 +17,18 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
-    "paths": { "@/*": ["src/*"] }
+    "paths": {
+      "@/*": ["src/*"],
+      "../../wailsjs/runtime/runtime": ["./wails-shim/runtime"],
+      "../../wailsjs/go/models": ["./wails-shim/models"],
+      "../../wailsjs/go/bindings/AppService": ["./wails-shim/bindings/AppService"],
+      "../../wailsjs/go/bindings/RunService": ["./wails-shim/bindings/RunService"],
+      "../../wailsjs/go/bindings/ServersService": ["./wails-shim/bindings/ServersService"],
+      "../../wailsjs/go/bindings/SubsService": ["./wails-shim/bindings/SubsService"],
+      "../../wailsjs/go/bindings/SettingsService": ["./wails-shim/bindings/SettingsService"],
+      "../../wailsjs/go/bindings/HelperService": ["./wails-shim/bindings/HelperService"],
+      "../../wailsjs/go/bindings/OnboardingService": ["./wails-shim/bindings/OnboardingService"]
+    }
   },
   "include": ["src", "vitest.setup.ts"]
 }
