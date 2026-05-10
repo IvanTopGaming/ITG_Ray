@@ -24,5 +24,18 @@ contextBridge.exposeInMainWorld("itg", {
     complete: () => rpc("onboarding.complete"),
     skip: () => rpc("onboarding.skip"),
   },
+  settings: {
+    get: () => rpc("settings.get"),
+    update: (section: string, patch: Record<string, unknown>) =>
+      rpc("settings.update", { section, patch }),
+  },
+  helper: {
+    status: () => rpc("helper.status"),
+    install: () => rpc("helper.install"),
+    start: () => rpc("helper.start"),
+    stop: () => rpc("helper.stop"),
+    restart: () => rpc("helper.restart"),
+    reinstall: () => rpc("helper.reinstall"),
+  },
   on,
 });
