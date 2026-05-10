@@ -11,6 +11,20 @@ let supervisor: BridgeSupervisor | null = null;
 app.setName("ITG Ray");
 app.setPath("userData", path.join(app.getPath("appData"), "ITG Ray"));
 
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  // Another Electron instance owns the lock — exit immediately so the
+  // primary instance's "second-instance" handler can refocus its window.
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1024,
