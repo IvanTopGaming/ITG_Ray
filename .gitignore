@@ -34,5 +34,6 @@ cmd/itgray-gui/frontend/dist/
 cmd/itgray-electron/node_modules/
 cmd/itgray-electron/dist-main/
 cmd/itgray-electron/dist-preload/
+cmd/itgray-electron/dist-bridge/
 cmd/itgray-electron/dist-frontend/
 cmd/itgray-electron/build/
