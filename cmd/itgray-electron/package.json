@@ -4,14 +4,18 @@
   "private": true,
   "main": "dist-main/main/index.js",
   "scripts": {
+    "build:bridge": "go build -o dist-bridge/itgray-bridge ../../cmd/itgray-bridge",
     "build:main": "tsc -p tsconfig.main.json",
     "build:preload": "tsc -p tsconfig.preload.json",
-    "build": "npm run build:main && npm run build:preload && npm run build:bridge",
-    "build:bridge": "go build -o dist-bridge/itgray-bridge ../../cmd/itgray-bridge",
-    "dev": "concurrently -k -n bridge,main \"npm:dev:bridge\" \"npm:dev:main\"",
-    "dev:bridge": "go build -o dist-bridge/itgray-bridge ../../cmd/itgray-bridge && cross-env ELECTRON_DEV=1 wait-on dist-bridge/itgray-bridge && cross-env ELECTRON_DEV=1 npm run start:dev",
-    "dev:main": "tsc -b --watch",
-    "start:dev": "cross-env ELECTRON_DEV=1 electron .",
+    "build:frontend": "cd frontend && npm run build",
+    "build": "npm run build:main && npm run build:preload && npm run build:frontend && npm run build:bridge",
+
+    "dev:bridge": "go build -o dist-bridge/itgray-bridge ../../cmd/itgray-bridge && air -c air.toml",
+    "dev:vite": "cd frontend && npm run dev",
+    "dev:tsc": "tsc -b --watch",
+    "dev:electron": "wait-on http://localhost:34115 dist-main/main/index.js && cross-env ELECTRON_DEV=1 electron .",
+    "dev": "concurrently -k -n bridge,vite,tsc,electron \"npm:dev:bridge\" \"npm:dev:vite\" \"npm:dev:tsc\" \"npm:dev:electron\"",
+
     "start": "electron ."
   },
   "devDependencies": {

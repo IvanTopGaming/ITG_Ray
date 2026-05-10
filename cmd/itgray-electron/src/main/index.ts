@@ -25,7 +25,7 @@ function createWindow(): void {
   });
 
   if (isDevMode()) {
-    mainWindow.loadURL("http://localhost:5173");
+    mainWindow.loadURL("http://localhost:34115");
     mainWindow.webContents.openDevTools({ mode: "detach" });
   } else {
     mainWindow.loadFile(path.join(__dirname, "..", "..", "dist-frontend", "index.html"));
