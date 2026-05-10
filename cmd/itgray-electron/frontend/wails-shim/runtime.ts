@@ -92,7 +92,7 @@ export function Environment(): Promise<{ buildType: string; platform: string; ar
 }
 
 export function Quit(): void {
-  // No-op in Phase 2. Phase 5 wires this to Electron's app.quit() via window.itg.
+  void window.itg.app.quit?.();
 }
 
 // Window controls used by the custom frameless title bar. Phase 5 will route
