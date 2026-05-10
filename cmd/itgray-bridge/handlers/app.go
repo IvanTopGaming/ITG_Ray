@@ -17,6 +17,7 @@ var Version = "dev"
 // bindings.AppService.GetSnapshot() satisfies it directly.
 type Snapshotter interface {
 	GetSnapshot() (hub.Snapshot, error)
+	GetPublicIP() (string, error)
 }
 
 // AppHandlers groups methods under the "app." namespace.
@@ -36,6 +37,18 @@ func (AppHandlers) Ping(_ context.Context, _ json.RawMessage) (any, error) {
 		Pong:    time.Now().UnixMilli(),
 		Version: Version,
 	}, nil
+}
+
+// GetPublicIP returns the egress public IP as seen by an outside
+// observer. The binding gates on chain status: when the chain is not
+// connected it returns bindings.ErrNotConnected, which the dispatcher
+// maps to JSON-RPC -32603. Nil-safe: returns "" (no error) when Snap
+// is unset, matching the GetSnapshot pattern.
+func (a AppHandlers) GetPublicIP(_ context.Context, _ json.RawMessage) (any, error) {
+	if a.Snap == nil {
+		return "", nil
+	}
+	return a.Snap.GetPublicIP()
 }
 
 // GetSnapshot returns the full app state for renderer bootstrap.

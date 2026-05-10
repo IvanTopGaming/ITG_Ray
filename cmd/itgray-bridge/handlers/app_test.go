@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -49,3 +50,49 @@ type stubSnapshotter struct {
 }
 
 func (s stubSnapshotter) GetSnapshot() (hub.Snapshot, error) { return s.snap, s.err }
+func (s stubSnapshotter) GetPublicIP() (string, error)       { return "", nil }
+
+// fakeSnapshotter extends stubSnapshotter with public-IP doubles for Task 3 tests.
+type fakeSnapshotter struct {
+	snap hub.Snapshot
+	err  error
+	// public IP doubles
+	pubIP    string
+	pubIPErr error
+}
+
+func (f *fakeSnapshotter) GetSnapshot() (hub.Snapshot, error) { return f.snap, f.err }
+func (f *fakeSnapshotter) GetPublicIP() (string, error)       { return f.pubIP, f.pubIPErr }
+
+func TestAppGetPublicIPReturnsValue(t *testing.T) {
+	h := AppHandlers{Snap: &fakeSnapshotter{pubIP: "203.0.113.42"}}
+	got, err := h.GetPublicIP(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("GetPublicIP: %v", err)
+	}
+	s, ok := got.(string)
+	if !ok {
+		t.Fatalf("expected string result, got %T", got)
+	}
+	if s != "203.0.113.42" {
+		t.Fatalf("ip mismatch: got %q", s)
+	}
+}
+
+func TestAppGetPublicIPPropagatesError(t *testing.T) {
+	h := AppHandlers{Snap: &fakeSnapshotter{pubIPErr: errors.New("not connected")}}
+	if _, err := h.GetPublicIP(context.Background(), nil); err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+}
+
+func TestAppGetPublicIPNilSnap(t *testing.T) {
+	h := AppHandlers{Snap: nil}
+	got, err := h.GetPublicIP(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("GetPublicIP with nil Snap should be no-op, got: %v", err)
+	}
+	if got != "" {
+		t.Fatalf("expected empty string for nil Snap, got %v", got)
+	}
+}
