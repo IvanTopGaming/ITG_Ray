@@ -1,9 +1,9 @@
 root = "../.."
-tmp_dir = "cmd/itgray-electron/dist-bridge"
+tmp_dir = "dist-bridge"
 
 [build]
-  cmd = "go build -o cmd/itgray-electron/dist-bridge/itgray-bridge ./cmd/itgray-bridge"
-  bin = "cmd/itgray-electron/dist-bridge/itgray-bridge"
+  cmd = "go build -o dist-bridge/itgray-bridge ../../cmd/itgray-bridge"
+  bin = "dist-bridge/itgray-bridge"
   include_ext = ["go"]
   include_dir = ["cmd/itgray-bridge", "internal/bridge", "internal/hub"]
   exclude_dir = ["cmd/itgray-electron/node_modules", "cmd/itgray-electron/frontend/node_modules", "tmp"]
