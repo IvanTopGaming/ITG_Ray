@@ -181,7 +181,15 @@ function onVpnStatus(payload: any) {
       } as ServerView;
     }
     if (typeof payload.mode === "string") next.mode = payload.mode as Mode;
-    if (state.status !== "connected") next.connectedAt = Date.now();
+    if (state.status !== "connected") {
+      // Backend supplies connectedAt for Reconcile-adopted sessions
+      // (the chain was already running before we booted; without this
+      // the duration counter would restart at zero on every GUI relaunch).
+      // bringUp also includes Date.now()-equivalent; falling back to
+      // Date.now() keeps older tests / event sources working.
+      next.connectedAt =
+        typeof payload.connectedAt === "number" ? payload.connectedAt : Date.now();
+    }
   }
 
   if (nextStatus === "idle") {

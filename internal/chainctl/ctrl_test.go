@@ -209,15 +209,18 @@ func TestController_Start_StartChainFails_Rollback(t *testing.T) {
 func TestController_Reconcile_AfterCrash(t *testing.T) {
 	c, fh, h, _ := setup(t)
 	// Helper survived a GUI crash and reports an active chain. Reconcile
-	// must adopt: rebind picker, emit a connected vpn:status, claim
-	// ownership (so Stop can tear it down), and start the poller.
+	// must adopt: rebind picker, emit a connected vpn:status (including
+	// the original session start time so the duration counter resumes
+	// from when the chain *actually* started, not from now), claim
+	// ownership, and start the poller.
 	fh.mu.Lock()
 	fh.running = true
 	fh.mu.Unlock()
+	sessionStart := time.Now().Add(-2 * time.Hour)
 	require.NoError(t, saveSession(c.d.DataDir, sessionRecord{
 		ServerID: "a",
 		Mode:     string(ModeTUN),
-		At:       time.Now(),
+		At:       sessionStart,
 	}))
 
 	rcv := h.Subscribe(8)
@@ -229,6 +232,8 @@ func TestController_Reconcile_AfterCrash(t *testing.T) {
 	require.Equal(t, "a", ev.Payload["serverId"])
 	require.Equal(t, string(ModeTUN), ev.Payload["mode"])
 	require.Contains(t, ev.Payload, "network", "adopted connected event must carry network view")
+	require.Equal(t, sessionStart.UnixMilli(), ev.Payload["connectedAt"],
+		"adopted connected event must carry the original session start time, not now()")
 
 	st, srv, mode := c.Status()
 	require.Equal(t, hub.StatusConnected, st)
@@ -481,15 +486,21 @@ func TestStart_ConnectedEvent_PayloadIncludesNetwork(t *testing.T) {
 	})
 	rcv := h.Subscribe(64)
 	defer h.Unsubscribe(rcv)
+	before := time.Now().UnixMilli()
 	require.NoError(t, c.Start(context.Background(), "a", ModeSysProxy))
 
 	ev := waitForVpnStatus(t, rcv, string(hub.StatusConnected), 2*time.Second)
+	after := time.Now().UnixMilli()
 	netView, ok := ev.Payload["network"]
 	require.True(t, ok, "connected event must carry network payload")
 	require.NotNil(t, netView)
 	view, ok := netView.(map[string]any)
 	require.True(t, ok, "network payload must be map[string]any")
 	require.EqualValues(t, 1090, view["socksPort"])
+	ts, ok := ev.Payload["connectedAt"].(int64)
+	require.True(t, ok, "connected event must carry connectedAt int64")
+	require.GreaterOrEqual(t, ts, before)
+	require.LessOrEqual(t, ts, after)
 }
 
 // TestStart_MTUOutOfRange_PassesRawToBuildConfigs pins the chainctl/

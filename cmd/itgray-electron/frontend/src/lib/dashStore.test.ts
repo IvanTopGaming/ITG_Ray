@@ -122,6 +122,33 @@ describe("dashStore — vpn:status", () => {
     expect(st.connectedAt).not.toBeNull();
   });
 
+  it("connected event carrying connectedAt uses the payload timestamp", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    // Pretend the chain has been running for 2 hours — Reconcile sends
+    // this so the duration counter resumes from the original session
+    // start instead of restarting at zero on every GUI relaunch.
+    const sessionStart = Date.now() - 2 * 60 * 60 * 1000;
+    fireEvent("vpn:status", {
+      status: "connected",
+      serverId: "s1",
+      mode: "tun",
+      connectedAt: sessionStart,
+    });
+    expect(getDashState().connectedAt).toBe(sessionStart);
+  });
+
+  it("connected event without connectedAt falls back to Date.now()", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    const before = Date.now();
+    fireEvent("vpn:status", { status: "connected", serverId: "s1", mode: "tun" });
+    const after = Date.now();
+    const ts = getDashState().connectedAt!;
+    expect(ts).toBeGreaterThanOrEqual(before);
+    expect(ts).toBeLessThanOrEqual(after);
+  });
+
   it("connected with cache miss falls back to {id, name=''}", async () => {
     getSnapshotMock.mockResolvedValue(baseSnapshot);
     await __bootstrapForTest();

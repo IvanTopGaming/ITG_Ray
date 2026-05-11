@@ -207,10 +207,11 @@ func (c *Controller) Start(ctx context.Context, serverID string, mode Mode) erro
 		c.d.Hub.Publish(hub.Event{
 			Name: hub.EventVPNStatus,
 			Payload: map[string]any{
-				"status":   string(hub.StatusConnected),
-				"serverId": srv.ID,
-				"mode":     string(effectiveMode),
-				"network":  networkSettingsView(net),
+				"status":      string(hub.StatusConnected),
+				"serverId":    srv.ID,
+				"mode":        string(effectiveMode),
+				"network":     networkSettingsView(net),
+				"connectedAt": time.Now().UnixMilli(),
 			},
 		})
 		c.runPoller(pollCtx)
@@ -414,9 +415,10 @@ func (c *Controller) Reconcile(ctx context.Context) {
 	c.mu.Unlock()
 
 	payload := map[string]any{
-		"status":   string(hub.StatusConnected),
-		"serverId": srv.ID,
-		"mode":     string(mode),
+		"status":      string(hub.StatusConnected),
+		"serverId":    srv.ID,
+		"mode":        string(mode),
+		"connectedAt": rec.At.UnixMilli(),
 	}
 	if net, nerr := c.d.Network(); nerr == nil {
 		payload["network"] = networkSettingsView(net)
