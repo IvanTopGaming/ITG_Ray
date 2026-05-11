@@ -1,6 +1,10 @@
 package hub
 
-import "time"
+import (
+	"time"
+
+	"github.com/itg-team/itg-ray/internal/rules"
+)
 
 // ChainStatus is the high-level VPN state shown in the Hero card.
 type ChainStatus string
@@ -155,4 +159,31 @@ type Snapshot struct {
 	Settings      SettingsView `json:"settings"`
 	Onboarded     bool         `json:"onboarded"`
 	Version       string       `json:"version"`
+}
+
+// RulesView is the wire shape rules.list returns. Mirrors
+// internal/rules.Model but uses string Action so the TS codegen
+// surfaces the literal "proxy" / "direct" / "block" without a type
+// alias hop.
+type RulesView struct {
+	DefaultAction string      `json:"defaultAction"`
+	Groups        []GroupView `json:"groups"`
+}
+
+// GroupView is the wire shape for a single rule group.
+type GroupView struct {
+	ID      string     `json:"id"`
+	Name    string     `json:"name"`
+	Locked  bool       `json:"locked"`
+	Enabled bool       `json:"enabled"`
+	Rules   []RuleView `json:"rules"`
+}
+
+// RuleView is the wire shape for a single rule.
+type RuleView struct {
+	ID         string           `json:"id"`
+	Name       string           `json:"name"`
+	Enabled    bool             `json:"enabled"`
+	Action     string           `json:"action"`
+	Conditions rules.Conditions `json:"conditions"`
 }

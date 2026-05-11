@@ -28,3 +28,8 @@ const (
 // Add / Edit / Remove. Payload is nil; consumers re-fetch via List or
 // App.GetSnapshot.
 const EventServersChanged = "servers:changed"
+
+// EventRulesChanged is published by bindings.RulesService on every
+// successful mutation. Renderer re-fetches via rules.list rather than
+// diffing payloads.
+const EventRulesChanged = "rules:changed"
