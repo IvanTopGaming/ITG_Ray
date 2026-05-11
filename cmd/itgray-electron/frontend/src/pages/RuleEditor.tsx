@@ -2,10 +2,33 @@ import { useState, useMemo, useRef } from "react";
 import type React from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
+import { AnimatePresence, motion, type Variants } from "framer-motion";
 import { useRules, rulesEditRule, rulesMoveRule, rulesRemoveRule, type RuleView, type GroupView, type DomainMatcher, type PortSpec } from "@/lib/rulesStore";
 import { Segmented } from "@/components/controls/Segmented";
 import { Toggle } from "@/components/controls/Toggle";
 import { ConfirmDialog } from "@/components/controls/ConfirmDialog";
+import { Reveal } from "@/components/controls/Reveal";
+
+const SNAP_EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+
+const pageVariants: Variants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { delayChildren: 0.05, staggerChildren: 0.04 },
+  },
+};
+
+const sectionVariants: Variants = {
+  hidden: { opacity: 0, y: 8 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.24, ease: SNAP_EASE } },
+};
+
+const rowVariants: Variants = {
+  hidden: { opacity: 0, x: -8 },
+  show: { opacity: 1, x: 0, transition: { duration: 0.22, ease: SNAP_EASE } },
+  exit: { opacity: 0, x: 8, transition: { duration: 0.18, ease: SNAP_EASE } },
+};
 
 export function RuleEditor() {
   const { ruleId = "" } = useParams<{ ruleId: string }>();
@@ -23,12 +46,23 @@ export function RuleEditor() {
 
   if (!draft) {
     return (
-      <div className="flex flex-col gap-3">
-        <button onClick={() => navigate("/routing")} className="self-start text-[12px] text-white/55 hover:text-white/90">
+      <motion.div
+        className="flex flex-col gap-3"
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.24, ease: SNAP_EASE }}
+      >
+        <motion.button
+          onClick={() => navigate("/routing")}
+          whileHover={{ x: -2 }}
+          whileTap={{ scale: 0.96 }}
+          transition={{ duration: 0.18, ease: SNAP_EASE }}
+          className="self-start text-[12px] text-white/55 hover:text-white/90"
+        >
           ← Routing
-        </button>
+        </motion.button>
         <p className="text-[14px] text-white/70">Rule not found.</p>
-      </div>
+      </motion.div>
     );
   }
 
@@ -63,22 +97,32 @@ export function RuleEditor() {
   const userGroups = groups.filter((g) => !g.locked);
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="flex items-center justify-between">
-        <button
+    <motion.div
+      className="flex flex-col gap-4"
+      initial="hidden"
+      animate="show"
+      variants={pageVariants}
+    >
+      <motion.header variants={sectionVariants} className="flex items-center justify-between">
+        <motion.button
           onClick={handleBack}
+          whileHover={{ x: -2 }}
+          whileTap={{ scale: 0.96 }}
+          transition={{ duration: 0.18, ease: SNAP_EASE }}
           className="flex items-center gap-1 text-[12px] text-white/55 hover:text-white/90"
         >
           <ChevronLeft className="h-3.5 w-3.5" /> Routing
-        </button>
-        <button
+        </motion.button>
+        <motion.button
           onClick={handleSave}
+          whileTap={{ scale: 0.96 }}
+          transition={{ duration: 0.18, ease: SNAP_EASE }}
           className="rounded-md bg-sky-500/30 px-3 py-1.5 text-[12.5px] font-medium text-sky-100 hover:bg-sky-500/40"
         >
           Save
-        </button>
-      </header>
-      <div className="glass-regular flex flex-col gap-3 rounded-2xl p-4">
+        </motion.button>
+      </motion.header>
+      <motion.div variants={sectionVariants} className="glass-regular flex flex-col gap-3 rounded-2xl p-4">
         <label className="flex flex-col gap-1">
           <span className="text-[11.5px] uppercase tracking-wider text-white/55">Name</span>
           <input
@@ -115,7 +159,7 @@ export function RuleEditor() {
             {userGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
           </select>
         </label>
-      </div>
+      </motion.div>
       <Section
         title="Domains"
         count={draft.conditions.domains?.length ?? 0}
@@ -185,64 +229,87 @@ export function RuleEditor() {
         onClose={() => setConfirmDiscard(false)}
         onConfirm={() => navigate("/routing")}
       />
-    </div>
+    </motion.div>
   );
 }
 
 function Section({ title, count, defaultOpen, children }: { title: string; count: number; defaultOpen: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <section className="glass-regular flex flex-col gap-2 rounded-2xl p-4">
+    <motion.section variants={sectionVariants} className="glass-regular flex flex-col gap-2 rounded-2xl p-4">
       <button type="button" onClick={() => setOpen(!open)} className="flex items-center justify-between text-left">
         <span className="text-[13px] font-medium text-white/90">
-          <span className="mr-1 inline-block w-3">{open ? "▼" : "▶"}</span>
+          <motion.span
+            animate={{ rotate: open ? 0 : -90 }}
+            transition={{ duration: 0.18, ease: SNAP_EASE }}
+            className="mr-1 inline-block w-3"
+          >
+            ▼
+          </motion.span>
           {title}{count > 0 ? ` (${count})` : ` · empty`}
         </span>
       </button>
-      {open && <div className="flex flex-col gap-2 pt-1">{children}</div>}
-    </section>
+      <Reveal show={open}>
+        <div className="flex flex-col gap-2 pt-1">{children}</div>
+      </Reveal>
+    </motion.section>
   );
 }
 
 function DomainsSection({ value, onChange }: { value: DomainMatcher[]; onChange: (next: DomainMatcher[]) => void }) {
   return (
     <>
-      {value.map((m, i) => (
-        <div key={i} className="flex items-center gap-2">
-          <select
-            aria-label="Domain matcher kind"
-            value={m.kind}
-            onChange={(e) => onChange(value.map((x, j) => j === i ? { ...x, kind: e.target.value as DomainMatcher["kind"] } : x))}
-            className="rounded-md border border-white/10 bg-[#1c1f2a] px-2 py-1 text-[12px]"
+      <AnimatePresence initial={false}>
+        {value.map((m, i) => (
+          <motion.div
+            key={i}
+            variants={rowVariants}
+            initial="hidden"
+            animate="show"
+            exit="exit"
+            className="flex items-center gap-2"
           >
-            <option value="exact">exact</option>
-            <option value="suffix">suffix</option>
-            <option value="keyword">keyword</option>
-            <option value="regex">regex</option>
-          </select>
-          <input
-            aria-label="Domain matcher value"
-            value={m.value}
-            onChange={(e) => onChange(value.map((x, j) => j === i ? { ...x, value: e.target.value } : x))}
-            className="flex-1 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
-          />
-          <button
-            type="button"
-            onClick={() => onChange(value.filter((_, j) => j !== i))}
-            aria-label={`Remove domain matcher ${i + 1}`}
-            className="text-white/45 hover:text-rose-300"
-          >
-            ✕
-          </button>
-        </div>
-      ))}
-      <button
+            <select
+              aria-label="Domain matcher kind"
+              value={m.kind}
+              onChange={(e) => onChange(value.map((x, j) => j === i ? { ...x, kind: e.target.value as DomainMatcher["kind"] } : x))}
+              className="rounded-md border border-white/10 bg-[#1c1f2a] px-2 py-1 text-[12px]"
+            >
+              <option value="exact">exact</option>
+              <option value="suffix">suffix</option>
+              <option value="keyword">keyword</option>
+              <option value="regex">regex</option>
+            </select>
+            <input
+              aria-label="Domain matcher value"
+              value={m.value}
+              onChange={(e) => onChange(value.map((x, j) => j === i ? { ...x, value: e.target.value } : x))}
+              className="flex-1 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
+            />
+            <motion.button
+              type="button"
+              onClick={() => onChange(value.filter((_, j) => j !== i))}
+              aria-label={`Remove domain matcher ${i + 1}`}
+              whileHover={{ scale: 1.15 }}
+              whileTap={{ scale: 0.85 }}
+              transition={{ duration: 0.18, ease: SNAP_EASE }}
+              className="text-white/45 hover:text-rose-300"
+            >
+              ✕
+            </motion.button>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+      <motion.button
         type="button"
         onClick={() => onChange([...value, { kind: "suffix", value: "" }])}
+        whileHover={{ y: -1 }}
+        whileTap={{ scale: 0.96 }}
+        transition={{ duration: 0.18, ease: SNAP_EASE }}
         className="self-start rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08]"
       >
         + Add domain matcher
-      </button>
+      </motion.button>
     </>
   );
 }
@@ -250,32 +317,47 @@ function DomainsSection({ value, onChange }: { value: DomainMatcher[]; onChange:
 function CidrsSection({ value, onChange }: { value: string[]; onChange: (next: string[]) => void }) {
   return (
     <>
-      {value.map((cidr, i) => (
-        <div key={i} className="flex items-center gap-2">
-          <input
-            aria-label={`CIDR value ${i + 1}`}
-            value={cidr}
-            onChange={(e) => onChange(value.map((x, j) => j === i ? e.target.value : x))}
-            placeholder="e.g. 10.0.0.0/8 or 1.2.3.4"
-            className="flex-1 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
-          />
-          <button
-            type="button"
-            onClick={() => onChange(value.filter((_, j) => j !== i))}
-            aria-label={`Remove CIDR ${i + 1}`}
-            className="text-white/45 hover:text-rose-300"
+      <AnimatePresence initial={false}>
+        {value.map((cidr, i) => (
+          <motion.div
+            key={i}
+            variants={rowVariants}
+            initial="hidden"
+            animate="show"
+            exit="exit"
+            className="flex items-center gap-2"
           >
-            ✕
-          </button>
-        </div>
-      ))}
-      <button
+            <input
+              aria-label={`CIDR value ${i + 1}`}
+              value={cidr}
+              onChange={(e) => onChange(value.map((x, j) => j === i ? e.target.value : x))}
+              placeholder="e.g. 10.0.0.0/8 or 1.2.3.4"
+              className="flex-1 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
+            />
+            <motion.button
+              type="button"
+              onClick={() => onChange(value.filter((_, j) => j !== i))}
+              aria-label={`Remove CIDR ${i + 1}`}
+              whileHover={{ scale: 1.15 }}
+              whileTap={{ scale: 0.85 }}
+              transition={{ duration: 0.18, ease: SNAP_EASE }}
+              className="text-white/45 hover:text-rose-300"
+            >
+              ✕
+            </motion.button>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+      <motion.button
         type="button"
         onClick={() => onChange([...value, ""])}
+        whileHover={{ y: -1 }}
+        whileTap={{ scale: 0.96 }}
+        transition={{ duration: 0.18, ease: SNAP_EASE }}
         className="self-start rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08]"
       >
         + Add CIDR
-      </button>
+      </motion.button>
     </>
   );
 }
@@ -288,44 +370,59 @@ function GeoSection({ value, onChange }: { value: string[]; onChange: (next: str
   }
   return (
     <>
-      {value.map((entry, i) => {
-        const { prefix, rest } = split(entry);
-        return (
-          <div key={i} className="flex items-center gap-2">
-            <select
-              aria-label={`Geo prefix ${i + 1}`}
-              value={prefix}
-              onChange={(e) => onChange(value.map((x, j) => j === i ? `${e.target.value}:${split(x).rest}` : x))}
-              className="rounded-md border border-white/10 bg-[#1c1f2a] px-2 py-1 text-[12px]"
+      <AnimatePresence initial={false}>
+        {value.map((entry, i) => {
+          const { prefix, rest } = split(entry);
+          return (
+            <motion.div
+              key={i}
+              variants={rowVariants}
+              initial="hidden"
+              animate="show"
+              exit="exit"
+              className="flex items-center gap-2"
             >
-              <option value="geosite">geosite</option>
-              <option value="geoip">geoip</option>
-            </select>
-            <input
-              aria-label={`Geo value ${i + 1}`}
-              value={rest}
-              onChange={(e) => onChange(value.map((x, j) => j === i ? `${split(x).prefix}:${e.target.value}` : x))}
-              placeholder="e.g. cn, google, ru"
-              className="flex-1 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
-            />
-            <button
-              type="button"
-              onClick={() => onChange(value.filter((_, j) => j !== i))}
-              aria-label={`Remove geo ${i + 1}`}
-              className="text-white/45 hover:text-rose-300"
-            >
-              ✕
-            </button>
-          </div>
-        );
-      })}
-      <button
+              <select
+                aria-label={`Geo prefix ${i + 1}`}
+                value={prefix}
+                onChange={(e) => onChange(value.map((x, j) => j === i ? `${e.target.value}:${split(x).rest}` : x))}
+                className="rounded-md border border-white/10 bg-[#1c1f2a] px-2 py-1 text-[12px]"
+              >
+                <option value="geosite">geosite</option>
+                <option value="geoip">geoip</option>
+              </select>
+              <input
+                aria-label={`Geo value ${i + 1}`}
+                value={rest}
+                onChange={(e) => onChange(value.map((x, j) => j === i ? `${split(x).prefix}:${e.target.value}` : x))}
+                placeholder="e.g. cn, google, ru"
+                className="flex-1 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
+              />
+              <motion.button
+                type="button"
+                onClick={() => onChange(value.filter((_, j) => j !== i))}
+                aria-label={`Remove geo ${i + 1}`}
+                whileHover={{ scale: 1.15 }}
+                whileTap={{ scale: 0.85 }}
+                transition={{ duration: 0.18, ease: SNAP_EASE }}
+                className="text-white/45 hover:text-rose-300"
+              >
+                ✕
+              </motion.button>
+            </motion.div>
+          );
+        })}
+      </AnimatePresence>
+      <motion.button
         type="button"
         onClick={() => onChange([...value, "geosite:"])}
+        whileHover={{ y: -1 }}
+        whileTap={{ scale: 0.96 }}
+        transition={{ duration: 0.18, ease: SNAP_EASE }}
         className="self-start rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08]"
       >
         + Add geo
-      </button>
+      </motion.button>
     </>
   );
 }
@@ -336,66 +433,81 @@ function PortsSection({ value, onChange }: { value: PortSpec[]; onChange: (next:
   }
   return (
     <>
-      {value.map((p, i) => {
-        const mode: "single" | "range" = p.single ? "single" : (p.from || p.to ? "range" : "single");
-        return (
-          <div key={i} className="flex items-center gap-2">
-            <Segmented
-              value={mode}
-              onChange={(v) => {
-                if (v === "single") setRow(i, { single: p.single ?? p.from ?? 0 });
-                else setRow(i, { from: p.from ?? p.single ?? 0, to: p.to ?? p.single ?? 0 });
-              }}
-              options={[
-                { value: "single", label: "Single" },
-                { value: "range", label: "Range" },
-              ] as const}
-            />
-            {mode === "single" ? (
-              <input
-                aria-label={`Port number ${i + 1}`}
-                type="number"
-                value={p.single ?? ""}
-                onChange={(e) => setRow(i, { single: Number(e.target.value) })}
-                className="w-24 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
-              />
-            ) : (
-              <>
-                <input
-                  aria-label={`Port from ${i + 1}`}
-                  type="number"
-                  value={p.from ?? ""}
-                  onChange={(e) => setRow(i, { ...p, from: Number(e.target.value), single: undefined })}
-                  className="w-24 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
-                />
-                <span className="text-white/45">→</span>
-                <input
-                  aria-label={`Port to ${i + 1}`}
-                  type="number"
-                  value={p.to ?? ""}
-                  onChange={(e) => setRow(i, { ...p, to: Number(e.target.value), single: undefined })}
-                  className="w-24 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
-                />
-              </>
-            )}
-            <button
-              type="button"
-              onClick={() => onChange(value.filter((_, j) => j !== i))}
-              aria-label={`Remove port ${i + 1}`}
-              className="ml-auto text-white/45 hover:text-rose-300"
+      <AnimatePresence initial={false}>
+        {value.map((p, i) => {
+          const mode: "single" | "range" = p.single ? "single" : (p.from || p.to ? "range" : "single");
+          return (
+            <motion.div
+              key={i}
+              variants={rowVariants}
+              initial="hidden"
+              animate="show"
+              exit="exit"
+              className="flex items-center gap-2"
             >
-              ✕
-            </button>
-          </div>
-        );
-      })}
-      <button
+              <Segmented
+                value={mode}
+                onChange={(v) => {
+                  if (v === "single") setRow(i, { single: p.single ?? p.from ?? 0 });
+                  else setRow(i, { from: p.from ?? p.single ?? 0, to: p.to ?? p.single ?? 0 });
+                }}
+                options={[
+                  { value: "single", label: "Single" },
+                  { value: "range", label: "Range" },
+                ] as const}
+              />
+              {mode === "single" ? (
+                <input
+                  aria-label={`Port number ${i + 1}`}
+                  type="number"
+                  value={p.single ?? ""}
+                  onChange={(e) => setRow(i, { single: Number(e.target.value) })}
+                  className="w-24 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
+                />
+              ) : (
+                <>
+                  <input
+                    aria-label={`Port from ${i + 1}`}
+                    type="number"
+                    value={p.from ?? ""}
+                    onChange={(e) => setRow(i, { ...p, from: Number(e.target.value), single: undefined })}
+                    className="w-24 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
+                  />
+                  <span className="text-white/45">→</span>
+                  <input
+                    aria-label={`Port to ${i + 1}`}
+                    type="number"
+                    value={p.to ?? ""}
+                    onChange={(e) => setRow(i, { ...p, to: Number(e.target.value), single: undefined })}
+                    className="w-24 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
+                  />
+                </>
+              )}
+              <motion.button
+                type="button"
+                onClick={() => onChange(value.filter((_, j) => j !== i))}
+                aria-label={`Remove port ${i + 1}`}
+                whileHover={{ scale: 1.15 }}
+                whileTap={{ scale: 0.85 }}
+                transition={{ duration: 0.18, ease: SNAP_EASE }}
+                className="ml-auto text-white/45 hover:text-rose-300"
+              >
+                ✕
+              </motion.button>
+            </motion.div>
+          );
+        })}
+      </AnimatePresence>
+      <motion.button
         type="button"
         onClick={() => onChange([...value, { single: 0 }])}
+        whileHover={{ y: -1 }}
+        whileTap={{ scale: 0.96 }}
+        transition={{ duration: 0.18, ease: SNAP_EASE }}
         className="self-start rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08]"
       >
         + Add port
-      </button>
+      </motion.button>
     </>
   );
 }
@@ -403,33 +515,48 @@ function PortsSection({ value, onChange }: { value: PortSpec[]; onChange: (next:
 function ProcessesSection({ value, onChange }: { value: string[]; onChange: (next: string[]) => void }) {
   return (
     <>
-      {value.map((name, i) => (
-        <div key={i} className="flex items-center gap-2">
-          <input
-            aria-label={`Process name ${i + 1}`}
-            value={name}
-            onChange={(e) => onChange(value.map((x, j) => j === i ? e.target.value : x))}
-            onBlur={() => onChange(value.map((x, j) => j === i ? x.trim() : x))}
-            placeholder="e.g. chrome.exe"
-            className="flex-1 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
-          />
-          <button
-            type="button"
-            onClick={() => onChange(value.filter((_, j) => j !== i))}
-            aria-label={`Remove process ${i + 1}`}
-            className="text-white/45 hover:text-rose-300"
+      <AnimatePresence initial={false}>
+        {value.map((name, i) => (
+          <motion.div
+            key={i}
+            variants={rowVariants}
+            initial="hidden"
+            animate="show"
+            exit="exit"
+            className="flex items-center gap-2"
           >
-            ✕
-          </button>
-        </div>
-      ))}
-      <button
+            <input
+              aria-label={`Process name ${i + 1}`}
+              value={name}
+              onChange={(e) => onChange(value.map((x, j) => j === i ? e.target.value : x))}
+              onBlur={() => onChange(value.map((x, j) => j === i ? x.trim() : x))}
+              placeholder="e.g. chrome.exe"
+              className="flex-1 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
+            />
+            <motion.button
+              type="button"
+              onClick={() => onChange(value.filter((_, j) => j !== i))}
+              aria-label={`Remove process ${i + 1}`}
+              whileHover={{ scale: 1.15 }}
+              whileTap={{ scale: 0.85 }}
+              transition={{ duration: 0.18, ease: SNAP_EASE }}
+              className="text-white/45 hover:text-rose-300"
+            >
+              ✕
+            </motion.button>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+      <motion.button
         type="button"
         onClick={() => onChange([...value, ""])}
+        whileHover={{ y: -1 }}
+        whileTap={{ scale: 0.96 }}
+        transition={{ duration: 0.18, ease: SNAP_EASE }}
         className="self-start rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08]"
       >
         + Add process
-      </button>
+      </motion.button>
     </>
   );
 }
@@ -437,33 +564,48 @@ function ProcessesSection({ value, onChange }: { value: string[]; onChange: (nex
 function ProtocolsSection({ value, onChange }: { value: string[]; onChange: (next: string[]) => void }) {
   return (
     <>
-      {value.map((proto, i) => (
-        <div key={i} className="flex items-center gap-2">
-          <Segmented
-            value={proto === "udp" ? "udp" : "tcp"}
-            onChange={(v) => onChange(value.map((x, j) => j === i ? v : x))}
-            options={[
-              { value: "tcp", label: "tcp" },
-              { value: "udp", label: "udp" },
-            ] as const}
-          />
-          <button
-            type="button"
-            onClick={() => onChange(value.filter((_, j) => j !== i))}
-            aria-label={`Remove protocol ${i + 1}`}
-            className="ml-auto text-white/45 hover:text-rose-300"
+      <AnimatePresence initial={false}>
+        {value.map((proto, i) => (
+          <motion.div
+            key={i}
+            variants={rowVariants}
+            initial="hidden"
+            animate="show"
+            exit="exit"
+            className="flex items-center gap-2"
           >
-            ✕
-          </button>
-        </div>
-      ))}
-      <button
+            <Segmented
+              value={proto === "udp" ? "udp" : "tcp"}
+              onChange={(v) => onChange(value.map((x, j) => j === i ? v : x))}
+              options={[
+                { value: "tcp", label: "tcp" },
+                { value: "udp", label: "udp" },
+              ] as const}
+            />
+            <motion.button
+              type="button"
+              onClick={() => onChange(value.filter((_, j) => j !== i))}
+              aria-label={`Remove protocol ${i + 1}`}
+              whileHover={{ scale: 1.15 }}
+              whileTap={{ scale: 0.85 }}
+              transition={{ duration: 0.18, ease: SNAP_EASE }}
+              className="ml-auto text-white/45 hover:text-rose-300"
+            >
+              ✕
+            </motion.button>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+      <motion.button
         type="button"
         onClick={() => onChange([...value, "tcp"])}
+        whileHover={{ y: -1 }}
+        whileTap={{ scale: 0.96 }}
+        transition={{ duration: 0.18, ease: SNAP_EASE }}
         className="self-start rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08]"
       >
         + Add protocol
-      </button>
+      </motion.button>
     </>
   );
 }

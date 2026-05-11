@@ -4,6 +4,7 @@ import { Lock, ChevronRight, Plus, MoreHorizontal, GripVertical } from "lucide-r
 import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
   useRules,
   rulesAddGroup,
@@ -19,6 +20,27 @@ import {
 import { Toggle } from "@/components/controls/Toggle";
 import { ConfirmDialog } from "@/components/controls/ConfirmDialog";
 import { cn } from "@/lib/cn";
+
+const SNAP_EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+
+const pageVariants: Variants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { delayChildren: 0.05, staggerChildren: 0.04 },
+  },
+};
+
+const sectionVariants: Variants = {
+  hidden: { opacity: 0, y: 8 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.24, ease: SNAP_EASE } },
+};
+
+const popoverVariants: Variants = {
+  hidden: { opacity: 0, y: -4, scale: 0.96 },
+  show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.18, ease: SNAP_EASE } },
+  exit: { opacity: 0, y: -4, scale: 0.96, transition: { duration: 0.18, ease: SNAP_EASE } },
+};
 
 export function reorderRules(groups: GroupView[], groupId: string, fromIdx: number, toIdx: number): GroupView[] {
   return groups.map((g) => {
@@ -69,26 +91,39 @@ export function Routing() {
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <header className="flex items-baseline justify-between pb-2">
+    <motion.div
+      className="flex flex-col gap-3"
+      initial="hidden"
+      animate="show"
+      variants={pageVariants}
+    >
+      <motion.header variants={sectionVariants} className="flex items-baseline justify-between pb-2">
         <div>
           <h1 className="text-[20px] font-semibold tracking-tight">Routing rules</h1>
           <p className="mt-1 text-[12px] text-white/55">Per-domain, per-IP, per-process routing. Top of the list matches first.</p>
         </div>
-        <button
+        <motion.button
           type="button"
           onClick={() => setAdding(true)}
+          whileTap={{ scale: 0.96 }}
+          transition={{ duration: 0.18, ease: SNAP_EASE }}
           className="flex items-center gap-1.5 rounded-md bg-white/[0.08] px-3 py-1.5 text-[12px] font-medium text-white/85 hover:bg-white/[0.12]"
         >
           <Plus className="h-3.5 w-3.5" /> Add group
-        </button>
-      </header>
+        </motion.button>
+      </motion.header>
       {lastError && (
-        <div role="alert" className="rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[12px] text-rose-200">
+        <motion.div
+          variants={sectionVariants}
+          role="alert"
+          className="rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[12px] text-rose-200"
+        >
           {lastError}
-        </div>
+        </motion.div>
       )}
-      {adding && <AddGroupRow onCancel={() => setAdding(false)} />}
+      <AnimatePresence initial={false}>
+        {adding && <AddGroupRow key="add-group-row" onCancel={() => setAdding(false)} />}
+      </AnimatePresence>
       {safetyGroup && <GroupCard group={safetyGroup} onRuleDragEnd={() => {}} allGroups={groups} />}
       <DndContext collisionDetection={closestCenter} onDragEnd={onGroupDragEnd}>
         <SortableContext items={userGroups.map((g) => g.id)} strategy={verticalListSortingStrategy}>
@@ -102,7 +137,7 @@ export function Routing() {
           ))}
         </SortableContext>
       </DndContext>
-    </div>
+    </motion.div>
   );
 }
 
@@ -132,7 +167,13 @@ function AddGroupRow({ onCancel }: { onCancel: () => void }) {
 
   const trimmed = value.trim();
   return (
-    <div className="glass-regular flex items-center gap-2 rounded-2xl p-3">
+    <motion.div
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.22, ease: SNAP_EASE }}
+      className="glass-regular flex items-center gap-2 rounded-2xl p-3"
+    >
       <input
         ref={ref}
         value={value}
@@ -144,22 +185,26 @@ function AddGroupRow({ onCancel }: { onCancel: () => void }) {
         placeholder="New group name — Enter to add, Esc to cancel"
         className="flex-1 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[13px] outline-none focus:border-sky-400/40"
       />
-      <button
+      <motion.button
         type="button"
         onClick={() => void submit()}
         disabled={!trimmed}
+        whileTap={{ scale: 0.96 }}
+        transition={{ duration: 0.18, ease: SNAP_EASE }}
         className="rounded-md bg-sky-500/30 px-3 py-1 text-[12px] font-medium text-sky-100 hover:bg-sky-500/40 disabled:cursor-not-allowed disabled:opacity-40"
       >
         Add
-      </button>
-      <button
+      </motion.button>
+      <motion.button
         type="button"
         onClick={cancel}
+        whileTap={{ scale: 0.96 }}
+        transition={{ duration: 0.18, ease: SNAP_EASE }}
         className="rounded-md px-2 py-1 text-[12px] text-white/55 hover:text-white/90"
       >
         Cancel
-      </button>
-    </div>
+      </motion.button>
+    </motion.div>
   );
 }
 
@@ -189,7 +234,12 @@ function GroupCard({ group, onRuleDragEnd, dragHandle, allGroups }: { group: Gro
 
   return (
     <>
-      <section className={cn("glass-regular flex flex-col gap-2 rounded-2xl p-4", !group.enabled && "opacity-60")}>
+      <motion.section
+        variants={sectionVariants}
+        whileHover={group.locked ? undefined : { y: -1 }}
+        transition={{ duration: 0.18, ease: SNAP_EASE }}
+        className={cn("glass-regular flex flex-col gap-2 rounded-2xl p-4", !group.enabled && "opacity-60")}
+      >
         <header className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {dragHandle && (
@@ -237,26 +287,36 @@ function GroupCard({ group, onRuleDragEnd, dragHandle, allGroups }: { group: Gro
                 >
                   <MoreHorizontal className="h-4 w-4" />
                 </button>
-                {menuOpen && (
-                  <div role="menu" className="absolute right-0 z-10 mt-1 w-32 rounded-md border border-white/10 bg-[#1c1f2a] py-1 text-[12.5px] shadow-lg">
-                    <button
-                      role="menuitem"
-                      type="button"
-                      className="block w-full px-3 py-1.5 text-left hover:bg-white/[0.06]"
-                      onClick={() => { setRenaming(true); setMenuOpen(false); }}
+                <AnimatePresence>
+                  {menuOpen && (
+                    <motion.div
+                      role="menu"
+                      variants={popoverVariants}
+                      initial="hidden"
+                      animate="show"
+                      exit="exit"
+                      style={{ transformOrigin: "top right" }}
+                      className="absolute right-0 z-10 mt-1 w-32 rounded-md border border-white/10 bg-[#1c1f2a] py-1 text-[12.5px] shadow-lg"
                     >
-                      Rename
-                    </button>
-                    <button
-                      role="menuitem"
-                      type="button"
-                      className="block w-full px-3 py-1.5 text-left text-rose-300 hover:bg-rose-500/10"
-                      onClick={() => { setConfirmDelete(true); setMenuOpen(false); }}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                )}
+                      <button
+                        role="menuitem"
+                        type="button"
+                        className="block w-full px-3 py-1.5 text-left hover:bg-white/[0.06]"
+                        onClick={() => { setRenaming(true); setMenuOpen(false); }}
+                      >
+                        Rename
+                      </button>
+                      <button
+                        role="menuitem"
+                        type="button"
+                        className="block w-full px-3 py-1.5 text-left text-rose-300 hover:bg-rose-500/10"
+                        onClick={() => { setConfirmDelete(true); setMenuOpen(false); }}
+                      >
+                        Delete
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             )}
           </div>
@@ -283,15 +343,18 @@ function GroupCard({ group, onRuleDragEnd, dragHandle, allGroups }: { group: Gro
           </DndContext>
         )}
         {!group.locked && (
-          <button
+          <motion.button
             type="button"
             onClick={handleAddRule}
+            whileHover={{ y: -1 }}
+            whileTap={{ scale: 0.96 }}
+            transition={{ duration: 0.18, ease: SNAP_EASE }}
             className="self-start rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08] hover:text-white/90"
           >
             + Add rule
-          </button>
+          </motion.button>
         )}
-      </section>
+      </motion.section>
       <ConfirmDialog
         open={confirmDelete}
         title="Delete group?"
@@ -398,7 +461,10 @@ function RuleRow({
       ? allGroups.filter((g) => !g.locked && g.id !== group.id)
       : [];
   return (
-    <div
+    <motion.div
+      whileHover={groupLocked ? undefined : { y: -1 }}
+      whileTap={groupLocked ? undefined : { scale: 0.99 }}
+      transition={{ duration: 0.18, ease: SNAP_EASE }}
       className={cn(
         "group flex items-center justify-between rounded-md px-3 py-2 text-[12.5px]",
         groupLocked ? "bg-white/[0.02]" : "bg-white/[0.04] hover:bg-white/[0.06] cursor-pointer",
@@ -422,34 +488,44 @@ function RuleRow({
             >
               <MoreHorizontal className="h-4 w-4" />
             </button>
-            {menuOpen && (
-              <div role="menu" className="absolute right-0 z-10 mt-1 w-44 rounded-md border border-white/10 bg-[#1c1f2a] py-1 text-[12.5px] shadow-lg">
-                {targetGroups.map((g) => (
+            <AnimatePresence>
+              {menuOpen && (
+                <motion.div
+                  role="menu"
+                  variants={popoverVariants}
+                  initial="hidden"
+                  animate="show"
+                  exit="exit"
+                  style={{ transformOrigin: "top right" }}
+                  className="absolute right-0 z-10 mt-1 w-44 rounded-md border border-white/10 bg-[#1c1f2a] py-1 text-[12.5px] shadow-lg"
+                >
+                  {targetGroups.map((g) => (
+                    <button
+                      key={g.id}
+                      role="menuitem"
+                      type="button"
+                      className="block w-full px-3 py-1.5 text-left hover:bg-white/[0.06]"
+                      onClick={() => { setMenuOpen(false); void rulesMoveRule(rule.id, g.id); }}
+                    >
+                      Move to {g.name}
+                    </button>
+                  ))}
                   <button
-                    key={g.id}
                     role="menuitem"
                     type="button"
-                    className="block w-full px-3 py-1.5 text-left hover:bg-white/[0.06]"
-                    onClick={() => { setMenuOpen(false); void rulesMoveRule(rule.id, g.id); }}
+                    className="block w-full px-3 py-1.5 text-left text-rose-300 hover:bg-rose-500/10"
+                    onClick={() => { setMenuOpen(false); void rulesRemoveRule(rule.id); }}
                   >
-                    Move to {g.name}
+                    Delete
                   </button>
-                ))}
-                <button
-                  role="menuitem"
-                  type="button"
-                  className="block w-full px-3 py-1.5 text-left text-rose-300 hover:bg-rose-500/10"
-                  onClick={() => { setMenuOpen(false); void rulesRemoveRule(rule.id); }}
-                >
-                  Delete
-                </button>
-              </div>
-            )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
           <ChevronRight className="h-3.5 w-3.5 text-white/40 transition-transform group-hover:translate-x-0.5" />
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
