@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion';
 import { cn } from '@/lib/cn';
 
 export type ToggleProps = {
@@ -26,12 +25,10 @@ export function Toggle({ value, onChange, disabled, className, 'aria-label': ari
         className,
       )}
     >
-      <motion.span
-        layout
-        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+      <span
         className={cn(
-          'inline-block h-4 w-4 rounded-full bg-white shadow',
-          value ? 'ml-auto mr-0.5' : 'ml-0.5 mr-auto',
+          'ml-0.5 inline-block h-4 w-4 rounded-full bg-white shadow transition-transform duration-150 ease-out',
+          value && 'translate-x-4',
         )}
       />
     </button>
