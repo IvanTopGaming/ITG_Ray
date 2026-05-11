@@ -1,0 +1,107 @@
+// Package bindings: RulesService exposes the on-disk rules.Model to
+// the renderer through rules.* JSON-RPC methods. Every mutation
+// serializes through s.mu and publishes hub.EventRulesChanged; the
+// renderer re-fetches via List rather than diffing payloads.
+package bindings
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/itg-team/itg-ray/internal/hub"
+	"github.com/itg-team/itg-ray/internal/rules"
+)
+
+// RulesService implements the rules.* bindings. List is shipped in
+// this task; Toggle / Create / Update / Delete / Reorder / SetDefault
+// land in T6 / T7 and will use the s.mu mutex and s.hub publisher
+// declared below.
+type RulesService struct {
+	mu    sync.Mutex
+	store *rules.Store
+	hub   *hub.Hub
+}
+
+// RulesDeps groups dependencies passed in from main.go. Store owns
+// rules.json; Hub is the in-process pub-sub used to publish
+// EventRulesChanged on every mutation.
+type RulesDeps struct {
+	Store *rules.Store
+	Hub   *hub.Hub
+}
+
+// NewRulesService constructs a new RulesService. Panics when required
+// deps are missing — every binding constructor in this package follows
+// the same convention so a wiring mistake surfaces at startup rather
+// than at first call from the renderer.
+func NewRulesService(d RulesDeps) *RulesService {
+	if d.Store == nil || d.Hub == nil {
+		panic("bindings.NewRulesService: Store and Hub are required")
+	}
+	return &RulesService{store: d.Store, hub: d.Hub}
+}
+
+// List returns the persisted rules model projected onto the wire shape.
+// rules.Store.Load returns the canonical default when rules.json is
+// missing or corrupt, so callers can rely on a populated view even on
+// first run.
+func (s *RulesService) List() (hub.RulesView, error) {
+	// s.mu serializes List against in-flight mutations from T6/T7 so the
+	// renderer always sees a complete post-mutation snapshot rather than
+	// a Load racing a Save mid-flight. Store has its own mu for torn-read
+	// safety; this one is about caller-visible consistency.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	m, err := s.store.Load()
+	if err != nil {
+		return hub.RulesView{}, err
+	}
+	return toRulesView(m), nil
+}
+
+// toRulesView projects a rules.Model onto the hub.RulesView wire shape.
+// The Action enum is widened to a plain string so the TS codegen emits
+// "proxy" / "direct" / "block" literals without a type alias hop.
+func toRulesView(m rules.Model) hub.RulesView {
+	groups := make([]hub.GroupView, 0, len(m.Groups))
+	for _, g := range m.Groups {
+		rs := make([]hub.RuleView, 0, len(g.Rules))
+		for _, r := range g.Rules {
+			rs = append(rs, hub.RuleView{
+				ID:         r.ID,
+				Name:       r.Name,
+				Enabled:    r.Enabled,
+				Action:     string(r.Action),
+				Conditions: r.Conditions,
+			})
+		}
+		groups = append(groups, hub.GroupView{
+			ID: g.ID, Name: g.Name, Locked: g.Locked, Enabled: g.Enabled,
+			Rules: rs,
+		})
+	}
+	return hub.RulesView{DefaultAction: string(m.DefaultAction), Groups: groups}
+}
+
+// newID returns a fresh ID of shape <prefix><unix-millis>-<hex4>.
+// Used by T6/T7 mutations (Create rule, Create group) to mint
+// collision-resistant IDs without dragging in a UUID dependency.
+// Declared here so the helper lives next to its consumers.
+//
+//nolint:unused // consumed by Create* mutations landing in T6/T7.
+func newID(prefix string) string {
+	var b [2]byte
+	_, _ = rand.Read(b[:])
+	return fmt.Sprintf("%s%d-%s", prefix, time.Now().UnixMilli(), hex.EncodeToString(b[:]))
+}
+
+// errLockedGroup is the sentinel returned by mutations that target the
+// safety group. Declared here so the upcoming T6/T7 handlers reach for
+// the same error string and renderer code can match on it.
+//
+//nolint:unused // consumed by Delete/Reorder mutations landing in T6/T7.
+var errLockedGroup = errors.New("safety group is locked")
