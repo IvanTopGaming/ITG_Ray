@@ -108,4 +108,18 @@ describe("RuleEditor", () => {
       conditions: expect.objectContaining({ geo: ["geoip:ru"] }),
     }));
   });
+
+  it("saves single port condition", async () => {
+    const userWithRule = { ...user, rules: [{ id: "r1", name: "T", enabled: true, action: "proxy", conditions: { ports: [] } }] };
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, userWithRule], loading: false, lastError: null, bootstrapped: true });
+    rulesEditRuleMock.mockResolvedValue(undefined);
+    renderEditor("r1");
+    await userEvent.click(screen.getByRole("button", { name: /ports/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add port/i }));
+    await userEvent.type(screen.getByLabelText(/port number/i), "443");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    expect(rulesEditRuleMock).toHaveBeenCalledWith(expect.objectContaining({
+      conditions: expect.objectContaining({ ports: [{ single: 443 }] }),
+    }));
+  });
 });

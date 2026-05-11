@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import type React from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
-import { useRules, rulesEditRule, rulesMoveRule, type RuleView, type GroupView, type DomainMatcher } from "@/lib/rulesStore";
+import { useRules, rulesEditRule, rulesMoveRule, type RuleView, type GroupView, type DomainMatcher, type PortSpec } from "@/lib/rulesStore";
 import { Segmented } from "@/components/controls/Segmented";
 import { Toggle } from "@/components/controls/Toggle";
 
@@ -119,6 +119,16 @@ export function RuleEditor() {
         <GeoSection
           value={draft.conditions.geo ?? []}
           onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, geo: next } })}
+        />
+      </Section>
+      <Section
+        title="Ports"
+        count={draft.conditions.ports?.length ?? 0}
+        defaultOpen={(draft.conditions.ports?.length ?? 0) > 0}
+      >
+        <PortsSection
+          value={draft.conditions.ports ?? []}
+          onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, ports: next } })}
         />
       </Section>
     </div>
@@ -261,6 +271,76 @@ function GeoSection({ value, onChange }: { value: string[]; onChange: (next: str
         className="self-start rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08]"
       >
         + Add geo
+      </button>
+    </>
+  );
+}
+
+function PortsSection({ value, onChange }: { value: PortSpec[]; onChange: (next: PortSpec[]) => void }) {
+  function setRow(i: number, next: PortSpec) {
+    onChange(value.map((x, j) => (j === i ? next : x)));
+  }
+  return (
+    <>
+      {value.map((p, i) => {
+        const mode: "single" | "range" = p.single ? "single" : (p.from || p.to ? "range" : "single");
+        return (
+          <div key={i} className="flex items-center gap-2">
+            <Segmented
+              value={mode}
+              onChange={(v) => {
+                if (v === "single") setRow(i, { single: p.single ?? p.from ?? 0 });
+                else setRow(i, { from: p.from ?? p.single ?? 0, to: p.to ?? p.single ?? 0 });
+              }}
+              options={[
+                { value: "single", label: "Single" },
+                { value: "range", label: "Range" },
+              ] as const}
+            />
+            {mode === "single" ? (
+              <input
+                aria-label={`Port number ${i + 1}`}
+                type="number"
+                value={p.single ?? ""}
+                onChange={(e) => setRow(i, { single: Number(e.target.value) })}
+                className="w-24 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
+              />
+            ) : (
+              <>
+                <input
+                  aria-label={`Port from ${i + 1}`}
+                  type="number"
+                  value={p.from ?? ""}
+                  onChange={(e) => setRow(i, { ...p, from: Number(e.target.value), single: undefined })}
+                  className="w-24 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
+                />
+                <span className="text-white/45">→</span>
+                <input
+                  aria-label={`Port to ${i + 1}`}
+                  type="number"
+                  value={p.to ?? ""}
+                  onChange={(e) => setRow(i, { ...p, to: Number(e.target.value), single: undefined })}
+                  className="w-24 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
+                />
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => onChange(value.filter((_, j) => j !== i))}
+              aria-label={`Remove port ${i + 1}`}
+              className="ml-auto text-white/45 hover:text-rose-300"
+            >
+              ✕
+            </button>
+          </div>
+        );
+      })}
+      <button
+        type="button"
+        onClick={() => onChange([...value, { single: 0 }])}
+        className="self-start rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08]"
+      >
+        + Add port
       </button>
     </>
   );
