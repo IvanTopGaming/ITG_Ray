@@ -130,6 +130,7 @@ function AddGroupRow({ onCancel }: { onCancel: () => void }) {
     onCancel();
   }
 
+  const trimmed = value.trim();
   return (
     <div className="glass-regular flex items-center gap-2 rounded-2xl p-3">
       <input
@@ -140,10 +141,24 @@ function AddGroupRow({ onCancel }: { onCancel: () => void }) {
           if (e.key === "Enter") void submit();
           if (e.key === "Escape") cancel();
         }}
-        onBlur={cancel}
-        placeholder="New group name"
+        placeholder="New group name — Enter to add, Esc to cancel"
         className="flex-1 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[13px] outline-none focus:border-sky-400/40"
       />
+      <button
+        type="button"
+        onClick={() => void submit()}
+        disabled={!trimmed}
+        className="rounded-md bg-sky-500/30 px-3 py-1 text-[12px] font-medium text-sky-100 hover:bg-sky-500/40 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Add
+      </button>
+      <button
+        type="button"
+        onClick={cancel}
+        className="rounded-md px-2 py-1 text-[12px] text-white/55 hover:text-white/90"
+      >
+        Cancel
+      </button>
     </div>
   );
 }

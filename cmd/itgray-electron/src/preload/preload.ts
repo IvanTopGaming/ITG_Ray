@@ -59,6 +59,21 @@ contextBridge.exposeInMainWorld("itg", {
     syncOne: (params: { id: string }) => rpc("subs.syncOne", params),
     syncAll: () => rpc("subs.syncAll"),
   },
+  rules: {
+    list: () => rpc("rules.list"),
+    replaceAll: (params: { model: unknown }) => rpc("rules.replaceAll", params),
+    groupAdd: (params: { name: string }) => rpc("rules.groupAdd", params),
+    groupEdit: (params: { id: string; name: string; enabled: boolean }) =>
+      rpc("rules.groupEdit", params),
+    groupRemove: (params: { id: string }) => rpc("rules.groupRemove", params),
+    ruleAdd: (params: { groupId: string; rule: unknown }) =>
+      rpc("rules.ruleAdd", params),
+    ruleEdit: (params: { rule: unknown }) => rpc("rules.ruleEdit", params),
+    ruleRemove: (params: { id: string }) => rpc("rules.ruleRemove", params),
+    ruleToggle: (params: { id: string }) => rpc("rules.ruleToggle", params),
+    ruleMove: (params: { id: string; toGroupId: string }) =>
+      rpc("rules.ruleMove", params),
+  },
   window: {
     minimise: () => ipcRenderer.invoke("window.minimise"),
     toggleMaximise: () => ipcRenderer.invoke("window.toggleMaximise"),
