@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -63,14 +63,23 @@ function renderCreateEditor(groupId: string) {
   );
 }
 
+// Opens the "+ Add condition" popover and picks an item by its visible label.
+async function addConditionPick(label: RegExp) {
+  await userEvent.click(screen.getByRole("button", { name: /\+ add condition/i }));
+  await userEvent.click(screen.getByRole("menuitem", { name: label }));
+}
+
 describe("RuleEditor", () => {
-  it("loads the rule by id and renders Name / Action / Group", () => {
+  it("loads the rule by id and renders Name / Group; action is below conditions", () => {
     useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user], loading: false, lastError: null, bootstrapped: true });
     renderEditor("r1");
     expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("Block ads");
     // Action segmented: pressed=true on the block button
     expect(screen.getByRole("button", { name: /block/i, pressed: true })).toBeInTheDocument();
     expect((screen.getByLabelText(/Group/i) as HTMLSelectElement).value).toBe("user");
+    // IP CIDRs card is visible (the rule has one); other cards are not.
+    expect(screen.getByRole("heading", { name: /ip cidrs/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /domains/i })).not.toBeInTheDocument();
   });
 
   it("Save calls rulesEditRule with the edited shape", async () => {
@@ -82,84 +91,171 @@ describe("RuleEditor", () => {
     expect(rulesEditRuleMock).toHaveBeenCalledWith(expect.objectContaining({ id: "r1", name: "Block ads v2", action: "block" }));
   });
 
-  it("adds a domain matcher row on +Add", async () => {
+  it("empty rule (create mode): only + Add condition button is visible; no condition cards", () => {
     useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user], loading: false, lastError: null, bootstrapped: true });
-    renderEditor("r1");
-    await userEvent.click(screen.getByRole("button", { name: /domains/i }));
-    await userEvent.click(screen.getByRole("button", { name: /add domain matcher/i }));
-    expect(screen.getAllByLabelText(/domain matcher kind/i)).toHaveLength(1);
+    renderCreateEditor("user");
+    expect(screen.getByRole("button", { name: /\+ add condition/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /domains/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /ip cidrs/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /geo/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /ports/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /processes/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /protocols/i })).not.toBeInTheDocument();
   });
 
-  it("saves domain matcher conditions", async () => {
+  it("Add condition dropdown shows 6 items", async () => {
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user], loading: false, lastError: null, bootstrapped: true });
+    renderCreateEditor("user");
+    await userEvent.click(screen.getByRole("button", { name: /\+ add condition/i }));
+    expect(screen.getAllByRole("menuitem")).toHaveLength(6);
+  });
+
+  it("picking Domain matcher adds a Domains card; type + Enter creates a chip; chip ✕ removes it", async () => {
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user], loading: false, lastError: null, bootstrapped: true });
+    renderCreateEditor("user");
+    await addConditionPick(/domain matcher/i);
+    expect(screen.getByRole("heading", { name: /domains/i })).toBeInTheDocument();
+    const input = screen.getByLabelText(/^domain matcher value$/i);
+    await userEvent.type(input, "example.com{enter}");
+    // chip rendered
+    expect(screen.getByRole("button", { name: /remove domain matcher 1/i })).toBeInTheDocument();
+    // remove the chip
+    await userEvent.click(screen.getByRole("button", { name: /remove domain matcher 1/i }));
+    expect(screen.queryByRole("button", { name: /remove domain matcher 1/i })).not.toBeInTheDocument();
+  });
+
+  it("card ✕ removes the entire card AND clears that condition type from draft", async () => {
     useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user], loading: false, lastError: null, bootstrapped: true });
     rulesEditRuleMock.mockResolvedValue(undefined);
     renderEditor("r1");
-    await userEvent.click(screen.getByRole("button", { name: /domains/i }));
-    await userEvent.click(screen.getByRole("button", { name: /add domain matcher/i }));
-    await userEvent.selectOptions(screen.getByLabelText(/domain matcher kind/i), "suffix");
-    await userEvent.type(screen.getByLabelText(/domain matcher value/i), "example.com");
+    // r1 has ip_cidrs: ["1.2.3.4/32"]. Add a domains card too so save still has conditions.
+    await addConditionPick(/domain matcher/i);
+    await userEvent.type(screen.getByLabelText(/^domain matcher value$/i), "example.com{enter}");
+    // Remove the IP CIDRs card.
+    await userEvent.click(screen.getByRole("button", { name: /remove ip cidrs card/i }));
+    // AnimatePresence keeps the exiting element mounted briefly — wait for it.
+    await waitFor(() => {
+      expect(screen.queryByRole("heading", { name: /ip cidrs/i })).not.toBeInTheDocument();
+    });
     await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
-    expect(rulesEditRuleMock).toHaveBeenCalledWith(expect.objectContaining({
-      conditions: expect.objectContaining({ domains: [{ kind: "suffix", value: "example.com" }] }),
-    }));
+    // After remove, ip_cidrs should not be present in the saved conditions.
+    const arg = rulesEditRuleMock.mock.calls[0][0];
+    expect(arg.conditions.ip_cidrs).toBeUndefined();
+    expect(arg.conditions.domains).toEqual([{ kind: "suffix", value: "example.com" }]);
   });
 
-  it("saves IP CIDR conditions", async () => {
-    const userWithRule = { ...user, rules: [{ id: "r1", name: "T", enabled: true, action: "proxy", conditions: { ip_cidrs: [] } }] };
-    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, userWithRule], loading: false, lastError: null, bootstrapped: true });
+  it("saves IP CIDR conditions via chip-input", async () => {
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user], loading: false, lastError: null, bootstrapped: true });
     rulesEditRuleMock.mockResolvedValue(undefined);
-    renderEditor("r1");
-    await userEvent.click(screen.getByRole("button", { name: /ip cidrs/i }));
-    await userEvent.click(screen.getByRole("button", { name: /add cidr/i }));
-    await userEvent.type(screen.getByLabelText(/cidr value/i), "10.0.0.0/8");
-    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
-    expect(rulesEditRuleMock).toHaveBeenCalledWith(expect.objectContaining({
+    renderCreateEditor("user");
+    await addConditionPick(/ip cidrs/i);
+    await userEvent.type(screen.getByLabelText(/^cidr value$/i), "10.0.0.0/8{enter}");
+    await userEvent.click(screen.getByRole("button", { name: /create rule/i }));
+    expect(rulesAddRuleMock).toHaveBeenCalledWith("user", expect.objectContaining({
       conditions: expect.objectContaining({ ip_cidrs: ["10.0.0.0/8"] }),
     }));
   });
 
-  it("saves geo conditions with prefix and value", async () => {
-    const userWithRule = { ...user, rules: [{ id: "r1", name: "T", enabled: true, action: "proxy", conditions: { geo: [] } }] };
-    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, userWithRule], loading: false, lastError: null, bootstrapped: true });
-    rulesEditRuleMock.mockResolvedValue(undefined);
-    renderEditor("r1");
-    await userEvent.click(screen.getByRole("button", { name: /geo/i }));
-    await userEvent.click(screen.getByRole("button", { name: /add geo/i }));
-    await userEvent.selectOptions(screen.getByLabelText(/geo prefix/i), "geoip");
-    await userEvent.type(screen.getByLabelText(/geo value/i), "ru");
-    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
-    expect(rulesEditRuleMock).toHaveBeenCalledWith(expect.objectContaining({
+  it("saves geo conditions with prefix and value via chip-input", async () => {
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user], loading: false, lastError: null, bootstrapped: true });
+    rulesAddRuleMock.mockResolvedValue("r-new");
+    renderCreateEditor("user");
+    await addConditionPick(/^geo$/i);
+    await userEvent.selectOptions(screen.getByLabelText(/^geo prefix$/i), "geoip");
+    await userEvent.type(screen.getByLabelText(/^geo value$/i), "ru{enter}");
+    await userEvent.click(screen.getByRole("button", { name: /create rule/i }));
+    expect(rulesAddRuleMock).toHaveBeenCalledWith("user", expect.objectContaining({
       conditions: expect.objectContaining({ geo: ["geoip:ru"] }),
     }));
   });
 
-  it("saves single port condition", async () => {
-    const userWithRule = { ...user, rules: [{ id: "r1", name: "T", enabled: true, action: "proxy", conditions: { ports: [] } }] };
-    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, userWithRule], loading: false, lastError: null, bootstrapped: true });
-    rulesEditRuleMock.mockResolvedValue(undefined);
-    renderEditor("r1");
-    await userEvent.click(screen.getByRole("button", { name: /ports/i }));
-    await userEvent.click(screen.getByRole("button", { name: /add port/i }));
-    await userEvent.type(screen.getByLabelText(/port number/i), "443");
-    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
-    expect(rulesEditRuleMock).toHaveBeenCalledWith(expect.objectContaining({
+  it("saves single port condition via chip-input", async () => {
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user], loading: false, lastError: null, bootstrapped: true });
+    rulesAddRuleMock.mockResolvedValue("r-new");
+    renderCreateEditor("user");
+    await addConditionPick(/^ports$/i);
+    await userEvent.type(screen.getByLabelText(/^port number$/i), "443{enter}");
+    await userEvent.click(screen.getByRole("button", { name: /create rule/i }));
+    expect(rulesAddRuleMock).toHaveBeenCalledWith("user", expect.objectContaining({
       conditions: expect.objectContaining({ ports: [{ single: 443 }] }),
     }));
   });
 
-  it("saves protocol conditions", async () => {
-    const userWithRule = { ...user, rules: [{ id: "r1", name: "T", enabled: true, action: "proxy", conditions: { protocols: [] } }] };
-    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, userWithRule], loading: false, lastError: null, bootstrapped: true });
-    rulesEditRuleMock.mockResolvedValue(undefined);
-    renderEditor("r1");
-    await userEvent.click(screen.getByRole("button", { name: /protocols/i }));
-    await userEvent.click(screen.getByRole("button", { name: /add protocol/i }));
-    // Default added row is "tcp"; switch to "udp"
-    await userEvent.click(screen.getByRole("button", { name: /^udp$/i, pressed: false }));
-    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
-    expect(rulesEditRuleMock).toHaveBeenCalledWith(expect.objectContaining({
+  it("ports Range mode saves {from, to} after a Range click + type", async () => {
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user], loading: false, lastError: null, bootstrapped: true });
+    rulesAddRuleMock.mockResolvedValue("r-new");
+    renderCreateEditor("user");
+    await addConditionPick(/^ports$/i);
+    await userEvent.click(screen.getByRole("button", { name: /^range$/i, pressed: false }));
+    await userEvent.type(screen.getByLabelText(/^port from$/i), "8000");
+    await userEvent.type(screen.getByLabelText(/^port to$/i), "9000");
+    // Click the chip +
+    await userEvent.click(screen.getByRole("button", { name: /^add port$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /create rule/i }));
+    expect(rulesAddRuleMock).toHaveBeenCalledWith("user", expect.objectContaining({
+      conditions: expect.objectContaining({ ports: [{ from: 8000, to: 9000 }] }),
+    }));
+  });
+
+  it("saves protocol conditions by toggling chip buttons", async () => {
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user], loading: false, lastError: null, bootstrapped: true });
+    rulesAddRuleMock.mockResolvedValue("r-new");
+    renderCreateEditor("user");
+    await addConditionPick(/^protocols$/i);
+    // Toggle udp on (tcp stays off).
+    await userEvent.click(screen.getByRole("button", { name: /protocol udp/i }));
+    await userEvent.click(screen.getByRole("button", { name: /create rule/i }));
+    expect(rulesAddRuleMock).toHaveBeenCalledWith("user", expect.objectContaining({
       conditions: expect.objectContaining({ protocols: ["udp"] }),
     }));
+  });
+
+  it("saves process conditions, trimmed", async () => {
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user], loading: false, lastError: null, bootstrapped: true });
+    rulesAddRuleMock.mockResolvedValue("r-new");
+    renderCreateEditor("user");
+    await addConditionPick(/^processes$/i);
+    await userEvent.type(screen.getByLabelText(/^process name$/i), "  chrome.exe  {enter}");
+    await userEvent.click(screen.getByRole("button", { name: /create rule/i }));
+    expect(rulesAddRuleMock).toHaveBeenCalledWith("user", expect.objectContaining({
+      conditions: expect.objectContaining({ processes: ["chrome.exe"] }),
+    }));
+  });
+
+  it("action block: wrapper has rose tint class", async () => {
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user], loading: false, lastError: null, bootstrapped: true });
+    renderCreateEditor("user");
+    // Find the wrapper around the Block segmented option.
+    const blockBtn = screen.getByRole("button", { name: /^block$/i });
+    await userEvent.click(blockBtn);
+    // Climb to the wrapper: Segmented is wrapped in <div class="rounded-2xl border …" >
+    let el: HTMLElement | null = blockBtn;
+    while (el && !el.className.includes("rounded-2xl")) el = el.parentElement;
+    expect(el).not.toBeNull();
+    expect(el!.className).toMatch(/rose/);
+  });
+
+  it("Save is disabled until at least one chip exists; never persists empty conditions", async () => {
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user], loading: false, lastError: null, bootstrapped: true });
+    renderCreateEditor("user");
+    expect(screen.getByRole("button", { name: /create rule/i })).toBeDisabled();
+    // Adding an empty card alone doesn't enable Save — backend rejects all-empty conditions.
+    await addConditionPick(/domain matcher/i);
+    expect(screen.getByRole("button", { name: /create rule/i })).toBeDisabled();
+    // Adding a chip enables Save.
+    await userEvent.type(screen.getByLabelText(/^domain matcher value$/i), "example.com{enter}");
+    expect(screen.getByRole("button", { name: /create rule/i })).toBeEnabled();
+    expect(rulesAddRuleMock).not.toHaveBeenCalled();
+  });
+
+  it("once a type is added, it disappears from the dropdown options", async () => {
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user], loading: false, lastError: null, bootstrapped: true });
+    renderCreateEditor("user");
+    await addConditionPick(/domain matcher/i);
+    await userEvent.click(screen.getByRole("button", { name: /\+ add condition/i }));
+    const menuItems = screen.getAllByRole("menuitem").map((el) => el.textContent ?? "");
+    expect(menuItems.some((t) => /domain matcher/i.test(t))).toBe(false);
+    expect(menuItems).toHaveLength(5);
   });
 
   it("shows a discard-changes confirm when leaving with unsaved edits", async () => {
@@ -174,12 +270,9 @@ describe("RuleEditor", () => {
     useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user], loading: false, lastError: null, bootstrapped: true });
     rulesAddRuleMock.mockResolvedValue("r-new");
     renderCreateEditor("user");
-    // Group dropdown is hidden in create mode.
     expect(screen.queryByLabelText(/^Group$/i)).not.toBeInTheDocument();
-    // Fill in a condition so the rule has something to save.
-    await userEvent.click(screen.getByRole("button", { name: /ip cidrs/i }));
-    await userEvent.click(screen.getByRole("button", { name: /add cidr/i }));
-    await userEvent.type(screen.getByLabelText(/cidr value/i), "10.0.0.0/8");
+    await addConditionPick(/ip cidrs/i);
+    await userEvent.type(screen.getByLabelText(/^cidr value$/i), "10.0.0.0/8{enter}");
     await userEvent.click(screen.getByRole("button", { name: /create rule/i }));
     expect(rulesAddRuleMock).toHaveBeenCalledWith("user", expect.objectContaining({
       name: expect.any(String),
@@ -187,7 +280,6 @@ describe("RuleEditor", () => {
       action: "proxy",
       conditions: expect.objectContaining({ ip_cidrs: ["10.0.0.0/8"] }),
     }));
-    // Ensure the persisted draft does NOT carry an id field.
     const payload = rulesAddRuleMock.mock.calls[0][1];
     expect(payload).not.toHaveProperty("id");
   });
@@ -199,39 +291,25 @@ describe("RuleEditor", () => {
     expect(rulesAddRuleMock).not.toHaveBeenCalled();
   });
 
-  it("ports Range mode saves {from, to} after a Range click + type", async () => {
-    const userWithRule = { ...user, rules: [{ id: "r1", name: "T", enabled: true, action: "proxy", conditions: { ports: [] } }] };
+  it("existing condition's chip kind dropdown updates the chip's kind", async () => {
+    // Start with a domain that's `exact:example.com`, then switch kind to `regex`
+    const userWithRule = { ...user, rules: [{
+      id: "r1", name: "T", enabled: true, action: "proxy" as const,
+      conditions: { domains: [{ kind: "exact" as const, value: "example.com" }] },
+    }] };
     useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, userWithRule], loading: false, lastError: null, bootstrapped: true });
     rulesEditRuleMock.mockResolvedValue(undefined);
     renderEditor("r1");
-    await userEvent.click(screen.getByRole("button", { name: /ports/i }));
-    await userEvent.click(screen.getByRole("button", { name: /add port/i }));
-    // Switch to Range — the Range button should toggle to pressed.
-    await userEvent.click(screen.getByRole("button", { name: /^range$/i, pressed: false }));
-    // Both range inputs should now be visible.
-    const fromInput = screen.getByLabelText(/port from/i) as HTMLInputElement;
-    const toInput = screen.getByLabelText(/port to/i) as HTMLInputElement;
-    await userEvent.type(fromInput, "8000");
-    await userEvent.type(toInput, "9000");
+    const chipKind = screen.getByLabelText(/^domain matcher kind 1$/i) as HTMLSelectElement;
+    expect(chipKind.value).toBe("exact");
+    await userEvent.selectOptions(chipKind, "regex");
     await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
     expect(rulesEditRuleMock).toHaveBeenCalledWith(expect.objectContaining({
-      conditions: expect.objectContaining({ ports: [{ from: 8000, to: 9000 }] }),
-    }));
-  });
-
-  it("saves process conditions, trimmed on blur", async () => {
-    const userWithRule = { ...user, rules: [{ id: "r1", name: "T", enabled: true, action: "proxy", conditions: { processes: [] } }] };
-    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, userWithRule], loading: false, lastError: null, bootstrapped: true });
-    rulesEditRuleMock.mockResolvedValue(undefined);
-    renderEditor("r1");
-    await userEvent.click(screen.getByRole("button", { name: /processes/i }));
-    await userEvent.click(screen.getByRole("button", { name: /add process/i }));
-    const input = screen.getByLabelText(/process name/i);
-    await userEvent.type(input, "  chrome.exe  ");
-    await userEvent.tab(); // blur
-    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
-    expect(rulesEditRuleMock).toHaveBeenCalledWith(expect.objectContaining({
-      conditions: expect.objectContaining({ processes: ["chrome.exe"] }),
+      conditions: expect.objectContaining({ domains: [{ kind: "regex", value: "example.com" }] }),
     }));
   });
 });
+
+// Silence eslint: import is referenced via within(); keep it to support
+// future scoping if needed.
+void within;
