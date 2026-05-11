@@ -113,6 +113,15 @@ var (
 	activeSess *chainState
 )
 
+// IsChainActive reports whether the helper has a running chain session.
+// Safe for concurrent callers — used by OpServiceStatus to surface chain
+// liveness to the user-level bridge for Reconcile-time adoption.
+func IsChainActive() bool {
+	chainMu.Lock()
+	defer chainMu.Unlock()
+	return activeSess != nil
+}
+
 // binaryPath looks up an adjacent binary by name. Two layouts are
 // supported because both Wails (per-machine) and Electron NSIS
 // (per-user) builds ship today:

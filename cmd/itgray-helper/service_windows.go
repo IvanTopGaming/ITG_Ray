@@ -105,7 +105,7 @@ func runInteractive(h *handler) error {
 
 func buildDispatcher() *server.Dispatcher {
 	d := server.NewDispatcher()
-	d.Register(protocol.OpServiceStatus, server.NewServiceStatusHandler(Version, time.Now()))
+	d.Register(protocol.OpServiceStatus, server.NewServiceStatusHandler(Version, time.Now(), server.IsChainActive))
 	d.Register(protocol.OpTunCreate, server.NewTunCreateHandler())
 	d.Register(protocol.OpTunDestroy, server.NewTunDestroyHandler())
 	d.Register(protocol.OpDnsRestore, server.NewDnsRestoreHandler())

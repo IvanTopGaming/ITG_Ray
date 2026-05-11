@@ -208,11 +208,12 @@ func TestController_Start_StartChainFails_Rollback(t *testing.T) {
 
 func TestController_Reconcile_AfterCrash(t *testing.T) {
 	c, fh, h, _ := setup(t)
-	// Pretend the helper survived a GUI crash and is still running.
+	// Helper survived a GUI crash and reports an active chain. Reconcile
+	// must adopt: rebind picker, emit a connected vpn:status, claim
+	// ownership (so Stop can tear it down), and start the poller.
 	fh.mu.Lock()
 	fh.running = true
 	fh.mu.Unlock()
-	// Seed a last-session record so Reconcile can rebind the picker.
 	require.NoError(t, saveSession(c.d.DataDir, sessionRecord{
 		ServerID: "a",
 		Mode:     string(ModeTUN),
@@ -224,27 +225,54 @@ func TestController_Reconcile_AfterCrash(t *testing.T) {
 
 	c.Reconcile(context.Background())
 
-	// Reconcile only pre-fills the picker; it does NOT emit a connected
-	// event because helper.OpServiceStatus cannot reliably distinguish
-	// "service alive" from "chain alive". The user must reconnect explicitly.
+	ev := waitForVpnStatus(t, rcv, string(hub.StatusConnected), time.Second)
+	require.Equal(t, "a", ev.Payload["serverId"])
+	require.Equal(t, string(ModeTUN), ev.Payload["mode"])
+	require.Contains(t, ev.Payload, "network", "adopted connected event must carry network view")
+
+	st, srv, mode := c.Status()
+	require.Equal(t, hub.StatusConnected, st)
+	require.NotNil(t, srv)
+	require.Equal(t, "a", srv.ID)
+	require.Equal(t, ModeTUN, mode)
+}
+
+// TestController_Reconcile_NoActiveHelperChain pins the negative path:
+// when the helper reports no chain, Reconcile pre-fills the picker
+// selection from last-session.json but must NOT claim ownership or
+// emit a status transition.
+func TestController_Reconcile_NoActiveHelperChain(t *testing.T) {
+	c, fh, h, _ := setup(t)
+	fh.mu.Lock()
+	fh.running = false
+	fh.mu.Unlock()
+	require.NoError(t, saveSession(c.d.DataDir, sessionRecord{
+		ServerID: "a",
+		Mode:     string(ModeTUN),
+		At:       time.Now(),
+	}))
+
+	rcv := h.Subscribe(8)
+	defer h.Unsubscribe(rcv)
+
+	c.Reconcile(context.Background())
+
 	c.mu.Lock()
 	srv := c.current
 	mode := c.mode
 	cancel := c.cancel
 	c.mu.Unlock()
-	require.NotNil(t, srv, "Reconcile should pre-fill current server from session")
+	require.NotNil(t, srv, "Reconcile should still pre-fill current server from session")
 	require.Equal(t, "a", srv.ID)
 	require.Equal(t, ModeTUN, mode)
-	require.Nil(t, cancel, "Reconcile must not claim chain ownership")
+	require.Nil(t, cancel, "Reconcile must not claim ownership when helper has no chain")
 
-	// No status event should fire from Reconcile; drain briefly to confirm.
 	select {
 	case e := <-rcv:
 		if e.Name == hub.EventVPNStatus {
-			t.Fatalf("unexpected vpn:status event from Reconcile: %v", e.Payload)
+			t.Fatalf("unexpected vpn:status event from Reconcile when helper idle: %v", e.Payload)
 		}
 	case <-time.After(100 * time.Millisecond):
-		// quiet — expected
 	}
 }
 

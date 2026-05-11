@@ -130,11 +130,10 @@ func (a *HelperAdapter) StopChain(ctx context.Context) error {
 // ServiceStatus calls OpServiceStatus and projects the helper's
 // response onto the chainctl ChainState shape. Byte counters come from
 // xray-core's StatsService via the helper; when no chain is active they
-// are zero. "Helper is up" doesn't directly tell us "chain is running"
-// — the chainctl Controller is the source of truth for chain state in
-// this design. We report Running=true whenever the helper responds;
-// the poller's crash-detection branch only fires if the helper itself
-// goes away (Call returns an error → caller skips the tick).
+// are zero. Running mirrors the helper's ChainActive flag (true when a
+// chain session is live in the helper) so the poller's crash-detection
+// branch fires on explicit chain teardown and Reconcile can adopt an
+// already-running chain on bridge startup.
 func (a *HelperAdapter) ServiceStatus(ctx context.Context) (ChainState, error) {
 	raw, err := a.c.Call(ctx, protocol.OpServiceStatus, nil)
 	if err != nil {
@@ -145,7 +144,7 @@ func (a *HelperAdapter) ServiceStatus(ctx context.Context) (ChainState, error) {
 		return ChainState{}, fmt.Errorf("decode ServiceStatus: %w", err)
 	}
 	return ChainState{
-		Running:   true,
+		Running:   res.ChainActive,
 		UpBytes:   res.UpBytes,
 		DownBytes: res.DownBytes,
 	}, nil

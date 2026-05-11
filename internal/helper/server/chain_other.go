@@ -27,3 +27,7 @@ func NewStopChainHandler() Handler {
 func readChainCounters(_ context.Context) (uint64, uint64, bool) {
 	return 0, 0, false
 }
+
+// IsChainActive is the non-Windows stub — returns false. The real
+// implementation (chain_windows.go) reads activeSess under chainMu.
+func IsChainActive() bool { return false }

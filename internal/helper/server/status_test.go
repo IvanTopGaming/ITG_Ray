@@ -11,7 +11,7 @@ import (
 
 func TestServiceStatusHandler(t *testing.T) {
 	startedAt := time.Now().Add(-3 * time.Second)
-	h := NewServiceStatusHandler("1.2.3", startedAt)
+	h := NewServiceStatusHandler("1.2.3", startedAt, func() bool { return false })
 
 	res, err := h(context.Background(), nil)
 	require.NoError(t, err)
@@ -35,4 +35,33 @@ func TestServiceStatusResult_DecodeBytes(t *testing.T) {
 	if r.UpBytes != 1024 || r.DownBytes != 2048 {
 		t.Fatalf("up=%d down=%d", r.UpBytes, r.DownBytes)
 	}
+}
+
+func TestServiceStatusHandler_ChainActive(t *testing.T) {
+	cases := []struct {
+		name  string
+		alive bool
+	}{
+		{"alive", true},
+		{"idle", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			h := NewServiceStatusHandler("v", time.Now(), func() bool { return c.alive })
+			res, err := h(context.Background(), nil)
+			require.NoError(t, err)
+			var got ServiceStatusResult
+			require.NoError(t, json.Unmarshal(res, &got))
+			require.Equal(t, c.alive, got.ChainActive)
+		})
+	}
+}
+
+func TestServiceStatusHandler_NilChainAliveTreatsAsIdle(t *testing.T) {
+	h := NewServiceStatusHandler("v", time.Now(), nil)
+	res, err := h(context.Background(), nil)
+	require.NoError(t, err)
+	var got ServiceStatusResult
+	require.NoError(t, json.Unmarshal(res, &got))
+	require.False(t, got.ChainActive)
 }

@@ -270,6 +270,12 @@ func main() {
 	// (it owns the spawn lifecycle), not by the bridge itself.
 	b.Emit("bridge.state", map[string]string{"state": "running"})
 
+	// Adopt a chain that the helper kept alive across our restart so
+	// the renderer's first GetSnapshot/vpn:status reflects connected
+	// state instead of forcing the user to reconnect. Safe no-op when
+	// the helper reports idle.
+	chainCtrl.Reconcile(ctx)
+
 	if err := d.Serve(ctx, os.Stdin, out); err != nil {
 		fmt.Fprintln(os.Stderr, "bridge: serve:", err)
 		os.Exit(1)

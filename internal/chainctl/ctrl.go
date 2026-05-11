@@ -365,17 +365,24 @@ func (c *Controller) tearDown(ctx context.Context, mode Mode) {
 	}
 }
 
-// Reconcile is called at app boot. It stays idle by default — the
-// helper-side OpServiceStatus only reports whether the SERVICE is alive
-// (not the chain inside it), so we cannot reliably detect an orphaned
-// chain from a previous GUI/CLI session. Until the helper exposes a
-// real "chain alive" probe (TODO: plan-c-helper-chainstatus), every GUI
-// boot starts in the idle state and the user reconnects explicitly.
+// Reconcile is called at app boot. It rebinds Controller state to a
+// helper chain that survived the previous GUI/bridge session — the
+// helper runs as a long-lived Windows service while the GUI/bridge are
+// short-lived, so without this path a GUI restart visibly drops to idle
+// even though the chain is still routing traffic.
 //
-// We still consult last-session.json to PRE-FILL the picker selection —
-// useful UX continuity — but we never set c.cancel or emit a connected
-// event from this path.
-func (c *Controller) Reconcile(_ context.Context) {
+// Behavior:
+//   - Loads last-session.json. Missing/invalid → no-op.
+//   - Asks the helper for ChainActive via ServiceStatus. Errors fall back
+//     to "pre-fill picker only" (the conservative pre-fix behavior).
+//   - When ChainActive: claims ownership (sets c.cancel/current/mode +
+//     poll counters), emits a connected vpn:status event mirroring the
+//     bringUp success payload, and launches the runPoller goroutine so
+//     speed updates and crash detection work for the adopted session.
+//   - When ChainActive is false: pre-fills c.current/c.mode for picker
+//     UX, but does NOT claim ownership and emits no event — the user
+//     reconnects explicitly.
+func (c *Controller) Reconcile(ctx context.Context) {
 	rec, err := loadSession(c.d.DataDir)
 	if err != nil || rec.ServerID == "" {
 		return
@@ -385,8 +392,39 @@ func (c *Controller) Reconcile(_ context.Context) {
 		_ = clearSession(c.d.DataDir)
 		return
 	}
+
+	state, statusErr := c.d.Helper.ServiceStatus(ctx)
+	if statusErr != nil || !state.Running {
+		c.mu.Lock()
+		c.current = srv
+		c.mode = Mode(rec.Mode)
+		c.mu.Unlock()
+		return
+	}
+
+	pollCtx, cancel := context.WithCancel(context.Background())
+	mode := Mode(rec.Mode)
 	c.mu.Lock()
+	c.cancel = cancel
 	c.current = srv
-	c.mode = Mode(rec.Mode)
+	c.mode = mode
+	c.prevAt = time.Now()
+	c.prevUp = state.UpBytes
+	c.prevDown = state.DownBytes
 	c.mu.Unlock()
+
+	payload := map[string]any{
+		"status":   string(hub.StatusConnected),
+		"serverId": srv.ID,
+		"mode":     string(mode),
+	}
+	if net, nerr := c.d.Network(); nerr == nil {
+		payload["network"] = networkSettingsView(net)
+	}
+	c.d.Hub.Publish(hub.Event{
+		Name:    hub.EventVPNStatus,
+		Payload: payload,
+	})
+
+	go c.runPoller(pollCtx)
 }
