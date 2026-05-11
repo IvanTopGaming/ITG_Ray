@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, type HTMLAttributes, type SyntheticEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { Lock, ChevronRight, Plus, MoreHorizontal, GripVertical } from "lucide-react";
 import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
@@ -28,9 +28,23 @@ export function reorderRules(groups: GroupView[], groupId: string, fromIdx: numb
   });
 }
 
+export function reorderGroups(groups: GroupView[], activeId: string, overId: string): GroupView[] {
+  if (activeId === "safety" || overId === "safety") return groups;
+  const fromIdx = groups.findIndex((g) => g.id === activeId);
+  const toIdx = groups.findIndex((g) => g.id === overId);
+  if (fromIdx < 0 || toIdx < 0) return groups;
+  const next = groups.slice();
+  const [moved] = next.splice(fromIdx, 1);
+  next.splice(toIdx, 0, moved);
+  return next;
+}
+
 export function Routing() {
   const { groups, defaultAction, lastError } = useRules();
   const [adding, setAdding] = useState(false);
+
+  const safetyGroup = groups.find((g) => g.id === "safety");
+  const userGroups = groups.filter((g) => g.id !== "safety");
 
   function handleRuleDragEnd(groupId: string) {
     return (e: DragEndEvent) => {
@@ -43,6 +57,13 @@ export function Routing() {
       const nextGroups = reorderRules(groups, groupId, fromIdx, toIdx);
       void rulesReplaceAll({ defaultAction, groups: nextGroups });
     };
+  }
+
+  function onGroupDragEnd(e: DragEndEvent) {
+    if (!e.over || e.over.id === e.active.id) return;
+    const nextUser = reorderGroups(userGroups, String(e.active.id), String(e.over.id));
+    const finalGroups = safetyGroup ? [safetyGroup, ...nextUser] : nextUser;
+    void rulesReplaceAll({ defaultAction, groups: finalGroups });
   }
 
   return (
@@ -66,7 +87,18 @@ export function Routing() {
         </div>
       )}
       {adding && <AddGroupRow onCancel={() => setAdding(false)} />}
-      {groups.map((g) => <GroupCard key={g.id} group={g} onRuleDragEnd={handleRuleDragEnd(g.id)} />)}
+      {safetyGroup && <GroupCard group={safetyGroup} onRuleDragEnd={() => {}} />}
+      <DndContext collisionDetection={closestCenter} onDragEnd={onGroupDragEnd}>
+        <SortableContext items={userGroups.map((g) => g.id)} strategy={verticalListSortingStrategy}>
+          {userGroups.map((g) => (
+            <SortableGroupCard
+              key={g.id}
+              group={g}
+              onRuleDragEnd={handleRuleDragEnd(g.id)}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
     </div>
   );
 }
@@ -113,7 +145,12 @@ function AddGroupRow({ onCancel }: { onCancel: () => void }) {
   );
 }
 
-function GroupCard({ group, onRuleDragEnd }: { group: GroupView; onRuleDragEnd: (e: DragEndEvent) => void }) {
+type DragHandleProps = {
+  attributes: HTMLAttributes<HTMLElement>;
+  listeners: Record<string, (event: SyntheticEvent) => void> | undefined;
+};
+
+function GroupCard({ group, onRuleDragEnd, dragHandle }: { group: GroupView; onRuleDragEnd: (e: DragEndEvent) => void; dragHandle?: DragHandleProps }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -134,6 +171,17 @@ function GroupCard({ group, onRuleDragEnd }: { group: GroupView; onRuleDragEnd: 
       <section className={cn("glass-regular flex flex-col gap-2 rounded-2xl p-4", !group.enabled && "opacity-60")}>
         <header className="flex items-center justify-between">
           <div className="flex items-center gap-2">
+            {dragHandle && (
+              <button
+                type="button"
+                {...dragHandle.attributes}
+                {...dragHandle.listeners}
+                aria-label={`Drag ${group.name}`}
+                className="cursor-grab text-white/35 hover:text-white/65"
+              >
+                <GripVertical className="h-3.5 w-3.5" />
+              </button>
+            )}
             {group.locked && <Lock aria-label="locked" className="h-3.5 w-3.5 text-white/55" />}
             {renaming
               ? <InlineRename
@@ -266,6 +314,20 @@ function InlineRename({ initial, onCancel, onCommit }: { initial: string; onCanc
       onBlur={commit}
       className="rounded-md border border-white/10 bg-transparent px-2 py-0.5 text-[14px] font-medium text-white/90 outline-none focus:border-sky-400/40"
     />
+  );
+}
+
+function SortableGroupCard({ group, onRuleDragEnd }: { group: GroupView; onRuleDragEnd: (e: DragEndEvent) => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: group.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.7 : 1,
+  };
+  return (
+    <div ref={setNodeRef} style={style}>
+      <GroupCard group={group} onRuleDragEnd={onRuleDragEnd} dragHandle={{ attributes: attributes as HTMLAttributes<HTMLElement>, listeners: listeners as Record<string, (event: SyntheticEvent) => void> | undefined }} />
+    </div>
   );
 }
 

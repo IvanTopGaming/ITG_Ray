@@ -26,7 +26,7 @@ vi.mock("react-router-dom", async () => {
   return { ...actual, useNavigate: () => navigateMock };
 });
 
-import { Routing, reorderRules } from "./Routing";
+import { Routing, reorderRules, reorderGroups } from "./Routing";
 
 const safety = {
   id: "safety",
@@ -170,5 +170,20 @@ describe("reorderRules", () => {
     } as any;
     const out = reorderRules([g], "missing", 0, 1);
     expect(out[0].rules.map((r: any) => r.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("reorderGroups", () => {
+  it("reorderGroups moves a non-locked group", () => {
+    const a = { id: "a", name: "A", locked: false, enabled: true, rules: [] } as any;
+    const b = { id: "b", name: "B", locked: false, enabled: true, rules: [] } as any;
+    const out = reorderGroups([safety as any, a, b], "a", "b");
+    expect(out.map((g) => g.id)).toEqual(["safety", "b", "a"]);
+  });
+
+  it("reorderGroups refuses to move into the safety slot", () => {
+    const a = { id: "a", name: "A", locked: false, enabled: true, rules: [] } as any;
+    const out = reorderGroups([safety as any, a], "a", "safety");
+    expect(out.map((g) => g.id)).toEqual(["safety", "a"]);
   });
 });
