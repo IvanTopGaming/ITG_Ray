@@ -201,22 +201,18 @@ describe("Routing page — per-rule menu", () => {
     rulesRemoveRuleMock.mockReset();
   });
 
-  it("Move to <group> calls rulesMoveRule", async () => {
+  it("Edit menuitem navigates to the rule editor", async () => {
     const ruleA = { id: "r1", name: "Block ads", enabled: true, action: "block", conditions: { ip_cidrs: ["1.2.3.4/32"] } };
     useRulesMock.mockReturnValue({
       defaultAction: "proxy",
-      groups: [
-        safety,
-        { ...user, id: "g1", name: "Group A", rules: [ruleA] },
-        { id: "g2", name: "Group B", locked: false, enabled: true, rules: [] },
-      ],
+      groups: [safety, { ...user, id: "g1", name: "Group A", rules: [ruleA] }],
       loading: false, lastError: null, bootstrapped: true,
     });
-    rulesMoveRuleMock.mockResolvedValue(undefined);
+    navigateMock.mockReset();
     renderRouting();
     await userEvent.click(screen.getByLabelText(/Block ads menu/i));
-    await userEvent.click(screen.getByRole("menuitem", { name: /move to group b/i }));
-    expect(rulesMoveRuleMock).toHaveBeenCalledWith("r1", "g2");
+    await userEvent.click(screen.getByRole("menuitem", { name: /^edit$/i }));
+    expect(navigateMock).toHaveBeenCalledWith("/routing/r1");
   });
 
   it("Delete calls rulesRemoveRule", async () => {

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, type HTMLAttributes, type SyntheticEvent } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Lock, ChevronRight, Plus, MoreHorizontal, GripVertical } from "lucide-react";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
@@ -10,7 +11,6 @@ import {
   rulesAddGroup,
   rulesEditGroup,
   rulesRemoveGroup,
-  rulesMoveRule,
   rulesRemoveRule,
   rulesReplaceAll,
   type GroupView,
@@ -455,15 +455,41 @@ function RuleRow({
   allGroups?: GroupView[];
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuCoords, setMenuCoords] = useState<{ left: number; top: number } | null>(null);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const menuPopRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  // group + allGroups are kept in the signature for backwards compatibility
+  // with parent call sites; the menu no longer reads cross-group context.
+  void group;
+  void allGroups;
   const actionStyle =
     rule.action === "proxy" ? "bg-sky-500/20 text-sky-200"
     : rule.action === "direct" ? "bg-amber-500/20 text-amber-200"
     : "bg-rose-500/20 text-rose-200";
-  const targetGroups =
-    !groupLocked && group && allGroups
-      ? allGroups.filter((g) => !g.locked && g.id !== group.id)
-      : [];
+
+  useEffect(() => {
+    if (!menuOpen || !menuBtnRef.current) return;
+    const r = menuBtnRef.current.getBoundingClientRect();
+    // Right-align: pop's right edge = button's right edge; width 11rem = 176px.
+    setMenuCoords({ left: r.right - 176, top: r.bottom + 4 });
+  }, [menuOpen]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (menuBtnRef.current?.contains(t) || menuPopRef.current?.contains(t)) return;
+      setMenuOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuOpen(false); };
+    document.addEventListener("mousedown", handler);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [menuOpen]);
   return (
     <motion.div
       onClick={groupLocked ? undefined : () => navigate(`/routing/${rule.id}`)}
@@ -483,50 +509,45 @@ function RuleRow({
         <span className="text-[11px] text-white/45">{summarise(rule.conditions)}</span>
       </div>
       {!groupLocked && (
-        <div className="flex items-center gap-1">
-          <div className="relative" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              aria-label={`${rule.name} menu`}
-              onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
-              className="rounded-md p-1 text-white/55 hover:bg-white/[0.08] hover:text-white/90"
+        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <button
+            ref={menuBtnRef}
+            type="button"
+            aria-label={`${rule.name} menu`}
+            onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
+            className="rounded-md p-1 text-white/55 hover:bg-white/[0.08] hover:text-white/90"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </button>
+          {menuOpen && menuCoords && createPortal(
+            <motion.div
+              ref={menuPopRef}
+              role="menu"
+              initial={{ opacity: 0, y: -4, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.16, ease: SNAP_EASE }}
+              style={{ position: "fixed", left: menuCoords.left, top: menuCoords.top, zIndex: 1000 }}
+              className="w-44 rounded-md border border-white/15 bg-[#1c1f2a] py-1 text-[12.5px] shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
             >
-              <MoreHorizontal className="h-4 w-4" />
-            </button>
-            <AnimatePresence>
-              {menuOpen && (
-                <motion.div
-                  role="menu"
-                  variants={popoverVariants}
-                  initial="hidden"
-                  animate="show"
-                  exit="exit"
-                  style={{ transformOrigin: "top right" }}
-                  className="absolute right-0 z-10 mt-1 w-44 rounded-md border border-white/10 bg-[#1c1f2a] py-1 text-[12.5px] shadow-lg"
-                >
-                  {targetGroups.map((g) => (
-                    <button
-                      key={g.id}
-                      role="menuitem"
-                      type="button"
-                      className="block w-full px-3 py-1.5 text-left hover:bg-white/[0.06]"
-                      onClick={() => { setMenuOpen(false); void rulesMoveRule(rule.id, g.id); }}
-                    >
-                      Move to {g.name}
-                    </button>
-                  ))}
-                  <button
-                    role="menuitem"
-                    type="button"
-                    className="block w-full px-3 py-1.5 text-left text-rose-300 hover:bg-rose-500/10"
-                    onClick={() => { setMenuOpen(false); void rulesRemoveRule(rule.id); }}
-                  >
-                    Delete
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+              <button
+                role="menuitem"
+                type="button"
+                className="block w-full px-3 py-1.5 text-left hover:bg-white/[0.06]"
+                onClick={() => { setMenuOpen(false); navigate(`/routing/${rule.id}`); }}
+              >
+                Edit
+              </button>
+              <button
+                role="menuitem"
+                type="button"
+                className="block w-full px-3 py-1.5 text-left text-rose-300 hover:bg-rose-500/10"
+                onClick={() => { setMenuOpen(false); void rulesRemoveRule(rule.id); }}
+              >
+                Delete
+              </button>
+            </motion.div>,
+            document.body,
+          )}
           <ChevronRight className="h-3.5 w-3.5 text-white/40 transition-transform group-hover:translate-x-0.5" />
         </div>
       )}
