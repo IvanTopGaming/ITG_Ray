@@ -5,7 +5,6 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import { useRules, rulesAddRule, rulesEditRule, rulesMoveRule, type RuleView, type GroupView, type DomainMatcher, type PortSpec } from "@/lib/rulesStore";
-import { Segmented } from "@/components/controls/Segmented";
 import { Toggle } from "@/components/controls/Toggle";
 import { ConfirmDialog } from "@/components/controls/ConfirmDialog";
 
@@ -25,9 +24,9 @@ const sectionVariants: Variants = {
 };
 
 const chipVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.92 },
+  hidden: { opacity: 0, scale: 0.88 },
   show: { opacity: 1, scale: 1, transition: { duration: 0.18, ease: SNAP_EASE } },
-  exit: { opacity: 0, scale: 0.92, transition: { duration: 0.14, ease: SNAP_EASE } },
+  exit: { opacity: 0, scale: 0.88, transition: { duration: 0.14, ease: SNAP_EASE } },
 };
 
 type ConditionType = "domains" | "ip_cidrs" | "geo" | "ports" | "processes" | "protocols";
@@ -46,9 +45,6 @@ const CONDITION_TYPES: ConditionDef[] = [
   { key: "processes", icon: "⚙️", label: "Processes" },
   { key: "protocols", icon: "\u{1F4E1}", label: "Protocols" },
 ];
-
-const CONDITION_BY_KEY: Record<ConditionType, ConditionDef> =
-  CONDITION_TYPES.reduce((acc, c) => { acc[c.key] = c; return acc; }, {} as Record<ConditionType, ConditionDef>);
 
 type CreateState = { mode: "create"; groupId: string };
 
@@ -72,6 +68,11 @@ function initialVisibleTypes(rule: RuleView | null): Set<ConditionType> {
     if (Array.isArray(arr) && arr.length > 0) set.add(c.key);
   }
   return set;
+}
+
+function conditionCount(rule: RuleView, key: ConditionType): number {
+  const arr = rule.conditions[key];
+  return Array.isArray(arr) ? arr.length : 0;
 }
 
 export function RuleEditor() {
@@ -109,7 +110,7 @@ export function RuleEditor() {
           whileHover={{ x: -2 }}
           whileTap={{ scale: 0.96 }}
           transition={{ duration: 0.18, ease: SNAP_EASE }}
-          className="self-start text-[12px] text-white/55 hover:text-white/90"
+          className="self-start text-[12.5px] text-white/70 hover:text-white/95"
         >
           ← Routing
         </motion.button>
@@ -206,20 +207,21 @@ export function RuleEditor() {
 
   return (
     <motion.div
-      className="flex flex-col gap-4"
+      className="flex flex-col gap-5"
       initial="hidden"
       animate="show"
       variants={pageVariants}
     >
+      {/* Header — back link + Save */}
       <motion.header variants={sectionVariants} className="flex items-center justify-between">
         <motion.button
           onClick={handleBack}
           whileHover={{ x: -2 }}
           whileTap={{ scale: 0.96 }}
           transition={{ duration: 0.18, ease: SNAP_EASE }}
-          className="flex items-center gap-1 text-[12px] text-white/55 hover:text-white/90"
+          className="flex items-center gap-1 text-[13px] text-white/70 hover:text-white/95"
         >
-          <ChevronLeft className="h-3.5 w-3.5" /> Routing
+          <ChevronLeft className="h-4 w-4" /> Routing
         </motion.button>
         <div className="flex flex-col items-end gap-1">
           <motion.button
@@ -231,7 +233,7 @@ export function RuleEditor() {
             className={
               conditionsEmpty
                 ? "rounded-md bg-white/[0.06] px-5 py-2 text-[13px] font-semibold text-white/45 cursor-not-allowed"
-                : "rounded-md bg-sky-500/60 px-5 py-2 text-[13px] font-semibold text-white shadow-[0_6px_18px_-8px_rgba(56,189,248,0.65)] hover:bg-sky-400/70"
+                : "rounded-md bg-sky-500/70 px-5 py-2 text-[13px] font-semibold text-white shadow-[0_8px_24px_-8px_rgba(56,189,248,0.75)] hover:bg-sky-400/80"
             }
           >
             {isCreate ? "Create rule" : "Save"}
@@ -241,6 +243,7 @@ export function RuleEditor() {
           )}
         </div>
       </motion.header>
+
       {saveError && (
         <motion.div
           variants={sectionVariants}
@@ -250,44 +253,45 @@ export function RuleEditor() {
           {saveError}
         </motion.div>
       )}
-      {/* Rule basics */}
-      <motion.div variants={sectionVariants} className="glass-regular flex flex-col gap-3 rounded-2xl p-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="flex min-w-0 flex-1 flex-col gap-1">
-            <span className="text-[11.5px] uppercase tracking-wider text-white/55">Name</span>
-            <input
-              aria-label="Name"
-              value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              className="rounded-md border border-white/15 bg-transparent px-3 py-1.5 text-[13px] outline-none focus:border-sky-400/40"
-            />
-          </label>
-          <div className="flex flex-col items-end gap-1">
-            <span className="text-[11.5px] uppercase tracking-wider text-white/55">Enabled</span>
+
+      {/* Rule basics — borderless, page-title style. No outer card chrome. */}
+      <motion.div variants={sectionVariants} className="flex flex-col gap-3">
+        <div className="flex items-center gap-4">
+          <input
+            aria-label="Name"
+            value={draft.name}
+            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            placeholder="Rule name"
+            className="min-w-0 flex-1 border-0 border-b border-white/10 bg-transparent px-0 pb-1.5 text-[18px] font-semibold text-white/95 outline-none transition-colors duration-200 placeholder:font-normal placeholder:text-white/30 focus:border-sky-400/50"
+          />
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-[0.16em] text-white/40">Enabled</span>
             <Toggle value={draft.enabled} aria-label="Enabled" onChange={(v) => setDraft({ ...draft, enabled: v })} />
           </div>
         </div>
-        {!isCreate && (
-          <label className="flex flex-col gap-1">
-            <span className="text-[11.5px] uppercase tracking-wider text-white/55">Group</span>
+        {!isCreate && userGroups.length > 0 && (
+          <label className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-[0.16em] text-white/40">Group</span>
             <select
               aria-label="Group"
               value={groupId}
               onChange={(e) => setGroupId(e.target.value)}
-              className="rounded-md border border-white/15 bg-[#1c1f2a] px-3 py-1.5 text-[13px] outline-none focus:border-sky-400/40"
+              className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[12px] text-white/85 outline-none transition-colors duration-200 hover:bg-white/[0.06] focus:border-sky-400/40"
             >
-              {userGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+              {userGroups.map((g) => <option key={g.id} value={g.id} className="bg-[#1c1f2a]">{g.name}</option>)}
             </select>
           </label>
         )}
       </motion.div>
 
-      {/* IF (conditions) */}
-      <motion.section variants={sectionVariants} className="flex flex-col gap-2">
-        <span className="text-[10px] uppercase tracking-[0.18em] text-white/45 font-medium">IF</span>
+      {/* IF (conditions) — tight gap to Rule basics */}
+      <motion.section variants={sectionVariants} className="flex flex-col gap-2.5">
+        <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/45">
+          If matches all of
+        </span>
         {visibleConditionList.length === 0 ? (
-          <div className="glass-regular flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-white/10 p-8 text-center">
-            <p className="text-[13px] text-white/55">No conditions yet</p>
+          <div className="flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-dashed border-white/10 px-4 py-8 text-center">
+            <p className="text-[13px] text-white/55">No conditions yet —</p>
             <AddConditionButton
               availableTypes={availableTypes}
               onPick={addConditionType}
@@ -297,66 +301,79 @@ export function RuleEditor() {
         ) : (
           <div className="flex flex-col gap-3">
             <AnimatePresence initial={false}>
-              {visibleConditionList.map((c) => (
+              {visibleConditionList.map((c) => {
+                const count = conditionCount(draft, c.key);
+                return (
+                  <motion.div
+                    key={c.key}
+                    layout
+                    variants={sectionVariants}
+                    initial="hidden"
+                    animate="show"
+                    exit={{ opacity: 0, y: -4, transition: { duration: 0.16, ease: SNAP_EASE } }}
+                    className="flex flex-col gap-2.5 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4 transition-colors duration-200 hover:border-white/[0.12]"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="flex items-center gap-2 text-[13.5px] font-medium text-white/90">
+                        <span aria-hidden className="text-[16px] leading-none">{c.icon}</span>
+                        <span>{c.label === "Domain matcher" ? "Domains" : c.label}</span>
+                        {count > 0 && (
+                          <span className="text-[11.5px] font-normal tabular-nums text-white/35">
+                            ({count})
+                          </span>
+                        )}
+                      </h3>
+                      <motion.button
+                        type="button"
+                        onClick={() => removeConditionType(c.key)}
+                        aria-label={`Remove ${c.label} card`}
+                        whileHover={{ scale: 1.15 }}
+                        whileTap={{ scale: 0.85 }}
+                        transition={{ duration: 0.18, ease: SNAP_EASE }}
+                        className="rounded-full p-1 text-white/40 hover:bg-rose-500/10 hover:text-rose-300"
+                      >
+                        ✕
+                      </motion.button>
+                    </div>
+                    <ConditionCardBody
+                      type={c.key}
+                      draft={draft}
+                      setDraft={setDraft}
+                    />
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+            <AnimatePresence initial={false}>
+              {availableTypes.length > 0 && (
                 <motion.div
-                  key={c.key}
-                  layout
-                  variants={sectionVariants}
-                  initial="hidden"
-                  animate="show"
-                  exit={{ opacity: 0, y: -4, transition: { duration: 0.16, ease: SNAP_EASE } }}
-                  className="glass-regular flex flex-col gap-2 rounded-2xl p-4"
+                  key="add-more"
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.18, ease: SNAP_EASE }}
+                  className="flex"
                 >
-                  <div className="flex items-center justify-between">
-                    <h3 className="flex items-center gap-2 text-[13px] font-medium text-white/90">
-                      <span aria-hidden className="text-[14px]">{c.icon}</span>
-                      <span>{c.label === "Domain matcher" ? "Domains" : c.label}</span>
-                    </h3>
-                    <motion.button
-                      type="button"
-                      onClick={() => removeConditionType(c.key)}
-                      aria-label={`Remove ${c.label} card`}
-                      whileHover={{ scale: 1.15 }}
-                      whileTap={{ scale: 0.85 }}
-                      transition={{ duration: 0.18, ease: SNAP_EASE }}
-                      className="rounded-full p-1 text-white/45 hover:bg-white/[0.08] hover:text-rose-300"
-                    >
-                      ✕
-                    </motion.button>
-                  </div>
-                  <ConditionCardBody
-                    type={c.key}
-                    draft={draft}
-                    setDraft={setDraft}
+                  <AddConditionButton
+                    availableTypes={availableTypes}
+                    onPick={addConditionType}
                   />
                 </motion.div>
-              ))}
+              )}
             </AnimatePresence>
-            {availableTypes.length > 0 && (
-              <AddConditionButton
-                availableTypes={availableTypes}
-                onPick={addConditionType}
-              />
-            )}
           </div>
         )}
       </motion.section>
 
-      {/* THEN (action) */}
-      <motion.section variants={sectionVariants} className="flex flex-col gap-2">
-        <span className="text-[10px] uppercase tracking-[0.18em] text-white/45 font-medium">THEN</span>
-        <div className={`flex flex-col gap-1 rounded-2xl border p-4 transition-colors duration-200 ${actionWrapperTint(draft.action)}`}>
-          <span className="text-[11.5px] uppercase tracking-wider text-white/55">Action</span>
-          <Segmented
-            value={draft.action}
-            onChange={(v) => setDraft({ ...draft, action: v as RuleView["action"] })}
-            options={[
-              { value: "proxy", label: "Proxy" },
-              { value: "direct", label: "Direct" },
-              { value: "block", label: "Block" },
-            ] as const}
-          />
-        </div>
+      {/* THEN (action) — extra breathing room above */}
+      <motion.section variants={sectionVariants} className="mt-2 flex flex-col gap-2.5">
+        <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/45">
+          Then action
+        </span>
+        <ActionPicker
+          value={draft.action}
+          onChange={(v) => setDraft({ ...draft, action: v })}
+        />
       </motion.section>
 
       <ConfirmDialog
@@ -372,17 +389,78 @@ export function RuleEditor() {
   );
 }
 
-function actionWrapperTint(action: RuleView["action"]): string {
+// ----- ActionPicker: custom 3-button row where each selected pill matches
+// the wrapper hue. The wrapper itself carries a soft glow (shadow) in the same
+// color so "Block" feels distinctly red, "Direct" warmly amber, "Proxy" cool sky.
+// Tests rely on:
+//   - role="button" with name=/^block$/i and aria-pressed reflecting selection
+//   - a rounded-2xl ancestor whose className contains the hue (e.g. "rose").
+
+type ActionValue = RuleView["action"];
+
+const ACTION_DEFS: ReadonlyArray<{ value: ActionValue; label: string; on: string; ring: string }> = [
+  {
+    value: "proxy",
+    label: "Proxy",
+    on: "bg-sky-500/40 text-sky-50 shadow-[0_4px_14px_-4px_rgba(56,189,248,0.45)]",
+    ring: "ring-sky-300/30",
+  },
+  {
+    value: "direct",
+    label: "Direct",
+    on: "bg-amber-500/35 text-amber-50 shadow-[0_4px_14px_-4px_rgba(245,158,11,0.40)]",
+    ring: "ring-amber-300/30",
+  },
+  {
+    value: "block",
+    label: "Block",
+    on: "bg-rose-500/40 text-rose-50 shadow-[0_4px_14px_-4px_rgba(244,63,94,0.50)]",
+    ring: "ring-rose-300/30",
+  },
+];
+
+function actionWrapperTint(action: ActionValue): string {
   switch (action) {
     case "proxy":
-      return "bg-sky-500/10 border-sky-500/30";
+      return "bg-sky-500/[0.12] border-sky-500/40 shadow-[0_0_32px_-4px_rgba(56,189,248,0.22)]";
     case "direct":
-      return "bg-white/[0.04] border-white/10";
+      return "bg-amber-500/[0.08] border-amber-500/30 shadow-[0_0_28px_-4px_rgba(245,158,11,0.18)]";
     case "block":
-      return "bg-rose-500/10 border-rose-500/30";
-    default:
-      return "bg-white/[0.04] border-white/10";
+      return "bg-rose-500/[0.12] border-rose-500/40 shadow-[0_0_32px_-4px_rgba(244,63,94,0.26)]";
   }
+}
+
+function ActionPicker({ value, onChange }: { value: ActionValue; onChange: (v: ActionValue) => void }) {
+  return (
+    <div
+      className={`flex flex-col gap-2 rounded-2xl border p-4 transition-all duration-200 ${actionWrapperTint(value)}`}
+    >
+      <div className="flex w-full gap-1 rounded-full bg-black/30 p-1">
+        {ACTION_DEFS.map((a) => {
+          const selected = value === a.value;
+          return (
+            <motion.button
+              key={a.value}
+              type="button"
+              role="button"
+              aria-pressed={selected}
+              onClick={() => onChange(a.value)}
+              whileTap={{ scale: 0.97 }}
+              transition={{ duration: 0.18, ease: SNAP_EASE }}
+              className={
+                "relative flex-1 rounded-full px-3 py-1.5 text-[12.5px] font-medium transition-colors duration-200 " +
+                (selected
+                  ? a.on
+                  : "text-white/55 hover:bg-white/[0.04] hover:text-white/80")
+              }
+            >
+              {a.label}
+            </motion.button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 // ----- AddConditionButton (custom popover dropdown) -----
@@ -433,15 +511,15 @@ function AddConditionButton({
         ref={btnRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
-        whileHover={{ y: -1 }}
+        whileHover={prominent ? { y: -1 } : { y: -1 }}
         whileTap={{ scale: 0.96 }}
         transition={{ duration: 0.18, ease: SNAP_EASE }}
         aria-haspopup="menu"
         aria-expanded={open}
         className={
           prominent
-            ? "self-start rounded-lg border border-sky-400/30 bg-sky-500/10 px-4 py-2 text-[12.5px] font-medium text-sky-200 hover:bg-sky-500/15"
-            : "self-start rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08]"
+            ? "self-center rounded-full border border-sky-400/40 bg-sky-500/15 px-3.5 py-1.5 text-[12.5px] font-medium text-sky-100 shadow-[0_4px_14px_-4px_rgba(56,189,248,0.45)] hover:bg-sky-500/25"
+            : "self-start rounded-md border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-[11.5px] font-medium text-white/65 hover:border-white/[0.12] hover:bg-white/[0.06] hover:text-white/85"
         }
       >
         + Add condition
@@ -493,7 +571,9 @@ function Chip({
       initial="hidden"
       animate="show"
       exit="exit"
-      className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-[12px] text-white/85"
+      whileHover={{ y: -1 }}
+      transition={{ duration: 0.18, ease: SNAP_EASE }}
+      className="group inline-flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.05] px-2.5 py-1 text-[12px] text-white/90 transition-colors duration-200 hover:border-white/[0.16] hover:bg-white/[0.10]"
     >
       {children}
       {onRemove && (
@@ -501,7 +581,7 @@ function Chip({
           type="button"
           onClick={onRemove}
           aria-label={removeLabel ?? "Remove"}
-          className="rounded-full p-0.5 text-white/45 hover:bg-white/[0.1] hover:text-rose-300"
+          className="ml-0.5 rounded-full p-0.5 text-white/40 transition-colors duration-150 hover:bg-rose-500/15 hover:text-rose-300"
         >
           ✕
         </button>
@@ -570,6 +650,14 @@ function ConditionCardBody({
   }
 }
 
+// ----- Shared input styling -----
+
+const ADD_INPUT_CLASSES =
+  "flex-1 rounded-md border border-white/[0.08] bg-white/[0.02] px-2.5 py-1.5 text-[12.5px] text-white/90 outline-none transition-colors duration-200 placeholder:text-white/30 focus:border-sky-400/45 focus:bg-white/[0.04]";
+
+const ADD_KIND_SELECT_CLASSES =
+  "rounded-md border border-white/[0.08] bg-[#1c1f2a] px-2 py-1.5 text-[12px] text-white/85 outline-none hover:border-white/[0.16] focus:border-sky-400/45";
+
 // ----- Domains -----
 
 const DOMAIN_KINDS: DomainMatcher["kind"][] = ["exact", "suffix", "keyword", "regex"];
@@ -577,7 +665,6 @@ const DOMAIN_KINDS: DomainMatcher["kind"][] = ["exact", "suffix", "keyword", "re
 function DomainsBody({ value, onChange }: { value: DomainMatcher[]; onChange: (next: DomainMatcher[]) => void }) {
   const [addKind, setAddKind] = useState<DomainMatcher["kind"]>("suffix");
   const [addValue, setAddValue] = useState("");
-
   function commit() {
     const v = addValue.trim();
     if (!v) return;
@@ -586,7 +673,7 @@ function DomainsBody({ value, onChange }: { value: DomainMatcher[]; onChange: (n
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2.5">
       {value.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           <AnimatePresence initial={false}>
@@ -600,24 +687,23 @@ function DomainsBody({ value, onChange }: { value: DomainMatcher[]; onChange: (n
                   aria-label={`Domain matcher kind ${i + 1}`}
                   value={m.kind}
                   onChange={(e) => onChange(value.map((x, j) => j === i ? { ...x, kind: e.target.value as DomainMatcher["kind"] } : x))}
-                  className="bg-transparent text-[11px] uppercase tracking-wider text-white/55 outline-none hover:text-white/80"
+                  className="cursor-pointer bg-transparent text-[11px] uppercase tracking-wider text-white/45 outline-none transition-colors duration-150 hover:text-white/80"
                 >
                   {DOMAIN_KINDS.map((k) => <option key={k} value={k} className="bg-[#1c1f2a] text-white/85 normal-case">{k}</option>)}
                 </select>
-                <span className="text-white/30">·</span>
-                <span>{m.value}</span>
+                <span className="text-white/25">·</span>
+                <span className="text-white/95">{m.value}</span>
               </Chip>
             ))}
           </AnimatePresence>
         </div>
       )}
       <div className="flex items-center gap-2">
-        <span className="text-[11px] uppercase tracking-wider text-white/45">Add</span>
         <select
           aria-label="Domain matcher kind"
           value={addKind}
           onChange={(e) => setAddKind(e.target.value as DomainMatcher["kind"])}
-          className="rounded-md border border-white/10 bg-[#1c1f2a] px-2 py-1 text-[12px]"
+          className={ADD_KIND_SELECT_CLASSES}
         >
           {DOMAIN_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
         </select>
@@ -626,10 +712,9 @@ function DomainsBody({ value, onChange }: { value: DomainMatcher[]; onChange: (n
           value={addValue}
           onChange={(e) => setAddValue(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
-          placeholder="e.g. example.com"
-          className="flex-1 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
+          placeholder="example.com — press Enter to add"
+          className={ADD_INPUT_CLASSES}
         />
-        <AddChipButton onClick={commit} disabled={!addValue.trim()} label="Add domain matcher" />
       </div>
     </div>
   );
@@ -646,7 +731,7 @@ function CidrsBody({ value, onChange }: { value: string[]; onChange: (next: stri
     setAddValue("");
   }
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2.5">
       {value.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           <AnimatePresence initial={false}>
@@ -662,18 +747,14 @@ function CidrsBody({ value, onChange }: { value: string[]; onChange: (next: stri
           </AnimatePresence>
         </div>
       )}
-      <div className="flex items-center gap-2">
-        <span className="text-[11px] uppercase tracking-wider text-white/45">Add</span>
-        <input
-          aria-label="CIDR value"
-          value={addValue}
-          onChange={(e) => setAddValue(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
-          placeholder="e.g. 10.0.0.0/8 or 1.2.3.4"
-          className="flex-1 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
-        />
-        <AddChipButton onClick={commit} disabled={!addValue.trim()} label="Add CIDR" />
-      </div>
+      <input
+        aria-label="CIDR value"
+        value={addValue}
+        onChange={(e) => setAddValue(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
+        placeholder="10.0.0.0/8 or 1.2.3.4 — press Enter to add"
+        className={ADD_INPUT_CLASSES}
+      />
     </div>
   );
 }
@@ -701,7 +782,7 @@ function GeoBody({ value, onChange }: { value: string[]; onChange: (next: string
     setAddValue("");
   }
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2.5">
       {value.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           <AnimatePresence initial={false}>
@@ -717,12 +798,12 @@ function GeoBody({ value, onChange }: { value: string[]; onChange: (next: string
                     aria-label={`Geo prefix ${i + 1}`}
                     value={prefix}
                     onChange={(e) => onChange(value.map((x, j) => j === i ? `${e.target.value}:${splitGeo(x).rest}` : x))}
-                    className="bg-transparent text-[11px] uppercase tracking-wider text-white/55 outline-none hover:text-white/80"
+                    className="cursor-pointer bg-transparent text-[11px] uppercase tracking-wider text-white/45 outline-none transition-colors duration-150 hover:text-white/80"
                   >
                     {GEO_PREFIXES.map((p) => <option key={p} value={p} className="bg-[#1c1f2a] text-white/85 normal-case">{p}</option>)}
                   </select>
-                  <span className="text-white/30">·</span>
-                  <span>{rest}</span>
+                  <span className="text-white/25">·</span>
+                  <span className="text-white/95">{rest}</span>
                 </Chip>
               );
             })}
@@ -730,12 +811,11 @@ function GeoBody({ value, onChange }: { value: string[]; onChange: (next: string
         </div>
       )}
       <div className="flex items-center gap-2">
-        <span className="text-[11px] uppercase tracking-wider text-white/45">Add</span>
         <select
           aria-label="Geo prefix"
           value={addPrefix}
           onChange={(e) => setAddPrefix(e.target.value as GeoPrefix)}
-          className="rounded-md border border-white/10 bg-[#1c1f2a] px-2 py-1 text-[12px]"
+          className={ADD_KIND_SELECT_CLASSES}
         >
           {GEO_PREFIXES.map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
@@ -744,10 +824,9 @@ function GeoBody({ value, onChange }: { value: string[]; onChange: (next: string
           value={addValue}
           onChange={(e) => setAddValue(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
-          placeholder="e.g. cn, google, ru"
-          className="flex-1 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
+          placeholder="cn, google, ru — press Enter to add"
+          className={ADD_INPUT_CLASSES}
         />
-        <AddChipButton onClick={commit} disabled={!addValue.trim()} label="Add geo" />
       </div>
     </div>
   );
@@ -788,7 +867,7 @@ function PortsBody({ value, onChange }: { value: PortSpec[]; onChange: (next: Po
   const canAdd = mode === "single" ? single !== "" : (from !== "" && to !== "");
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2.5">
       {value.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           <AnimatePresence initial={false}>
@@ -805,15 +884,27 @@ function PortsBody({ value, onChange }: { value: PortSpec[]; onChange: (next: Po
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[11px] uppercase tracking-wider text-white/45">Add</span>
-        <Segmented
-          value={mode}
-          onChange={(v) => setMode(v as "single" | "range")}
-          options={[
-            { value: "single", label: "Single" },
-            { value: "range", label: "Range" },
-          ] as const}
-        />
+        {/* Small inline mode switch — single | range — matches the rest of the visual language. */}
+        <div className="flex gap-0.5 rounded-full bg-black/30 p-0.5">
+          {(["single", "range"] as const).map((m) => {
+            const selected = mode === m;
+            return (
+              <button
+                key={m}
+                type="button"
+                role="button"
+                aria-pressed={selected}
+                onClick={() => setMode(m)}
+                className={
+                  "rounded-full px-2.5 py-1 text-[11.5px] font-medium capitalize transition-colors duration-150 " +
+                  (selected ? "bg-white/[0.10] text-white/95" : "text-white/55 hover:text-white/80")
+                }
+              >
+                {m}
+              </button>
+            );
+          })}
+        </div>
         {mode === "single" ? (
           <input
             aria-label="Port number"
@@ -821,7 +912,8 @@ function PortsBody({ value, onChange }: { value: PortSpec[]; onChange: (next: Po
             value={single}
             onChange={(e) => setSingle(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
-            className="w-24 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
+            placeholder="443"
+            className="w-28 rounded-md border border-white/[0.08] bg-white/[0.02] px-2.5 py-1.5 text-[12.5px] tabular-nums text-white/90 outline-none transition-colors duration-200 placeholder:text-white/30 focus:border-sky-400/45 focus:bg-white/[0.04]"
           />
         ) : (
           <>
@@ -831,16 +923,18 @@ function PortsBody({ value, onChange }: { value: PortSpec[]; onChange: (next: Po
               value={from}
               onChange={(e) => setFrom(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
-              className="w-20 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
+              placeholder="8000"
+              className="w-24 rounded-md border border-white/[0.08] bg-white/[0.02] px-2.5 py-1.5 text-[12.5px] tabular-nums text-white/90 outline-none transition-colors duration-200 placeholder:text-white/30 focus:border-sky-400/45 focus:bg-white/[0.04]"
             />
-            <span className="text-white/45">→</span>
+            <span className="text-white/40">→</span>
             <input
               aria-label="Port to"
               type="number"
               value={to}
               onChange={(e) => setTo(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
-              className="w-20 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
+              placeholder="9000"
+              className="w-24 rounded-md border border-white/[0.08] bg-white/[0.02] px-2.5 py-1.5 text-[12.5px] tabular-nums text-white/90 outline-none transition-colors duration-200 placeholder:text-white/30 focus:border-sky-400/45 focus:bg-white/[0.04]"
             />
           </>
         )}
@@ -861,7 +955,7 @@ function ProcessesBody({ value, onChange }: { value: string[]; onChange: (next: 
     setAddValue("");
   }
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2.5">
       {value.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           <AnimatePresence initial={false}>
@@ -877,18 +971,14 @@ function ProcessesBody({ value, onChange }: { value: string[]; onChange: (next: 
           </AnimatePresence>
         </div>
       )}
-      <div className="flex items-center gap-2">
-        <span className="text-[11px] uppercase tracking-wider text-white/45">Add</span>
-        <input
-          aria-label="Process name"
-          value={addValue}
-          onChange={(e) => setAddValue(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
-          placeholder="e.g. chrome.exe"
-          className="flex-1 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
-        />
-        <AddChipButton onClick={commit} disabled={!addValue.trim()} label="Add process" />
-      </div>
+      <input
+        aria-label="Process name"
+        value={addValue}
+        onChange={(e) => setAddValue(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
+        placeholder="chrome.exe — press Enter to add"
+        className={ADD_INPUT_CLASSES}
+      />
     </div>
   );
 }
@@ -907,27 +997,30 @@ function ProtocolsBody({ value, onChange }: { value: string[]; onChange: (next: 
       {PROTOCOL_VALUES.map((p) => {
         const on = value.includes(p);
         return (
-          <button
+          <motion.button
             key={p}
             type="button"
             onClick={() => toggle(p)}
             aria-label={`Protocol ${p}`}
             aria-pressed={on}
+            whileTap={{ scale: 0.94 }}
+            transition={{ duration: 0.16, ease: SNAP_EASE }}
             className={
               on
-                ? "inline-flex items-center gap-1 rounded-full border border-sky-400/40 bg-sky-500/15 px-3 py-1 text-[12px] text-sky-100"
-                : "inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[12px] text-white/55 hover:bg-white/[0.08]"
+                ? "inline-flex items-center gap-1 rounded-full border border-sky-400/45 bg-sky-500/20 px-3.5 py-1 text-[12px] font-medium uppercase tracking-wider text-sky-100 shadow-[0_2px_10px_-2px_rgba(56,189,248,0.35)]"
+                : "inline-flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.03] px-3.5 py-1 text-[12px] font-medium uppercase tracking-wider text-white/55 transition-colors duration-200 hover:border-white/[0.16] hover:bg-white/[0.06] hover:text-white/85"
             }
           >
             {p}
-          </button>
+          </motion.button>
         );
       })}
     </div>
   );
 }
 
-// ----- AddChipButton -----
+// ----- AddChipButton — for the one body (Ports) where Enter-to-add is awkward
+// due to the dual-input range mode. Kept only there for consistency.
 
 function AddChipButton({ onClick, disabled, label }: { onClick: () => void; disabled?: boolean; label: string }) {
   return (
@@ -941,8 +1034,8 @@ function AddChipButton({ onClick, disabled, label }: { onClick: () => void; disa
       transition={{ duration: 0.18, ease: SNAP_EASE }}
       className={
         disabled
-          ? "rounded-md bg-white/[0.04] px-2.5 py-1 text-[12.5px] text-white/30 cursor-not-allowed"
-          : "rounded-md bg-sky-500/20 px-2.5 py-1 text-[12.5px] text-sky-200 hover:bg-sky-500/30"
+          ? "rounded-md bg-white/[0.04] px-2.5 py-1.5 text-[12.5px] text-white/30 cursor-not-allowed"
+          : "rounded-md bg-sky-500/25 px-2.5 py-1.5 text-[12.5px] font-medium text-sky-100 transition-colors duration-200 hover:bg-sky-500/40"
       }
     >
       +
