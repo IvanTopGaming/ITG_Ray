@@ -93,4 +93,19 @@ describe("RuleEditor", () => {
       conditions: expect.objectContaining({ ip_cidrs: ["10.0.0.0/8"] }),
     }));
   });
+
+  it("saves geo conditions with prefix and value", async () => {
+    const userWithRule = { ...user, rules: [{ id: "r1", name: "T", enabled: true, action: "proxy", conditions: { geo: [] } }] };
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, userWithRule], loading: false, lastError: null, bootstrapped: true });
+    rulesEditRuleMock.mockResolvedValue(undefined);
+    renderEditor("r1");
+    await userEvent.click(screen.getByRole("button", { name: /geo/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add geo/i }));
+    await userEvent.selectOptions(screen.getByLabelText(/geo prefix/i), "geoip");
+    await userEvent.type(screen.getByLabelText(/geo value/i), "ru");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    expect(rulesEditRuleMock).toHaveBeenCalledWith(expect.objectContaining({
+      conditions: expect.objectContaining({ geo: ["geoip:ru"] }),
+    }));
+  });
 });

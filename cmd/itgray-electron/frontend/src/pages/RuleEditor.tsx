@@ -111,6 +111,16 @@ export function RuleEditor() {
           onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, ip_cidrs: next } })}
         />
       </Section>
+      <Section
+        title="Geo"
+        count={draft.conditions.geo?.length ?? 0}
+        defaultOpen={(draft.conditions.geo?.length ?? 0) > 0}
+      >
+        <GeoSection
+          value={draft.conditions.geo ?? []}
+          onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, geo: next } })}
+        />
+      </Section>
     </div>
   );
 }
@@ -201,6 +211,56 @@ function CidrsSection({ value, onChange }: { value: string[]; onChange: (next: s
         className="self-start rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08]"
       >
         + Add CIDR
+      </button>
+    </>
+  );
+}
+
+function GeoSection({ value, onChange }: { value: string[]; onChange: (next: string[]) => void }) {
+  function split(entry: string): { prefix: string; rest: string } {
+    const idx = entry.indexOf(":");
+    if (idx < 0) return { prefix: "geosite", rest: entry };
+    return { prefix: entry.slice(0, idx), rest: entry.slice(idx + 1) };
+  }
+  return (
+    <>
+      {value.map((entry, i) => {
+        const { prefix, rest } = split(entry);
+        return (
+          <div key={i} className="flex items-center gap-2">
+            <select
+              aria-label={`Geo prefix ${i + 1}`}
+              value={prefix}
+              onChange={(e) => onChange(value.map((x, j) => j === i ? `${e.target.value}:${split(x).rest}` : x))}
+              className="rounded-md border border-white/10 bg-[#1c1f2a] px-2 py-1 text-[12px]"
+            >
+              <option value="geosite">geosite</option>
+              <option value="geoip">geoip</option>
+            </select>
+            <input
+              aria-label={`Geo value ${i + 1}`}
+              value={rest}
+              onChange={(e) => onChange(value.map((x, j) => j === i ? `${split(x).prefix}:${e.target.value}` : x))}
+              placeholder="e.g. cn, google, ru"
+              className="flex-1 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
+            />
+            <button
+              type="button"
+              onClick={() => onChange(value.filter((_, j) => j !== i))}
+              aria-label={`Remove geo ${i + 1}`}
+              className="text-white/45 hover:text-rose-300"
+            >
+              ✕
+            </button>
+          </div>
+        );
+      })}
+      <button
+        type="button"
+        onClick={() => onChange([...value, "geosite:"])}
+        className="self-start rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08]"
+      >
+        + Add geo
       </button>
     </>
   );
