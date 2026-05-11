@@ -131,6 +131,16 @@ export function RuleEditor() {
           onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, ports: next } })}
         />
       </Section>
+      <Section
+        title="Processes"
+        count={draft.conditions.processes?.length ?? 0}
+        defaultOpen={(draft.conditions.processes?.length ?? 0) > 0}
+      >
+        <ProcessesSection
+          value={draft.conditions.processes ?? []}
+          onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, processes: next } })}
+        />
+      </Section>
     </div>
   );
 }
@@ -341,6 +351,40 @@ function PortsSection({ value, onChange }: { value: PortSpec[]; onChange: (next:
         className="self-start rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08]"
       >
         + Add port
+      </button>
+    </>
+  );
+}
+
+function ProcessesSection({ value, onChange }: { value: string[]; onChange: (next: string[]) => void }) {
+  return (
+    <>
+      {value.map((name, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <input
+            aria-label={`Process name ${i + 1}`}
+            value={name}
+            onChange={(e) => onChange(value.map((x, j) => j === i ? e.target.value : x))}
+            onBlur={() => onChange(value.map((x, j) => j === i ? x.trim() : x))}
+            placeholder="e.g. chrome.exe"
+            className="flex-1 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
+          />
+          <button
+            type="button"
+            onClick={() => onChange(value.filter((_, j) => j !== i))}
+            aria-label={`Remove process ${i + 1}`}
+            className="text-white/45 hover:text-rose-300"
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange([...value, ""])}
+        className="self-start rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08]"
+      >
+        + Add process
       </button>
     </>
   );

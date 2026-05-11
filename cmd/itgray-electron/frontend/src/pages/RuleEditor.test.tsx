@@ -122,4 +122,20 @@ describe("RuleEditor", () => {
       conditions: expect.objectContaining({ ports: [{ single: 443 }] }),
     }));
   });
+
+  it("saves process conditions, trimmed on blur", async () => {
+    const userWithRule = { ...user, rules: [{ id: "r1", name: "T", enabled: true, action: "proxy", conditions: { processes: [] } }] };
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, userWithRule], loading: false, lastError: null, bootstrapped: true });
+    rulesEditRuleMock.mockResolvedValue(undefined);
+    renderEditor("r1");
+    await userEvent.click(screen.getByRole("button", { name: /processes/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add process/i }));
+    const input = screen.getByLabelText(/process name/i);
+    await userEvent.type(input, "  chrome.exe  ");
+    await userEvent.tab(); // blur
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    expect(rulesEditRuleMock).toHaveBeenCalledWith(expect.objectContaining({
+      conditions: expect.objectContaining({ processes: ["chrome.exe"] }),
+    }));
+  });
 });
