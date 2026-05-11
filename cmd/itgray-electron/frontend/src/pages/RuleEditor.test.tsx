@@ -180,7 +180,7 @@ describe("RuleEditor", () => {
     await userEvent.click(screen.getByRole("button", { name: /ip cidrs/i }));
     await userEvent.click(screen.getByRole("button", { name: /add cidr/i }));
     await userEvent.type(screen.getByLabelText(/cidr value/i), "10.0.0.0/8");
-    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /create rule/i }));
     expect(rulesAddRuleMock).toHaveBeenCalledWith("user", expect.objectContaining({
       name: expect.any(String),
       enabled: true,

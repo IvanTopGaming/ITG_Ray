@@ -141,13 +141,23 @@ export function RuleEditor() {
         </motion.button>
         <motion.button
           onClick={handleSave}
+          whileHover={{ scale: 1.03 }}
           whileTap={{ scale: 0.96 }}
           transition={{ duration: 0.18, ease: SNAP_EASE }}
-          className="rounded-md bg-sky-500/30 px-3 py-1.5 text-[12.5px] font-medium text-sky-100 hover:bg-sky-500/40"
+          className="rounded-md bg-sky-500/60 px-5 py-2 text-[13px] font-semibold text-white shadow-[0_6px_18px_-8px_rgba(56,189,248,0.65)] hover:bg-sky-400/70"
         >
-          Save
+          {isCreate ? "Create rule" : "Save"}
         </motion.button>
       </motion.header>
+      {saveError && (
+        <motion.div
+          variants={sectionVariants}
+          role="alert"
+          className="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-[12px] text-rose-200"
+        >
+          {saveError}
+        </motion.div>
+      )}
       <motion.div variants={sectionVariants} className="glass-regular flex flex-col gap-3 rounded-2xl p-4">
         <label className="flex flex-col gap-1">
           <span className="text-[11.5px] uppercase tracking-wider text-white/55">Name</span>
@@ -155,24 +165,26 @@ export function RuleEditor() {
             aria-label="Name"
             value={draft.name}
             onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-            className="rounded-md border border-white/10 bg-transparent px-3 py-1.5 text-[13px] outline-none focus:border-sky-400/40"
+            className="rounded-md border border-white/15 bg-transparent px-3 py-1.5 text-[13px] outline-none focus:border-sky-400/40"
           />
         </label>
-        <div className="flex items-center justify-between">
-          <span className="text-[11.5px] uppercase tracking-wider text-white/55">Enabled</span>
-          <Toggle value={draft.enabled} aria-label="Enabled" onChange={(v) => setDraft({ ...draft, enabled: v })} />
-        </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-[11.5px] uppercase tracking-wider text-white/55">Action</span>
-          <Segmented
-            value={draft.action}
-            onChange={(v) => setDraft({ ...draft, action: v as RuleView["action"] })}
-            options={[
-              { value: "proxy", label: "Proxy" },
-              { value: "direct", label: "Direct" },
-              { value: "block", label: "Block" },
-            ] as const}
-          />
+        <div className={`flex flex-wrap items-end gap-3 rounded-lg p-2 transition-colors duration-200 ${actionTint(draft.action)}`}>
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="text-[11.5px] uppercase tracking-wider text-white/55">Action</span>
+            <Segmented
+              value={draft.action}
+              onChange={(v) => setDraft({ ...draft, action: v as RuleView["action"] })}
+              options={[
+                { value: "proxy", label: "Proxy" },
+                { value: "direct", label: "Direct" },
+                { value: "block", label: "Block" },
+              ] as const}
+            />
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <span className="text-[11.5px] uppercase tracking-wider text-white/55">Enabled</span>
+            <Toggle value={draft.enabled} aria-label="Enabled" onChange={(v) => setDraft({ ...draft, enabled: v })} />
+          </div>
         </div>
         {!isCreate && (
           <label className="flex flex-col gap-1">
@@ -181,14 +193,14 @@ export function RuleEditor() {
               aria-label="Group"
               value={groupId}
               onChange={(e) => setGroupId(e.target.value)}
-              className="rounded-md border border-white/10 bg-[#1c1f2a] px-3 py-1.5 text-[13px] outline-none focus:border-sky-400/40"
+              className="rounded-md border border-white/15 bg-[#1c1f2a] px-3 py-1.5 text-[13px] outline-none focus:border-sky-400/40"
             >
               {userGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
           </label>
         )}
       </motion.div>
-      <motion.div variants={sectionVariants} layout className="grid grid-cols-2 gap-3">
+      <motion.div variants={sectionVariants} layout className="grid grid-cols-2 items-start gap-3">
         <Section
           title="Domains"
           count={draft.conditions.domains?.length ?? 0}
@@ -250,15 +262,6 @@ export function RuleEditor() {
           />
         </Section>
       </motion.div>
-      {saveError && (
-        <motion.div
-          variants={sectionVariants}
-          role="alert"
-          className="rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[12px] text-rose-200"
-        >
-          {saveError}
-        </motion.div>
-      )}
       <ConfirmDialog
         open={confirmDiscard}
         title="Discard changes?"
@@ -275,7 +278,12 @@ export function RuleEditor() {
 function Section({ title, count, defaultOpen, children }: { title: string; count: number; defaultOpen: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <motion.section layout variants={sectionVariants} transition={{ layout: { duration: 0.22, ease: SNAP_EASE } }} className="glass-regular flex flex-col gap-2 rounded-2xl p-4">
+    <motion.section
+      layout
+      variants={sectionVariants}
+      transition={{ layout: { duration: 0.22, ease: SNAP_EASE } }}
+      className={`glass-regular flex flex-col rounded-2xl ${open ? "gap-2 p-4" : "py-2.5 px-4"}`}
+    >
       <button type="button" onClick={() => setOpen(!open)} className="flex items-center justify-between text-left">
         <span className="text-[13px] font-medium text-white/90">
           <motion.span
@@ -293,6 +301,19 @@ function Section({ title, count, defaultOpen, children }: { title: string; count
       </Reveal>
     </motion.section>
   );
+}
+
+function actionTint(action: RuleView["action"]): string {
+  switch (action) {
+    case "proxy":
+      return "bg-sky-500/10 ring-1 ring-inset ring-sky-400/20";
+    case "direct":
+      return "bg-amber-500/10 ring-1 ring-inset ring-amber-400/20";
+    case "block":
+      return "bg-rose-500/10 ring-1 ring-inset ring-rose-400/20";
+    default:
+      return "";
+  }
 }
 
 function DomainsSection({ value, onChange }: { value: DomainMatcher[]; onChange: (next: DomainMatcher[]) => void }) {
