@@ -10,6 +10,8 @@ import {
   rulesEditGroup,
   rulesRemoveGroup,
   rulesAddRule,
+  rulesMoveRule,
+  rulesRemoveRule,
   rulesReplaceAll,
   type GroupView,
   type RuleView,
@@ -87,7 +89,7 @@ export function Routing() {
         </div>
       )}
       {adding && <AddGroupRow onCancel={() => setAdding(false)} />}
-      {safetyGroup && <GroupCard group={safetyGroup} onRuleDragEnd={() => {}} />}
+      {safetyGroup && <GroupCard group={safetyGroup} onRuleDragEnd={() => {}} allGroups={groups} />}
       <DndContext collisionDetection={closestCenter} onDragEnd={onGroupDragEnd}>
         <SortableContext items={userGroups.map((g) => g.id)} strategy={verticalListSortingStrategy}>
           {userGroups.map((g) => (
@@ -95,6 +97,7 @@ export function Routing() {
               key={g.id}
               group={g}
               onRuleDragEnd={handleRuleDragEnd(g.id)}
+              allGroups={groups}
             />
           ))}
         </SortableContext>
@@ -150,7 +153,7 @@ type DragHandleProps = {
   listeners: Record<string, (event: SyntheticEvent) => void> | undefined;
 };
 
-function GroupCard({ group, onRuleDragEnd, dragHandle }: { group: GroupView; onRuleDragEnd: (e: DragEndEvent) => void; dragHandle?: DragHandleProps }) {
+function GroupCard({ group, onRuleDragEnd, dragHandle, allGroups }: { group: GroupView; onRuleDragEnd: (e: DragEndEvent) => void; dragHandle?: DragHandleProps; allGroups: GroupView[] }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -256,7 +259,7 @@ function GroupCard({ group, onRuleDragEnd, dragHandle }: { group: GroupView; onR
           <DndContext collisionDetection={closestCenter} onDragEnd={onRuleDragEnd}>
             <SortableContext items={group.rules.map((r) => r.id)} strategy={verticalListSortingStrategy}>
               <ul className="flex flex-col gap-1">
-                {group.rules.map((r) => <SortableRuleRow key={r.id} rule={r} />)}
+                {group.rules.map((r) => <SortableRuleRow key={r.id} rule={r} group={group} allGroups={allGroups} />)}
               </ul>
             </SortableContext>
           </DndContext>
@@ -317,7 +320,7 @@ function InlineRename({ initial, onCancel, onCommit }: { initial: string; onCanc
   );
 }
 
-function SortableGroupCard({ group, onRuleDragEnd }: { group: GroupView; onRuleDragEnd: (e: DragEndEvent) => void }) {
+function SortableGroupCard({ group, onRuleDragEnd, allGroups }: { group: GroupView; onRuleDragEnd: (e: DragEndEvent) => void; allGroups: GroupView[] }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: group.id });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -326,12 +329,12 @@ function SortableGroupCard({ group, onRuleDragEnd }: { group: GroupView; onRuleD
   };
   return (
     <div ref={setNodeRef} style={style}>
-      <GroupCard group={group} onRuleDragEnd={onRuleDragEnd} dragHandle={{ attributes: attributes as HTMLAttributes<HTMLElement>, listeners: listeners as Record<string, (event: SyntheticEvent) => void> | undefined }} />
+      <GroupCard group={group} onRuleDragEnd={onRuleDragEnd} allGroups={allGroups} dragHandle={{ attributes: attributes as HTMLAttributes<HTMLElement>, listeners: listeners as Record<string, (event: SyntheticEvent) => void> | undefined }} />
     </div>
   );
 }
 
-function SortableRuleRow({ rule }: { rule: RuleView }) {
+function SortableRuleRow({ rule, group, allGroups }: { rule: RuleView; group: GroupView; allGroups: GroupView[] }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: rule.id });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -350,17 +353,32 @@ function SortableRuleRow({ rule }: { rule: RuleView }) {
         <GripVertical className="h-3.5 w-3.5" />
       </button>
       <div className="flex-1">
-        <RuleRow rule={rule} groupLocked={false} />
+        <RuleRow rule={rule} groupLocked={false} group={group} allGroups={allGroups} />
       </div>
     </li>
   );
 }
 
-function RuleRow({ rule, groupLocked }: { rule: RuleView; groupLocked: boolean }) {
+function RuleRow({
+  rule,
+  groupLocked,
+  group,
+  allGroups,
+}: {
+  rule: RuleView;
+  groupLocked: boolean;
+  group?: GroupView;
+  allGroups?: GroupView[];
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const actionStyle =
     rule.action === "proxy" ? "bg-sky-500/20 text-sky-200"
     : rule.action === "direct" ? "bg-amber-500/20 text-amber-200"
     : "bg-rose-500/20 text-rose-200";
+  const targetGroups =
+    !groupLocked && group && allGroups
+      ? allGroups.filter((g) => !g.locked && g.id !== group.id)
+      : [];
   return (
     <div
       className={cn(
@@ -375,7 +393,44 @@ function RuleRow({ rule, groupLocked }: { rule: RuleView; groupLocked: boolean }
         <span className="text-white/85">{rule.name}</span>
         <span className="text-[11px] text-white/45">{summarise(rule.conditions)}</span>
       </div>
-      {!groupLocked && <ChevronRight className="h-3.5 w-3.5 text-white/40 transition-transform group-hover:translate-x-0.5" />}
+      {!groupLocked && (
+        <div className="flex items-center gap-1">
+          <div className="relative" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              aria-label={`${rule.name} menu`}
+              onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
+              className="rounded-md p-1 text-white/55 hover:bg-white/[0.08] hover:text-white/90"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+            {menuOpen && (
+              <div role="menu" className="absolute right-0 z-10 mt-1 w-44 rounded-md border border-white/10 bg-[#1c1f2a] py-1 text-[12.5px] shadow-lg">
+                {targetGroups.map((g) => (
+                  <button
+                    key={g.id}
+                    role="menuitem"
+                    type="button"
+                    className="block w-full px-3 py-1.5 text-left hover:bg-white/[0.06]"
+                    onClick={() => { setMenuOpen(false); void rulesMoveRule(rule.id, g.id); }}
+                  >
+                    Move to {g.name}
+                  </button>
+                ))}
+                <button
+                  role="menuitem"
+                  type="button"
+                  className="block w-full px-3 py-1.5 text-left text-rose-300 hover:bg-rose-500/10"
+                  onClick={() => { setMenuOpen(false); void rulesRemoveRule(rule.id); }}
+                >
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
+          <ChevronRight className="h-3.5 w-3.5 text-white/40 transition-transform group-hover:translate-x-0.5" />
+        </div>
+      )}
     </div>
   );
 }

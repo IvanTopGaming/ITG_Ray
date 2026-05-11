@@ -8,6 +8,8 @@ const rulesAddGroupMock = vi.fn();
 const rulesEditGroupMock = vi.fn();
 const rulesRemoveGroupMock = vi.fn();
 const rulesAddRuleMock = vi.fn();
+const rulesMoveRuleMock = vi.fn();
+const rulesRemoveRuleMock = vi.fn();
 vi.mock("@/lib/rulesStore", async () => {
   const actual = await vi.importActual<any>("@/lib/rulesStore");
   return {
@@ -17,6 +19,8 @@ vi.mock("@/lib/rulesStore", async () => {
     rulesEditGroup: (...a: any[]) => rulesEditGroupMock(...a),
     rulesRemoveGroup: (...a: any[]) => rulesRemoveGroupMock(...a),
     rulesAddRule: (...a: any[]) => rulesAddRuleMock(...a),
+    rulesMoveRule: (...a: any[]) => rulesMoveRuleMock(...a),
+    rulesRemoveRule: (...a: any[]) => rulesRemoveRuleMock(...a),
   };
 });
 
@@ -137,6 +141,55 @@ describe("Routing page — add rule", () => {
     });
     renderRouting();
     expect(screen.queryByRole("button", { name: /add rule/i })).not.toBeInTheDocument();
+  });
+});
+
+describe("Routing page — per-rule menu", () => {
+  beforeEach(() => {
+    rulesMoveRuleMock.mockReset();
+    rulesRemoveRuleMock.mockReset();
+  });
+
+  it("Move to <group> calls rulesMoveRule", async () => {
+    const ruleA = { id: "r1", name: "Block ads", enabled: true, action: "block", conditions: { ip_cidrs: ["1.2.3.4/32"] } };
+    useRulesMock.mockReturnValue({
+      defaultAction: "proxy",
+      groups: [
+        safety,
+        { ...user, id: "g1", name: "Group A", rules: [ruleA] },
+        { id: "g2", name: "Group B", locked: false, enabled: true, rules: [] },
+      ],
+      loading: false, lastError: null, bootstrapped: true,
+    });
+    rulesMoveRuleMock.mockResolvedValue(undefined);
+    renderRouting();
+    await userEvent.click(screen.getByLabelText(/Block ads menu/i));
+    await userEvent.click(screen.getByRole("menuitem", { name: /move to group b/i }));
+    expect(rulesMoveRuleMock).toHaveBeenCalledWith("r1", "g2");
+  });
+
+  it("Delete calls rulesRemoveRule", async () => {
+    const ruleA = { id: "r1", name: "Block ads", enabled: true, action: "block", conditions: { ip_cidrs: ["1.2.3.4/32"] } };
+    useRulesMock.mockReturnValue({
+      defaultAction: "proxy",
+      groups: [safety, { ...user, id: "g1", name: "Group A", rules: [ruleA] }],
+      loading: false, lastError: null, bootstrapped: true,
+    });
+    rulesRemoveRuleMock.mockResolvedValue(undefined);
+    renderRouting();
+    await userEvent.click(screen.getByLabelText(/Block ads menu/i));
+    await userEvent.click(screen.getByRole("menuitem", { name: /delete/i }));
+    expect(rulesRemoveRuleMock).toHaveBeenCalledWith("r1");
+  });
+
+  it("locked groups do not show per-rule menu", () => {
+    useRulesMock.mockReturnValue({
+      defaultAction: "proxy",
+      groups: [safety],
+      loading: false, lastError: null, bootstrapped: true,
+    });
+    renderRouting();
+    expect(screen.queryByLabelText(/Private IPs menu/i)).not.toBeInTheDocument();
   });
 });
 
