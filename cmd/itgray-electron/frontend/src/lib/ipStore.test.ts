@@ -85,4 +85,23 @@ describe("ipStore", () => {
       vi.useRealTimers();
     }
   });
+
+  // GetPublicIP can resolve after the user has already disconnected — e.g.
+  // the request was issued while connected, the chain came down, ipReset
+  // ran, and only then the public-IP endpoint responded. The post-await
+  // generation check must drop that value rather than overwrite the
+  // freshly-reset state.
+  it("a stale-gen GetPublicIP resolve does not overwrite post-ipReset state", async () => {
+    let resolveIp: (v: string) => void = () => {};
+    getPublicIPMock.mockReturnValueOnce(
+      new Promise<string>((r) => {
+        resolveIp = r;
+      }),
+    );
+    const p = ipRefresh();
+    ipReset();
+    resolveIp("203.0.113.99");
+    await p;
+    expect(getIpState()).toEqual({ value: null, loading: false, error: null });
+  });
 });
