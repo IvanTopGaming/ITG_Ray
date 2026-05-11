@@ -463,6 +463,67 @@ func TestBuildSingbox_AllowLAN_TUN_NoDuplicateWithKillswitch(t *testing.T) {
 	require.Equal(t, 1, count, "expected exactly one LAN-bypass rule (TUN+killswitch+AllowLAN)")
 }
 
+// Production loads the default safety group when rules.json is absent (see
+// cmd/itgray-bridge/configbuilder.go loadRulesFromDataDir). That model
+// compiles to an {ip_cidr:[RFC1918+...], outbound:"direct"} rule. With TUN
+// mode + AllowLAN=false the killswitch path previously emitted its own
+// identical lanBypassRule(), producing two equivalent rules. Sing-box
+// evaluates the duplicate as a no-op but the config is noisy. The
+// killswitch must scan existing rules and skip the emit when an equivalent
+// rule is already present.
+func TestBuildSingbox_TUN_KillswitchDoesNotDuplicateSafetyGroupLanBypass(t *testing.T) {
+	in := SingboxInput{
+		Mode:          ModeTun,
+		FakeIP:        true,
+		TunName:       "ITGRay-TUN",
+		TunIPv4:       "198.18.0.1/15",
+		XraySOCKSHost: "127.0.0.1",
+		XraySOCKSPort: 1081,
+		AllowLAN:      false,
+		Rules: rules.Model{
+			DefaultAction: rules.ActionProxy,
+			Groups: []rules.Group{
+				{ID: "safety", Name: "Safety", Locked: true, Enabled: true, Rules: []rules.Rule{
+					{ID: "private", Name: "Private IPs", Enabled: true, Action: rules.ActionDirect,
+						Conditions: rules.Conditions{IPCIDRs: []string{
+							"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8",
+							"fc00::/7", "fe80::/10", "224.0.0.0/4",
+						}}},
+				}},
+				{ID: "user", Name: "My Rules", Enabled: true},
+			},
+		},
+	}
+	out, err := BuildSingbox(&in)
+	require.NoError(t, err)
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(out, &doc))
+	route := doc["route"].(map[string]any)
+	rs := route["rules"].([]any)
+	count := 0
+	for _, r := range rs {
+		m, ok := r.(map[string]any)
+		if !ok {
+			continue
+		}
+		if m["outbound"] != "direct" {
+			continue
+		}
+		cidrs, ok := m["ip_cidr"].([]any)
+		if !ok {
+			continue
+		}
+		for _, c := range cidrs {
+			if c == "10.0.0.0/8" {
+				count++
+				break
+			}
+		}
+	}
+	require.Equal(t, 1, count,
+		"safety-group already emits {ip_cidr:[RFC1918+...], outbound:direct} — killswitch must not emit a duplicate")
+}
+
 func TestBuildSingbox_IPv6Strategy_PreferV6(t *testing.T) {
 	in := SingboxInput{
 		Mode:             ModeSysProxy,

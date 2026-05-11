@@ -145,6 +145,55 @@ func prependLanBypass(rules []map[string]any) []map[string]any {
 	return out
 }
 
+// hasEquivalentLanBypass reports whether the rules slice already contains a
+// rule whose ip_cidr is a superset of lanBypassCIDRs with outbound:"direct".
+// The safety-group default model loaded by cmd/itgray-bridge/configbuilder.go
+// compiles to exactly such a rule; without this check applyTunModeKillswitch
+// would emit a second identical one.
+func hasEquivalentLanBypass(routeRules any) bool {
+	check := func(m map[string]any) bool {
+		if m["outbound"] != "direct" {
+			return false
+		}
+		present := map[string]bool{}
+		switch xs := m["ip_cidr"].(type) {
+		case []any:
+			for _, c := range xs {
+				if s, ok := c.(string); ok {
+					present[s] = true
+				}
+			}
+		case []string:
+			for _, s := range xs {
+				present[s] = true
+			}
+		default:
+			return false
+		}
+		for _, want := range lanBypassCIDRs {
+			if !present[want] {
+				return false
+			}
+		}
+		return true
+	}
+	switch s := routeRules.(type) {
+	case []map[string]any:
+		for _, m := range s {
+			if check(m) {
+				return true
+			}
+		}
+	case []any:
+		for _, r := range s {
+			if m, ok := r.(map[string]any); ok && check(m) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // applyTunModeKillswitch hardens the route block for TUN mode: it sets
 // the route's "final" outbound to "block" (killswitch — unmatched traffic
 // is dropped rather than leaked to the proxy) and prepends an
@@ -157,6 +206,9 @@ func prependLanBypass(rules []map[string]any) []map[string]any {
 // nomenclature so library validation accepts the document.
 func applyTunModeKillswitch(route map[string]any, lanBypassPrepended bool) {
 	route["final"] = "block"
+	if !lanBypassPrepended && hasEquivalentLanBypass(route["rules"]) {
+		lanBypassPrepended = true
+	}
 	// hijackDnsRule feeds DNS traffic (detected via sniff in the rule
 	// preceding it) into sing-box's DNS engine so that FakeIP and other
 	// DNS rules can take effect. Without this, TUN inbound treats UDP/53
