@@ -1,8 +1,8 @@
 import { useState, useMemo, useRef } from "react";
 import type React from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
-import { useRules, rulesEditRule, rulesMoveRule, type RuleView, type GroupView, type DomainMatcher, type PortSpec } from "@/lib/rulesStore";
+import { useRules, rulesEditRule, rulesMoveRule, rulesRemoveRule, type RuleView, type GroupView, type DomainMatcher, type PortSpec } from "@/lib/rulesStore";
 import { Segmented } from "@/components/controls/Segmented";
 import { Toggle } from "@/components/controls/Toggle";
 import { ConfirmDialog } from "@/components/controls/ConfirmDialog";
@@ -17,6 +17,9 @@ export function RuleEditor() {
   const [groupId, setGroupId] = useState<string>(initial.groupId);
   const initialSnapshot = useRef(JSON.stringify({ rule: initial.rule, groupId: initial.groupId }));
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const location = useLocation();
+  const freshFromAdd = (location.state as { freshFromAdd?: boolean } | null)?.freshFromAdd === true;
+  const savedRef = useRef(false);
 
   if (!draft) {
     return (
@@ -35,13 +38,24 @@ export function RuleEditor() {
       await rulesMoveRule(draft.id, groupId);
     }
     await rulesEditRule(draft);
+    // After a successful Save the rule is no longer a fresh stub —
+    // future back-clicks should behave like ordinary edits.
+    savedRef.current = true;
     navigate("/routing");
   }
 
   const currentSerialized = JSON.stringify({ rule: draft, groupId });
   const dirty = initialSnapshot.current !== currentSerialized;
 
-  function handleBack() {
+  async function handleBack() {
+    if (freshFromAdd && !savedRef.current) {
+      // User clicked + Add rule, then backed out without saving.
+      // Delete the stub so the routing list doesn't accumulate junk
+      // placeholder rules.
+      try { await rulesRemoveRule(draft!.id); } catch { /* best-effort */ }
+      navigate("/routing");
+      return;
+    }
     if (dirty) setConfirmDiscard(true);
     else navigate("/routing");
   }

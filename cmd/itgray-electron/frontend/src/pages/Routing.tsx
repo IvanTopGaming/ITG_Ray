@@ -181,7 +181,10 @@ function GroupCard({ group, onRuleDragEnd, dragHandle, allGroups }: { group: Gro
       action: "proxy",
       conditions: { ip_cidrs: ["0.0.0.0/0"] },
     });
-    navigate(`/routing/${id}`);
+    // freshFromAdd lets RuleEditor know this rule was just stubbed on
+    // the user's behalf — if they back out without saving, the editor
+    // deletes it so the routing list stays clean.
+    navigate(`/routing/${id}`, { state: { freshFromAdd: true } });
   }
 
   return (

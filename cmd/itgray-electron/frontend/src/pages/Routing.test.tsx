@@ -141,7 +141,7 @@ describe("Routing page — add rule", () => {
     expect(rulesAddRuleMock).toHaveBeenCalledWith("g1", expect.objectContaining({
       action: "proxy", enabled: true, name: expect.any(String),
     }));
-    expect(navigateMock).toHaveBeenCalledWith("/routing/r-new");
+    expect(navigateMock).toHaveBeenCalledWith("/routing/r-new", { state: { freshFromAdd: true } });
   });
 
   it("locked groups do not show + Add rule", () => {
