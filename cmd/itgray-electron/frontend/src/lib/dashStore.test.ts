@@ -67,6 +67,7 @@ beforeEach(() => {
   runDisconnectMock.mockReset();
   testLatencyMock.mockReset();
   testLatencyMock.mockResolvedValue(undefined);
+  localStorage.clear();
   __resetForTest();
 });
 
@@ -185,6 +186,56 @@ describe("dashStore — chain:error", () => {
     expect(st.status).toBe("connecting");
     expect(st.lastError?.kind).toBe("bringup_failed");
     expect(st.lastError?.message).toBe("tunnel up failed");
+  });
+});
+
+// The banner showing the most recent chain failure must survive a GUI
+// restart (user closes the window mid-failure to inspect the error
+// later, or relaunches expecting context for why their session ended).
+// dashStore writes lastError to localStorage; the in-memory store seeds
+// from localStorage on initialState() with a TTL gate to drop stale
+// entries from days-ago crashes.
+describe("dashStore — chain:error persistence", () => {
+  const KEY = "itg.dashStore.lastError";
+
+  it("persists lastError to localStorage on chain:error", async () => {
+    fireEvent("chain:error", { kind: "bringup_failed", message: "tunnel up failed" });
+    const raw = localStorage.getItem(KEY);
+    expect(raw).not.toBeNull();
+    const parsed = JSON.parse(raw!);
+    expect(parsed.kind).toBe("bringup_failed");
+    expect(parsed.message).toBe("tunnel up failed");
+    expect(typeof parsed.at).toBe("number");
+  });
+
+  it("rehydrates lastError from localStorage on initialState", () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ kind: "chain_crashed", message: "xray died", at: Date.now() }),
+    );
+    __resetForTest();
+    expect(getDashState().lastError).toMatchObject({
+      kind: "chain_crashed",
+      message: "xray died",
+    });
+  });
+
+  it("drops persisted error older than the 1h TTL", () => {
+    const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ kind: "x", message: "y", at: twoHoursAgo }),
+    );
+    __resetForTest();
+    expect(getDashState().lastError).toBeNull();
+    expect(localStorage.getItem(KEY)).toBeNull();
+  });
+
+  it("clearLastError removes the localStorage entry", async () => {
+    fireEvent("chain:error", { kind: "x", message: "y" });
+    expect(localStorage.getItem(KEY)).not.toBeNull();
+    (await import("./dashStore")).clearLastError();
+    expect(localStorage.getItem(KEY)).toBeNull();
   });
 });
 

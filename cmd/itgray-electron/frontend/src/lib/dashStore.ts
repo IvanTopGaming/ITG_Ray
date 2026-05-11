@@ -30,6 +30,37 @@ export type DashState = {
 
 const HISTORY_CAP = 60;
 const RECONNECT_TIMEOUT_MS = 5000;
+const LAST_ERROR_KEY = "itg.dashStore.lastError";
+// The banner should persist across a GUI relaunch (user closes mid-failure
+// and reopens later to inspect) but a chain.error from days ago is just
+// noise on a fresh boot. 1h captures the relaunch-immediately use case
+// without leaking stale state into the next session.
+const LAST_ERROR_TTL_MS = 60 * 60 * 1000;
+
+function loadPersistedError(): DashState["lastError"] {
+  try {
+    const raw = localStorage.getItem(LAST_ERROR_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as DashState["lastError"];
+    if (!parsed || typeof parsed.at !== "number") return null;
+    if (Date.now() - parsed.at > LAST_ERROR_TTL_MS) {
+      localStorage.removeItem(LAST_ERROR_KEY);
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function persistError(err: DashState["lastError"]): void {
+  try {
+    if (err) localStorage.setItem(LAST_ERROR_KEY, JSON.stringify(err));
+    else localStorage.removeItem(LAST_ERROR_KEY);
+  } catch {
+    // Storage quota / unavailable — non-fatal, keep in-memory state.
+  }
+}
 
 const initialState = (): DashState => ({
   status: "idle",
@@ -41,7 +72,7 @@ const initialState = (): DashState => ({
   history: [],
   totals: { down: 0, up: 0 },
   connectedAt: null,
-  lastError: null,
+  lastError: loadPersistedError(),
   bootstrapped: false,
   probeState: new Map(),
 });
@@ -50,7 +81,11 @@ let state: DashState = initialState();
 const listeners = new Set<() => void>();
 
 function notify() { for (const l of listeners) l(); }
-function setState(next: DashState) { state = next; notify(); }
+function setState(next: DashState) {
+  if (next.lastError !== state.lastError) persistError(next.lastError);
+  state = next;
+  notify();
+}
 function subscribe(cb: () => void) { listeners.add(cb); return () => { listeners.delete(cb); }; }
 
 let pendingIdleAck: { resolve: () => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> } | null = null;
