@@ -449,12 +449,17 @@ function ActionPicker({ value, onChange }: { value: ActionValue; onChange: (v: A
               transition={{ duration: 0.18, ease: SNAP_EASE }}
               className={
                 "relative flex-1 rounded-full px-3 py-1.5 text-[12.5px] font-medium transition-colors duration-200 " +
-                (selected
-                  ? a.on
-                  : "text-white/55 hover:bg-white/[0.04] hover:text-white/80")
+                (selected ? "text-white" : "text-white/55 hover:text-white/85")
               }
             >
-              {a.label}
+              {selected && (
+                <motion.span
+                  layoutId="action-pill"
+                  className={`absolute inset-0 rounded-full ${a.on}`}
+                  transition={{ type: "spring", stiffness: 500, damping: 32 }}
+                />
+              )}
+              <span className="relative">{a.label}</span>
             </motion.button>
           );
         })}
