@@ -1,11 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
 const useRulesMock = vi.fn();
+const rulesAddGroupMock = vi.fn();
+const rulesEditGroupMock = vi.fn();
+const rulesRemoveGroupMock = vi.fn();
 vi.mock("@/lib/rulesStore", async () => {
   const actual = await vi.importActual<any>("@/lib/rulesStore");
-  return { ...actual, useRules: () => useRulesMock() };
+  return {
+    ...actual,
+    useRules: () => useRulesMock(),
+    rulesAddGroup: (...a: any[]) => rulesAddGroupMock(...a),
+    rulesEditGroup: (...a: any[]) => rulesEditGroupMock(...a),
+    rulesRemoveGroup: (...a: any[]) => rulesRemoveGroupMock(...a),
+  };
 });
 
 import { Routing } from "./Routing";
@@ -47,5 +57,45 @@ describe("Routing page", () => {
     });
     renderRouting();
     expect(screen.getByText("Block ads")).toBeInTheDocument();
+  });
+});
+
+describe("Routing page — group actions", () => {
+  beforeEach(() => {
+    rulesAddGroupMock.mockReset();
+    rulesEditGroupMock.mockReset();
+    rulesRemoveGroupMock.mockReset();
+  });
+
+  it("Add group flow calls rulesAddGroup", async () => {
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user], loading: false, lastError: null, bootstrapped: true });
+    rulesAddGroupMock.mockResolvedValue(undefined);
+    renderRouting();
+    await userEvent.click(screen.getByRole("button", { name: /add group/i }));
+    const input = screen.getByPlaceholderText(/new group name/i);
+    await userEvent.type(input, "Streaming{Enter}");
+    expect(rulesAddGroupMock).toHaveBeenCalledWith("Streaming");
+  });
+
+  it("toggling a user group calls rulesEditGroup", async () => {
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user], loading: false, lastError: null, bootstrapped: true });
+    rulesEditGroupMock.mockResolvedValue(undefined);
+    renderRouting();
+    await userEvent.click(screen.getByLabelText(/Toggle My Rules/i));
+    expect(rulesEditGroupMock).toHaveBeenCalledWith("user", "My Rules", false);
+  });
+
+  it("delete group asks for confirmation", async () => {
+    useRulesMock.mockReturnValue({
+      defaultAction: "proxy",
+      groups: [safety, { ...user, id: "g1", name: "Streaming" }],
+      loading: false, lastError: null, bootstrapped: true,
+    });
+    rulesRemoveGroupMock.mockResolvedValue(undefined);
+    renderRouting();
+    await userEvent.click(screen.getByLabelText(/Streaming menu/i));
+    await userEvent.click(screen.getByRole("menuitem", { name: /delete/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+    expect(rulesRemoveGroupMock).toHaveBeenCalledWith("g1");
   });
 });
