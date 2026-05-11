@@ -123,6 +123,21 @@ describe("RuleEditor", () => {
     }));
   });
 
+  it("saves protocol conditions", async () => {
+    const userWithRule = { ...user, rules: [{ id: "r1", name: "T", enabled: true, action: "proxy", conditions: { protocols: [] } }] };
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, userWithRule], loading: false, lastError: null, bootstrapped: true });
+    rulesEditRuleMock.mockResolvedValue(undefined);
+    renderEditor("r1");
+    await userEvent.click(screen.getByRole("button", { name: /protocols/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add protocol/i }));
+    // Default added row is "tcp"; switch to "udp"
+    await userEvent.click(screen.getByRole("button", { name: /^udp$/i, pressed: false }));
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    expect(rulesEditRuleMock).toHaveBeenCalledWith(expect.objectContaining({
+      conditions: expect.objectContaining({ protocols: ["udp"] }),
+    }));
+  });
+
   it("saves process conditions, trimmed on blur", async () => {
     const userWithRule = { ...user, rules: [{ id: "r1", name: "T", enabled: true, action: "proxy", conditions: { processes: [] } }] };
     useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, userWithRule], loading: false, lastError: null, bootstrapped: true });

@@ -141,6 +141,16 @@ export function RuleEditor() {
           onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, processes: next } })}
         />
       </Section>
+      <Section
+        title="Protocols"
+        count={draft.conditions.protocols?.length ?? 0}
+        defaultOpen={(draft.conditions.protocols?.length ?? 0) > 0}
+      >
+        <ProtocolsSection
+          value={draft.conditions.protocols ?? []}
+          onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, protocols: next } })}
+        />
+      </Section>
     </div>
   );
 }
@@ -385,6 +395,40 @@ function ProcessesSection({ value, onChange }: { value: string[]; onChange: (nex
         className="self-start rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08]"
       >
         + Add process
+      </button>
+    </>
+  );
+}
+
+function ProtocolsSection({ value, onChange }: { value: string[]; onChange: (next: string[]) => void }) {
+  return (
+    <>
+      {value.map((proto, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <Segmented
+            value={proto === "udp" ? "udp" : "tcp"}
+            onChange={(v) => onChange(value.map((x, j) => j === i ? v : x))}
+            options={[
+              { value: "tcp", label: "tcp" },
+              { value: "udp", label: "udp" },
+            ] as const}
+          />
+          <button
+            type="button"
+            onClick={() => onChange(value.filter((_, j) => j !== i))}
+            aria-label={`Remove protocol ${i + 1}`}
+            className="ml-auto text-white/45 hover:text-rose-300"
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange([...value, "tcp"])}
+        className="self-start rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08]"
+      >
+        + Add protocol
       </button>
     </>
   );
