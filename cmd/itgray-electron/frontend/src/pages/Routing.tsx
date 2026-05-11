@@ -10,7 +10,6 @@ import {
   rulesAddGroup,
   rulesEditGroup,
   rulesRemoveGroup,
-  rulesAddRule,
   rulesMoveRule,
   rulesRemoveRule,
   rulesReplaceAll,
@@ -92,6 +91,7 @@ export function Routing() {
 
   return (
     <motion.div
+      layout
       className="flex flex-col gap-3"
       initial="hidden"
       animate="show"
@@ -219,25 +219,18 @@ function GroupCard({ group, onRuleDragEnd, dragHandle, allGroups }: { group: Gro
   const [renaming, setRenaming] = useState(false);
   const navigate = useNavigate();
 
-  async function handleAddRule() {
-    const id = await rulesAddRule(group.id, {
-      name: "New rule",
-      enabled: true,
-      action: "proxy",
-      conditions: { ip_cidrs: ["0.0.0.0/0"] },
-    });
-    // freshFromAdd lets RuleEditor know this rule was just stubbed on
-    // the user's behalf — if they back out without saving, the editor
-    // deletes it so the routing list stays clean.
-    navigate(`/routing/${id}`, { state: { freshFromAdd: true } });
+  function handleAddRule() {
+    // Don't persist a stub on the server — navigate to the editor in
+    // "create" mode and let the user Save when they're ready.
+    navigate("/routing/new", { state: { mode: "create", groupId: group.id } });
   }
 
   return (
     <>
       <motion.section
+        layout
         variants={sectionVariants}
-        whileHover={group.locked ? undefined : { y: -1 }}
-        transition={{ duration: 0.18, ease: SNAP_EASE }}
+        transition={{ duration: 0.18, ease: SNAP_EASE, layout: { duration: 0.22, ease: SNAP_EASE } }}
         className={cn("glass-regular flex flex-col gap-2 rounded-2xl p-4", !group.enabled && "opacity-60")}
       >
         <header className="flex items-center justify-between">
@@ -452,6 +445,7 @@ function RuleRow({
   allGroups?: GroupView[];
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const navigate = useNavigate();
   const actionStyle =
     rule.action === "proxy" ? "bg-sky-500/20 text-sky-200"
     : rule.action === "direct" ? "bg-amber-500/20 text-amber-200"
@@ -462,6 +456,7 @@ function RuleRow({
       : [];
   return (
     <motion.div
+      onClick={groupLocked ? undefined : () => navigate(`/routing/${rule.id}`)}
       whileHover={groupLocked ? undefined : { y: -1 }}
       whileTap={groupLocked ? undefined : { scale: 0.99 }}
       transition={{ duration: 0.18, ease: SNAP_EASE }}

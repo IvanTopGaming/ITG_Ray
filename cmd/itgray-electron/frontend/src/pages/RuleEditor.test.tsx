@@ -17,6 +17,7 @@ vi.mock("@/lib/settings", () => ({
 const useRulesMock = vi.fn();
 const rulesEditRuleMock = vi.fn();
 const rulesMoveRuleMock = vi.fn();
+const rulesAddRuleMock = vi.fn();
 vi.mock("@/lib/rulesStore", async () => {
   const actual = await vi.importActual<any>("@/lib/rulesStore");
   return {
@@ -24,6 +25,7 @@ vi.mock("@/lib/rulesStore", async () => {
     useRules: () => useRulesMock(),
     rulesEditRule: (...a: any[]) => rulesEditRuleMock(...a),
     rulesMoveRule: (...a: any[]) => rulesMoveRuleMock(...a),
+    rulesAddRule: (...a: any[]) => rulesAddRuleMock(...a),
   };
 });
 
@@ -38,11 +40,22 @@ beforeEach(() => {
   useRulesMock.mockReset();
   rulesEditRuleMock.mockReset();
   rulesMoveRuleMock.mockReset();
+  rulesAddRuleMock.mockReset();
 });
 
 function renderEditor(ruleId: string) {
   return render(
     <MemoryRouter initialEntries={[`/routing/${ruleId}`]}>
+      <Routes>
+        <Route path="/routing/:ruleId" element={<RuleEditor />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+function renderCreateEditor(groupId: string) {
+  return render(
+    <MemoryRouter initialEntries={[{ pathname: "/routing/new", state: { mode: "create", groupId } }]}>
       <Routes>
         <Route path="/routing/:ruleId" element={<RuleEditor />} />
       </Routes>
@@ -155,6 +168,55 @@ describe("RuleEditor", () => {
     await userEvent.type(screen.getByLabelText("Name"), " edit");
     await userEvent.click(screen.getByRole("button", { name: /routing/i }));
     expect(screen.getByText(/discard.*changes/i)).toBeInTheDocument();
+  });
+
+  it("create mode hides the Group dropdown and Save calls rulesAddRule", async () => {
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user], loading: false, lastError: null, bootstrapped: true });
+    rulesAddRuleMock.mockResolvedValue("r-new");
+    renderCreateEditor("user");
+    // Group dropdown is hidden in create mode.
+    expect(screen.queryByLabelText(/^Group$/i)).not.toBeInTheDocument();
+    // Fill in a condition so the rule has something to save.
+    await userEvent.click(screen.getByRole("button", { name: /ip cidrs/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add cidr/i }));
+    await userEvent.type(screen.getByLabelText(/cidr value/i), "10.0.0.0/8");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    expect(rulesAddRuleMock).toHaveBeenCalledWith("user", expect.objectContaining({
+      name: expect.any(String),
+      enabled: true,
+      action: "proxy",
+      conditions: expect.objectContaining({ ip_cidrs: ["10.0.0.0/8"] }),
+    }));
+    // Ensure the persisted draft does NOT carry an id field.
+    const payload = rulesAddRuleMock.mock.calls[0][1];
+    expect(payload).not.toHaveProperty("id");
+  });
+
+  it("create mode back-out does NOT persist anything", async () => {
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user], loading: false, lastError: null, bootstrapped: true });
+    renderCreateEditor("user");
+    await userEvent.click(screen.getByRole("button", { name: /routing/i }));
+    expect(rulesAddRuleMock).not.toHaveBeenCalled();
+  });
+
+  it("ports Range mode saves {from, to} after a Range click + type", async () => {
+    const userWithRule = { ...user, rules: [{ id: "r1", name: "T", enabled: true, action: "proxy", conditions: { ports: [] } }] };
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, userWithRule], loading: false, lastError: null, bootstrapped: true });
+    rulesEditRuleMock.mockResolvedValue(undefined);
+    renderEditor("r1");
+    await userEvent.click(screen.getByRole("button", { name: /ports/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add port/i }));
+    // Switch to Range — the Range button should toggle to pressed.
+    await userEvent.click(screen.getByRole("button", { name: /^range$/i, pressed: false }));
+    // Both range inputs should now be visible.
+    const fromInput = screen.getByLabelText(/port from/i) as HTMLInputElement;
+    const toInput = screen.getByLabelText(/port to/i) as HTMLInputElement;
+    await userEvent.type(fromInput, "8000");
+    await userEvent.type(toInput, "9000");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    expect(rulesEditRuleMock).toHaveBeenCalledWith(expect.objectContaining({
+      conditions: expect.objectContaining({ ports: [{ from: 8000, to: 9000 }] }),
+    }));
   });
 
   it("saves process conditions, trimmed on blur", async () => {

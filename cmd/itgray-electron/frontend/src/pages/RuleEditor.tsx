@@ -3,7 +3,7 @@ import type React from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
-import { useRules, rulesEditRule, rulesMoveRule, rulesRemoveRule, type RuleView, type GroupView, type DomainMatcher, type PortSpec } from "@/lib/rulesStore";
+import { useRules, rulesAddRule, rulesEditRule, rulesMoveRule, type RuleView, type GroupView, type DomainMatcher, type PortSpec } from "@/lib/rulesStore";
 import { Segmented } from "@/components/controls/Segmented";
 import { Toggle } from "@/components/controls/Toggle";
 import { ConfirmDialog } from "@/components/controls/ConfirmDialog";
@@ -30,19 +30,40 @@ const rowVariants: Variants = {
   exit: { opacity: 0, x: 8, transition: { duration: 0.18, ease: SNAP_EASE } },
 };
 
+type CreateState = { mode: "create"; groupId: string };
+
+function isCreateState(s: unknown): s is CreateState {
+  return !!s && typeof s === "object" && (s as { mode?: unknown }).mode === "create"
+    && typeof (s as { groupId?: unknown }).groupId === "string";
+}
+
+const EMPTY_DRAFT: Omit<RuleView, "id"> = {
+  name: "New rule",
+  enabled: true,
+  action: "proxy",
+  conditions: {},
+};
+
 export function RuleEditor() {
   const { ruleId = "" } = useParams<{ ruleId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { groups } = useRules();
 
-  const initial = useMemo(() => findRule(groups, ruleId), [groups, ruleId]);
+  const isCreate = ruleId === "new";
+  const createState = isCreateState(location.state) ? location.state : null;
+
+  const initial = useMemo(
+    () => isCreate
+      ? { rule: { id: "", ...EMPTY_DRAFT } as RuleView, groupId: createState?.groupId ?? "" }
+      : findRule(groups, ruleId),
+    [groups, ruleId, isCreate, createState?.groupId],
+  );
   const [draft, setDraft] = useState<RuleView | null>(initial.rule);
   const [groupId, setGroupId] = useState<string>(initial.groupId);
   const initialSnapshot = useRef(JSON.stringify({ rule: initial.rule, groupId: initial.groupId }));
   const [confirmDiscard, setConfirmDiscard] = useState(false);
-  const location = useLocation();
-  const freshFromAdd = (location.state as { freshFromAdd?: boolean } | null)?.freshFromAdd === true;
-  const savedRef = useRef(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   if (!draft) {
     return (
@@ -68,25 +89,30 @@ export function RuleEditor() {
 
   async function handleSave() {
     if (!draft) return;
-    if (groupId !== initial.groupId) {
-      await rulesMoveRule(draft.id, groupId);
+    setSaveError(null);
+    try {
+      if (isCreate) {
+        const { id: _id, ...rest } = draft;
+        void _id;
+        await rulesAddRule(groupId, rest);
+      } else {
+        if (groupId !== initial.groupId) {
+          await rulesMoveRule(draft.id, groupId);
+        }
+        await rulesEditRule(draft);
+      }
+      navigate("/routing");
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
     }
-    await rulesEditRule(draft);
-    // After a successful Save the rule is no longer a fresh stub —
-    // future back-clicks should behave like ordinary edits.
-    savedRef.current = true;
-    navigate("/routing");
   }
 
   const currentSerialized = JSON.stringify({ rule: draft, groupId });
   const dirty = initialSnapshot.current !== currentSerialized;
 
-  async function handleBack() {
-    if (freshFromAdd && !savedRef.current) {
-      // User clicked + Add rule, then backed out without saving.
-      // Delete the stub so the routing list doesn't accumulate junk
-      // placeholder rules.
-      try { await rulesRemoveRule(draft!.id); } catch { /* best-effort */ }
+  function handleBack() {
+    if (isCreate) {
+      // Create-mode drafts only live in memory — backing out is free.
       navigate("/routing");
       return;
     }
@@ -148,78 +174,91 @@ export function RuleEditor() {
             ] as const}
           />
         </div>
-        <label className="flex flex-col gap-1">
-          <span className="text-[11.5px] uppercase tracking-wider text-white/55">Group</span>
-          <select
-            aria-label="Group"
-            value={groupId}
-            onChange={(e) => setGroupId(e.target.value)}
-            className="rounded-md border border-white/10 bg-[#1c1f2a] px-3 py-1.5 text-[13px] outline-none focus:border-sky-400/40"
-          >
-            {userGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-          </select>
-        </label>
+        {!isCreate && (
+          <label className="flex flex-col gap-1">
+            <span className="text-[11.5px] uppercase tracking-wider text-white/55">Group</span>
+            <select
+              aria-label="Group"
+              value={groupId}
+              onChange={(e) => setGroupId(e.target.value)}
+              className="rounded-md border border-white/10 bg-[#1c1f2a] px-3 py-1.5 text-[13px] outline-none focus:border-sky-400/40"
+            >
+              {userGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+            </select>
+          </label>
+        )}
       </motion.div>
-      <Section
-        title="Domains"
-        count={draft.conditions.domains?.length ?? 0}
-        defaultOpen={(draft.conditions.domains?.length ?? 0) > 0}
-      >
-        <DomainsSection
-          value={draft.conditions.domains ?? []}
-          onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, domains: next } })}
-        />
-      </Section>
-      <Section
-        title="IP CIDRs"
-        count={draft.conditions.ip_cidrs?.length ?? 0}
-        defaultOpen={(draft.conditions.ip_cidrs?.length ?? 0) > 0}
-      >
-        <CidrsSection
-          value={draft.conditions.ip_cidrs ?? []}
-          onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, ip_cidrs: next } })}
-        />
-      </Section>
-      <Section
-        title="Geo"
-        count={draft.conditions.geo?.length ?? 0}
-        defaultOpen={(draft.conditions.geo?.length ?? 0) > 0}
-      >
-        <GeoSection
-          value={draft.conditions.geo ?? []}
-          onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, geo: next } })}
-        />
-      </Section>
-      <Section
-        title="Ports"
-        count={draft.conditions.ports?.length ?? 0}
-        defaultOpen={(draft.conditions.ports?.length ?? 0) > 0}
-      >
-        <PortsSection
-          value={draft.conditions.ports ?? []}
-          onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, ports: next } })}
-        />
-      </Section>
-      <Section
-        title="Processes"
-        count={draft.conditions.processes?.length ?? 0}
-        defaultOpen={(draft.conditions.processes?.length ?? 0) > 0}
-      >
-        <ProcessesSection
-          value={draft.conditions.processes ?? []}
-          onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, processes: next } })}
-        />
-      </Section>
-      <Section
-        title="Protocols"
-        count={draft.conditions.protocols?.length ?? 0}
-        defaultOpen={(draft.conditions.protocols?.length ?? 0) > 0}
-      >
-        <ProtocolsSection
-          value={draft.conditions.protocols ?? []}
-          onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, protocols: next } })}
-        />
-      </Section>
+      <motion.div variants={sectionVariants} layout className="grid grid-cols-2 gap-3">
+        <Section
+          title="Domains"
+          count={draft.conditions.domains?.length ?? 0}
+          defaultOpen={(draft.conditions.domains?.length ?? 0) > 0}
+        >
+          <DomainsSection
+            value={draft.conditions.domains ?? []}
+            onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, domains: next } })}
+          />
+        </Section>
+        <Section
+          title="IP CIDRs"
+          count={draft.conditions.ip_cidrs?.length ?? 0}
+          defaultOpen={(draft.conditions.ip_cidrs?.length ?? 0) > 0}
+        >
+          <CidrsSection
+            value={draft.conditions.ip_cidrs ?? []}
+            onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, ip_cidrs: next } })}
+          />
+        </Section>
+        <Section
+          title="Geo"
+          count={draft.conditions.geo?.length ?? 0}
+          defaultOpen={(draft.conditions.geo?.length ?? 0) > 0}
+        >
+          <GeoSection
+            value={draft.conditions.geo ?? []}
+            onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, geo: next } })}
+          />
+        </Section>
+        <Section
+          title="Ports"
+          count={draft.conditions.ports?.length ?? 0}
+          defaultOpen={(draft.conditions.ports?.length ?? 0) > 0}
+        >
+          <PortsSection
+            value={draft.conditions.ports ?? []}
+            onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, ports: next } })}
+          />
+        </Section>
+        <Section
+          title="Processes"
+          count={draft.conditions.processes?.length ?? 0}
+          defaultOpen={(draft.conditions.processes?.length ?? 0) > 0}
+        >
+          <ProcessesSection
+            value={draft.conditions.processes ?? []}
+            onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, processes: next } })}
+          />
+        </Section>
+        <Section
+          title="Protocols"
+          count={draft.conditions.protocols?.length ?? 0}
+          defaultOpen={(draft.conditions.protocols?.length ?? 0) > 0}
+        >
+          <ProtocolsSection
+            value={draft.conditions.protocols ?? []}
+            onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, protocols: next } })}
+          />
+        </Section>
+      </motion.div>
+      {saveError && (
+        <motion.div
+          variants={sectionVariants}
+          role="alert"
+          className="rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[12px] text-rose-200"
+        >
+          {saveError}
+        </motion.div>
+      )}
       <ConfirmDialog
         open={confirmDiscard}
         title="Discard changes?"
@@ -236,7 +275,7 @@ export function RuleEditor() {
 function Section({ title, count, defaultOpen, children }: { title: string; count: number; defaultOpen: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <motion.section variants={sectionVariants} className="glass-regular flex flex-col gap-2 rounded-2xl p-4">
+    <motion.section layout variants={sectionVariants} transition={{ layout: { duration: 0.22, ease: SNAP_EASE } }} className="glass-regular flex flex-col gap-2 rounded-2xl p-4">
       <button type="button" onClick={() => setOpen(!open)} className="flex items-center justify-between text-left">
         <span className="text-[13px] font-medium text-white/90">
           <motion.span
@@ -435,7 +474,10 @@ function PortsSection({ value, onChange }: { value: PortSpec[]; onChange: (next:
     <>
       <AnimatePresence initial={false}>
         {value.map((p, i) => {
-          const mode: "single" | "range" = p.single ? "single" : (p.from || p.to ? "range" : "single");
+          // Track mode by field presence, not by truthiness. A range with
+          // both endpoints at 0 (`from === 0, to === 0`) is still a range.
+          const mode: "single" | "range" =
+            p.from !== undefined || p.to !== undefined ? "range" : "single";
           return (
             <motion.div
               key={i}
@@ -470,7 +512,7 @@ function PortsSection({ value, onChange }: { value: PortSpec[]; onChange: (next:
                     aria-label={`Port from ${i + 1}`}
                     type="number"
                     value={p.from ?? ""}
-                    onChange={(e) => setRow(i, { ...p, from: Number(e.target.value), single: undefined })}
+                    onChange={(e) => setRow(i, { from: Number(e.target.value), to: p.to ?? 0 })}
                     className="w-24 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
                   />
                   <span className="text-white/45">→</span>
@@ -478,7 +520,7 @@ function PortsSection({ value, onChange }: { value: PortSpec[]; onChange: (next:
                     aria-label={`Port to ${i + 1}`}
                     type="number"
                     value={p.to ?? ""}
-                    onChange={(e) => setRow(i, { ...p, to: Number(e.target.value), single: undefined })}
+                    onChange={(e) => setRow(i, { from: p.from ?? 0, to: Number(e.target.value) })}
                     className="w-24 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
                   />
                 </>

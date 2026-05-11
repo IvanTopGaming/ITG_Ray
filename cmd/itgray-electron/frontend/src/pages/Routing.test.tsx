@@ -129,19 +129,18 @@ describe("Routing page — add rule", () => {
     navigateMock.mockReset();
   });
 
-  it("+ Add rule creates a stub and navigates to the editor", async () => {
+  it("+ Add rule navigates to the create-flow editor without persisting", async () => {
     useRulesMock.mockReturnValue({
       defaultAction: "proxy",
       groups: [safety, { ...user, id: "g1" }],
       loading: false, lastError: null, bootstrapped: true,
     });
-    rulesAddRuleMock.mockResolvedValue("r-new");
     renderRouting();
     await userEvent.click(screen.getByRole("button", { name: /add rule/i }));
-    expect(rulesAddRuleMock).toHaveBeenCalledWith("g1", expect.objectContaining({
-      action: "proxy", enabled: true, name: expect.any(String),
-    }));
-    expect(navigateMock).toHaveBeenCalledWith("/routing/r-new", { state: { freshFromAdd: true } });
+    expect(rulesAddRuleMock).not.toHaveBeenCalled();
+    expect(navigateMock).toHaveBeenCalledWith("/routing/new", {
+      state: { mode: "create", groupId: "g1" },
+    });
   });
 
   it("locked groups do not show + Add rule", () => {
@@ -152,6 +151,47 @@ describe("Routing page — add rule", () => {
     });
     renderRouting();
     expect(screen.queryByRole("button", { name: /add rule/i })).not.toBeInTheDocument();
+  });
+});
+
+describe("Routing page — rule click", () => {
+  beforeEach(() => {
+    navigateMock.mockReset();
+  });
+
+  it("clicking a rule row navigates to the editor", async () => {
+    const ruleA = { id: "r1", name: "Block ads", enabled: true, action: "block", conditions: { ip_cidrs: ["1.2.3.4/32"] } };
+    useRulesMock.mockReturnValue({
+      defaultAction: "proxy",
+      groups: [safety, { ...user, id: "g1", name: "Group A", rules: [ruleA] }],
+      loading: false, lastError: null, bootstrapped: true,
+    });
+    renderRouting();
+    await userEvent.click(screen.getByText("Block ads"));
+    expect(navigateMock).toHaveBeenCalledWith("/routing/r1");
+  });
+
+  it("clicking the rule menu does NOT navigate", async () => {
+    const ruleA = { id: "r1", name: "Block ads", enabled: true, action: "block", conditions: { ip_cidrs: ["1.2.3.4/32"] } };
+    useRulesMock.mockReturnValue({
+      defaultAction: "proxy",
+      groups: [safety, { ...user, id: "g1", name: "Group A", rules: [ruleA] }],
+      loading: false, lastError: null, bootstrapped: true,
+    });
+    renderRouting();
+    await userEvent.click(screen.getByLabelText(/Block ads menu/i));
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it("locked-group rule rows are NOT clickable", async () => {
+    useRulesMock.mockReturnValue({
+      defaultAction: "proxy",
+      groups: [safety],
+      loading: false, lastError: null, bootstrapped: true,
+    });
+    renderRouting();
+    await userEvent.click(screen.getByText("Private IPs"));
+    expect(navigateMock).not.toHaveBeenCalled();
   });
 });
 
