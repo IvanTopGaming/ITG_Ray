@@ -1,9 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { eventHandlers, listMock, addGroupMock } = vi.hoisted(() => ({
+const {
+  eventHandlers,
+  listMock,
+  addGroupMock,
+  getDashStateMock,
+  markRulesDirtyMock,
+} = vi.hoisted(() => ({
   eventHandlers: {} as Record<string, (...args: any[]) => void>,
   listMock: vi.fn(),
   addGroupMock: vi.fn(),
+  getDashStateMock: vi.fn(),
+  markRulesDirtyMock: vi.fn(),
 }));
 
 vi.mock("@/lib/itg/runtime", () => ({
@@ -28,6 +36,14 @@ vi.mock("@/lib/itg/RulesService", () => ({
   RuleMove: vi.fn(),
 }));
 
+vi.mock("@/lib/dashStore", () => ({
+  getDashState: () => getDashStateMock(),
+}));
+
+vi.mock("@/lib/settings", () => ({
+  markRulesDirty: () => markRulesDirtyMock(),
+}));
+
 import {
   __bootRulesForTest,
   __resetRulesForTest,
@@ -39,6 +55,11 @@ beforeEach(() => {
   for (const k of Object.keys(eventHandlers)) delete eventHandlers[k];
   listMock.mockReset();
   addGroupMock.mockReset();
+  getDashStateMock.mockReset();
+  markRulesDirtyMock.mockReset();
+  // Default: chain is idle so mutations do NOT arm the toast unless a
+  // test opts in by overriding the dash status.
+  getDashStateMock.mockReturnValue({ status: "idle" });
   __resetRulesForTest();
 });
 
@@ -81,5 +102,25 @@ describe("rulesStore", () => {
     listMock.mockResolvedValue(baseView);
     await rulesAddGroup("Streaming");
     expect(addGroupMock).toHaveBeenCalledWith({ name: "Streaming" });
+  });
+
+  it("rulesAddGroup arms ReconnectToast when chain is connected", async () => {
+    listMock.mockResolvedValue(baseView);
+    await __bootRulesForTest();
+    addGroupMock.mockResolvedValue({ id: "g3" });
+    listMock.mockResolvedValue(baseView);
+    getDashStateMock.mockReturnValue({ status: "connected" });
+    await rulesAddGroup("Streaming");
+    expect(markRulesDirtyMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("rulesAddGroup does NOT arm ReconnectToast when chain is idle", async () => {
+    listMock.mockResolvedValue(baseView);
+    await __bootRulesForTest();
+    addGroupMock.mockResolvedValue({ id: "g3" });
+    listMock.mockResolvedValue(baseView);
+    getDashStateMock.mockReturnValue({ status: "idle" });
+    await rulesAddGroup("Streaming");
+    expect(markRulesDirtyMock).not.toHaveBeenCalled();
   });
 });

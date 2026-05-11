@@ -123,6 +123,12 @@ let activeServerEdited = false;
 // snapshot rebuild (re-Connect), and on snapshot clear (idle/error) so
 // a fresh diff re-arms the toast. Active-edit signal is independent.
 let networkDiffDismissed = false;
+// rulesDirtyAfterConnect: a rules mutation happened while chain was
+// connected. Set by markRulesDirty() (called from rulesStore on
+// successful mutation), cleared on the next vpn:status=connected
+// snapshot rebuild and on idle/error. Mirrors activeServerEdited
+// shape so useReconnectNeeded ORs all three signals together.
+let rulesDirtyAfterConnect = false;
 const listeners = new Set<() => void>();
 
 function notifyListeners(): void {
@@ -190,9 +196,11 @@ function ensureEventsRegistered(): void {
     const p = payload as { status?: string };
     if (p.status === 'connected') {
       snapshotFromConnectedPayload(payload as Parameters<typeof snapshotFromConnectedPayload>[0]);
+      clearRulesDirty();
     } else if (p.status === 'idle' || p.status === 'error') {
       clearConnectSnapshot();
       clearActiveServerEdited();
+      clearRulesDirty();
     }
   });
   eventsRegistered = true;
@@ -283,6 +291,22 @@ export function clearActiveServerEdited(): void {
   notifyListeners();
 }
 
+// markRulesDirty: called by rulesStore on successful mutation when chain
+// is currently connected. Arms the reconnect signal; the next successful
+// Connect (vpn:status=connected) — or an idle/error transition — clears
+// it via clearRulesDirty().
+export function markRulesDirty(): void {
+  if (rulesDirtyAfterConnect) return;
+  rulesDirtyAfterConnect = true;
+  notifyListeners();
+}
+
+export function clearRulesDirty(): void {
+  if (!rulesDirtyAfterConnect) return;
+  rulesDirtyAfterConnect = false;
+  notifyListeners();
+}
+
 // dismissNetworkDiff hides the network-diff signal until the next
 // settings edit (which clears the flag in useSettings.update) or a
 // snapshot rebuild. Active-edit signal is unaffected — that path has
@@ -294,7 +318,11 @@ export function dismissNetworkDiff(): void {
 }
 
 function reconnectNeeded(): boolean {
-  return (networkDiffersFromSnapshot() && !networkDiffDismissed) || activeServerEdited;
+  return (
+    (networkDiffersFromSnapshot() && !networkDiffDismissed) ||
+    activeServerEdited ||
+    rulesDirtyAfterConnect
+  );
 }
 
 export function useReconnectNeeded(): boolean {
@@ -379,6 +407,7 @@ export function __resetForTests(): void {
   lastConnectSnapshot = null;
   activeServerEdited = false;
   networkDiffDismissed = false;
+  rulesDirtyAfterConnect = false;
   if (eventsRegistered) {
     EventsOff(HUB_EVENT_SETTINGS);
     EventsOff('vpn:status');

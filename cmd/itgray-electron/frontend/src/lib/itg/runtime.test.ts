@@ -65,6 +65,7 @@ const WIRE_TOPICS = [
   "chain.error",
   "helper.state",
   "probe.result",
+  "rules.changed",
   "servers.changed",
   "sub.synced",
   "vpn.speed",

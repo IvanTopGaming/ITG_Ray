@@ -3,6 +3,17 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
+// rulesStore.ts pulls in dashStore + settings at top level; both
+// modules touch window.itg via EventsOn during init, which is undefined
+// in jsdom. Stub them so vi.importActual('@/lib/rulesStore') doesn't
+// crash.
+vi.mock("@/lib/dashStore", () => ({
+  getDashState: () => ({ status: "idle" }),
+}));
+vi.mock("@/lib/settings", () => ({
+  markRulesDirty: () => {},
+}));
+
 const useRulesMock = vi.fn();
 const rulesAddGroupMock = vi.fn();
 const rulesEditGroupMock = vi.fn();

@@ -2,6 +2,8 @@ import { useSyncExternalStore } from "react";
 
 import * as RulesService from "@/lib/itg/RulesService";
 import { EventsOn } from "@/lib/itg/runtime";
+import { getDashState } from "@/lib/dashStore";
+import { markRulesDirty } from "@/lib/settings";
 
 // rulesStore mirrors serversStore: a singleton store backed by
 // useSyncExternalStore, lazy-bootstrapped on first hook mount, with a
@@ -131,6 +133,22 @@ function withSingleFlight<T>(fn: () => Promise<T>): Promise<T> {
   return p;
 }
 
+// applyMutation wraps every mutation in the single-flight mutex, refetches
+// the authoritative model from the backend, then — if the chain is
+// currently connected — arms the ReconnectToast via markRulesDirty().
+// This is centralized here so each mutation wrapper stays a one-liner
+// and the "arm on connected" contract has a single source of truth.
+async function applyMutation<T>(op: () => Promise<T>): Promise<T> {
+  return withSingleFlight(async () => {
+    const result = await op();
+    await refetch();
+    if (getDashState().status === "connected") {
+      markRulesDirty();
+    }
+    return result;
+  });
+}
+
 export function useRules(): RulesState {
   if (!state.bootstrapped && !bootInFlight) void ensureBoot();
   return useSyncExternalStore(
@@ -145,23 +163,20 @@ export function getRulesState(): RulesState {
 }
 
 export function rulesAddGroup(name: string): Promise<void> {
-  return withSingleFlight(async () => {
+  return applyMutation(async () => {
     await RulesService.GroupAdd({ name });
-    await refetch();
   });
 }
 
 export function rulesEditGroup(id: string, name: string, enabled: boolean): Promise<void> {
-  return withSingleFlight(async () => {
+  return applyMutation(async () => {
     await RulesService.GroupEdit({ id, name, enabled });
-    await refetch();
   });
 }
 
 export function rulesRemoveGroup(id: string): Promise<void> {
-  return withSingleFlight(async () => {
+  return applyMutation(async () => {
     await RulesService.GroupRemove({ id });
-    await refetch();
   });
 }
 
@@ -169,38 +184,33 @@ export function rulesAddRule(
   groupId: string,
   rule: Omit<RuleView, "id">,
 ): Promise<string> {
-  return withSingleFlight(async () => {
+  return applyMutation(async () => {
     const { id } = await RulesService.RuleAdd({ groupId, rule: { id: "", ...rule } });
-    await refetch();
     return id;
   });
 }
 
 export function rulesEditRule(rule: RuleView): Promise<void> {
-  return withSingleFlight(async () => {
+  return applyMutation(async () => {
     await RulesService.RuleEdit({ rule });
-    await refetch();
   });
 }
 
 export function rulesRemoveRule(id: string): Promise<void> {
-  return withSingleFlight(async () => {
+  return applyMutation(async () => {
     await RulesService.RuleRemove({ id });
-    await refetch();
   });
 }
 
 export function rulesToggleRule(id: string): Promise<void> {
-  return withSingleFlight(async () => {
+  return applyMutation(async () => {
     await RulesService.RuleToggle({ id });
-    await refetch();
   });
 }
 
 export function rulesMoveRule(id: string, toGroupId: string): Promise<void> {
-  return withSingleFlight(async () => {
+  return applyMutation(async () => {
     await RulesService.RuleMove({ id, toGroupId });
-    await refetch();
   });
 }
 
@@ -208,9 +218,8 @@ export function rulesReplaceAll(model: {
   defaultAction: Action;
   groups: GroupView[];
 }): Promise<void> {
-  return withSingleFlight(async () => {
+  return applyMutation(async () => {
     await RulesService.ReplaceAll({ model });
-    await refetch();
   });
 }
 
