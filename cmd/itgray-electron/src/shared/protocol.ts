@@ -6,6 +6,15 @@ export interface AboutSettings {
   buildDate: string;
 }
 
+export interface Conditions {
+  processes?: string[];
+  domains?: DomainMatcher[];
+  ip_cidrs?: string[];
+  geo?: string[];
+  ports?: PortSpec[];
+  protocols?: string[];
+}
+
 export interface DNSSettings {
   mode: string;
   servers: string[];
@@ -13,6 +22,11 @@ export interface DNSSettings {
 
 export interface DebugSettings {
   logLevel: string;
+}
+
+export interface DomainMatcher {
+  kind: string;
+  value: string;
 }
 
 export interface Empty {}
@@ -23,6 +37,22 @@ export interface GeneralSettings {
   startMinimized: boolean;
 }
 
+export interface Group {
+  id: string;
+  name: string;
+  locked?: boolean;
+  enabled: boolean;
+  rules: Rule[];
+}
+
+export interface GroupView {
+  id: string;
+  name: string;
+  locked: boolean;
+  enabled: boolean;
+  rules: RuleView[];
+}
+
 export interface HelperStatusResult {
   state: string;
 }
@@ -30,6 +60,11 @@ export interface HelperStatusResult {
 export interface KillSwitchSettings {
   enabled: boolean;
   alwaysOn: boolean;
+}
+
+export interface Model {
+  groups: Group[];
+  default_action: string;
 }
 
 export interface NetworkSettings {
@@ -59,6 +94,81 @@ export interface OnboardingStateResult {
 export interface PingResult {
   pong: number;
   version: string;
+}
+
+export interface PortSpec {
+  single?: number;
+  from?: number;
+  to?: number;
+}
+
+export interface Rule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  action: string;
+  conditions: Conditions;
+}
+
+export interface RuleView {
+  id: string;
+  name: string;
+  enabled: boolean;
+  action: string;
+  conditions: Conditions;
+}
+
+export interface RulesGroupAddParams {
+  name: string;
+}
+
+export interface RulesGroupAddResult {
+  id: string;
+}
+
+export interface RulesGroupEditParams {
+  id: string;
+  name: string;
+  enabled: boolean;
+}
+
+export interface RulesGroupRemoveParams {
+  id: string;
+}
+
+export interface RulesReplaceAllParams {
+  model: Model;
+}
+
+export interface RulesRuleAddParams {
+  groupId: string;
+  rule: Rule;
+}
+
+export interface RulesRuleAddResult {
+  id: string;
+}
+
+export interface RulesRuleEditParams {
+  rule: Rule;
+}
+
+export interface RulesRuleMoveParams {
+  id: string;
+  toGroupId: string;
+}
+
+export interface RulesRuleRemoveParams {
+  id: string;
+}
+
+export interface RulesRuleToggleParams {
+  id: string;
+}
+
+export interface RulesView {
+  defaultAction: string;
+  groups: GroupView[];
 }
 
 export interface RunConnectParams {
@@ -215,6 +325,16 @@ export interface RpcMethods {
   "onboarding.complete": { params: Empty; result: Empty };
   "onboarding.getState": { params: Empty; result: OnboardingStateResult };
   "onboarding.skip": { params: Empty; result: Empty };
+  "rules.groupAdd": { params: RulesGroupAddParams; result: RulesGroupAddResult };
+  "rules.groupEdit": { params: RulesGroupEditParams; result: Empty };
+  "rules.groupRemove": { params: RulesGroupRemoveParams; result: Empty };
+  "rules.list": { params: Empty; result: RulesView };
+  "rules.replaceAll": { params: RulesReplaceAllParams; result: Empty };
+  "rules.ruleAdd": { params: RulesRuleAddParams; result: RulesRuleAddResult };
+  "rules.ruleEdit": { params: RulesRuleEditParams; result: Empty };
+  "rules.ruleMove": { params: RulesRuleMoveParams; result: Empty };
+  "rules.ruleRemove": { params: RulesRuleRemoveParams; result: Empty };
+  "rules.ruleToggle": { params: RulesRuleToggleParams; result: Empty };
   "run.connect": { params: RunConnectParams; result: Empty };
   "run.disconnect": { params: Empty; result: Empty };
   "run.reconnect": { params: RunReconnectParams; result: Empty };
@@ -244,6 +364,7 @@ export type EventTopic =
   | "chain.error"
   | "helper.state"
   | "probe.result"
+  | "rules.changed"
   | "servers.changed"
   | "sub.synced"
   | "vpn.speed"

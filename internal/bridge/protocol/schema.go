@@ -1,6 +1,9 @@
 package protocol
 
-import "github.com/itg-team/itg-ray/internal/hub"
+import (
+	"github.com/itg-team/itg-ray/internal/hub"
+	"github.com/itg-team/itg-ray/internal/rules"
+)
 
 // Each method's argument struct ends in "Params"; result type either ends
 // in "Result" or is a domain type re-exported from another package
@@ -150,6 +153,70 @@ type OnboardingStateResult struct {
 	Onboarded bool `json:"onboarded"`
 }
 
+// RulesService — methods under "rules." namespace. Wire names flatten
+// to a single dot (e.g. rules.groupAdd, not rules.group.add) to match
+// the codegen contract used by every other service in this file.
+type RulesService interface {
+	List(p Empty) (hub.RulesView, error)
+	ReplaceAll(p RulesReplaceAllParams) (Empty, error)
+	GroupAdd(p RulesGroupAddParams) (RulesGroupAddResult, error)
+	GroupEdit(p RulesGroupEditParams) (Empty, error)
+	GroupRemove(p RulesGroupRemoveParams) (Empty, error)
+	RuleAdd(p RulesRuleAddParams) (RulesRuleAddResult, error)
+	RuleEdit(p RulesRuleEditParams) (Empty, error)
+	RuleRemove(p RulesRuleRemoveParams) (Empty, error)
+	RuleToggle(p RulesRuleToggleParams) (Empty, error)
+	RuleMove(p RulesRuleMoveParams) (Empty, error)
+}
+
+type RulesReplaceAllParams struct {
+	Model rules.Model `json:"model"`
+}
+
+type RulesGroupAddParams struct {
+	Name string `json:"name"`
+}
+
+type RulesGroupAddResult struct {
+	ID string `json:"id"`
+}
+
+type RulesGroupEditParams struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+}
+
+type RulesGroupRemoveParams struct {
+	ID string `json:"id"`
+}
+
+type RulesRuleAddParams struct {
+	GroupID string     `json:"groupId"`
+	Rule    rules.Rule `json:"rule"`
+}
+
+type RulesRuleAddResult struct {
+	ID string `json:"id"`
+}
+
+type RulesRuleEditParams struct {
+	Rule rules.Rule `json:"rule"`
+}
+
+type RulesRuleRemoveParams struct {
+	ID string `json:"id"`
+}
+
+type RulesRuleToggleParams struct {
+	ID string `json:"id"`
+}
+
+type RulesRuleMoveParams struct {
+	ID        string `json:"id"`
+	ToGroupID string `json:"toGroupId"`
+}
+
 // EventTopics enumerates the bridge → main notification topics. The
 // codegen tool emits these as a TS string-union type.
 type EventTopic string
@@ -162,5 +229,6 @@ const (
 	TopicSubSynced      EventTopic = "sub.synced"
 	TopicProbeResult    EventTopic = "probe.result"
 	TopicServersChanged EventTopic = "servers.changed"
+	TopicRulesChanged   EventTopic = "rules.changed"
 	TopicBridgeState    EventTopic = "bridge.state"
 )
