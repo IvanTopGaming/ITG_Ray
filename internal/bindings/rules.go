@@ -201,3 +201,155 @@ func indexOfGroup(m rules.Model, id string) int {
 func (s *RulesService) publishChanged() {
 	s.hub.Publish(hub.Event{Name: hub.EventRulesChanged})
 }
+
+// RuleAdd appends a new rule to a non-locked group. Returns the
+// generated rule id. Validates rule shape before touching the store.
+func (s *RulesService) RuleAdd(groupID string, r rules.Rule) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if groupID == "safety" {
+		return "", errLockedGroup
+	}
+	r.ID = newID("r")
+	if err := r.Validate(); err != nil {
+		return "", err
+	}
+	m, err := s.store.Load()
+	if err != nil {
+		return "", err
+	}
+	idx := indexOfGroup(m, groupID)
+	if idx < 0 {
+		return "", fmt.Errorf("group not found: %s", groupID)
+	}
+	if m.Groups[idx].Locked {
+		return "", errLockedGroup
+	}
+	m.Groups[idx].Rules = append(m.Groups[idx].Rules, r)
+	if err := s.store.Save(m); err != nil {
+		return "", err
+	}
+	s.publishChanged()
+	return r.ID, nil
+}
+
+// RuleEdit replaces an existing rule (matched by ID) across all
+// non-locked groups. Returns an error if the rule lives in a locked
+// group or the new shape fails Validate.
+func (s *RulesService) RuleEdit(r rules.Rule) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := r.Validate(); err != nil {
+		return err
+	}
+	m, err := s.store.Load()
+	if err != nil {
+		return err
+	}
+	gi, ri := findRule(m, r.ID)
+	if gi < 0 {
+		return fmt.Errorf("rule not found: %s", r.ID)
+	}
+	if m.Groups[gi].Locked {
+		return errLockedGroup
+	}
+	m.Groups[gi].Rules[ri] = r
+	if err := s.store.Save(m); err != nil {
+		return err
+	}
+	s.publishChanged()
+	return nil
+}
+
+// RuleRemove deletes a non-locked rule by id.
+func (s *RulesService) RuleRemove(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	m, err := s.store.Load()
+	if err != nil {
+		return err
+	}
+	gi, ri := findRule(m, id)
+	if gi < 0 {
+		return fmt.Errorf("rule not found: %s", id)
+	}
+	if m.Groups[gi].Locked {
+		return errLockedGroup
+	}
+	m.Groups[gi].Rules = append(m.Groups[gi].Rules[:ri], m.Groups[gi].Rules[ri+1:]...)
+	if err := s.store.Save(m); err != nil {
+		return err
+	}
+	s.publishChanged()
+	return nil
+}
+
+// RuleToggle flips a non-locked rule's enabled flag.
+func (s *RulesService) RuleToggle(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	m, err := s.store.Load()
+	if err != nil {
+		return err
+	}
+	gi, ri := findRule(m, id)
+	if gi < 0 {
+		return fmt.Errorf("rule not found: %s", id)
+	}
+	if m.Groups[gi].Locked {
+		return errLockedGroup
+	}
+	m.Groups[gi].Rules[ri].Enabled = !m.Groups[gi].Rules[ri].Enabled
+	if err := s.store.Save(m); err != nil {
+		return err
+	}
+	s.publishChanged()
+	return nil
+}
+
+// RuleMove relocates a non-locked rule to another non-locked group,
+// appending at the end of the destination.
+func (s *RulesService) RuleMove(id, toGroupID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if toGroupID == "safety" {
+		return errLockedGroup
+	}
+	m, err := s.store.Load()
+	if err != nil {
+		return err
+	}
+	gi, ri := findRule(m, id)
+	if gi < 0 {
+		return fmt.Errorf("rule not found: %s", id)
+	}
+	if m.Groups[gi].Locked {
+		return errLockedGroup
+	}
+	to := indexOfGroup(m, toGroupID)
+	if to < 0 {
+		return fmt.Errorf("group not found: %s", toGroupID)
+	}
+	if m.Groups[to].Locked {
+		return errLockedGroup
+	}
+	r := m.Groups[gi].Rules[ri]
+	m.Groups[gi].Rules = append(m.Groups[gi].Rules[:ri], m.Groups[gi].Rules[ri+1:]...)
+	m.Groups[to].Rules = append(m.Groups[to].Rules, r)
+	if err := s.store.Save(m); err != nil {
+		return err
+	}
+	s.publishChanged()
+	return nil
+}
+
+func findRule(m rules.Model, id string) (groupIdx, ruleIdx int) {
+	for gi := range m.Groups {
+		for ri := range m.Groups[gi].Rules {
+			if m.Groups[gi].Rules[ri].ID == id {
+				return gi, ri
+			}
+		}
+	}
+	return -1, -1
+}

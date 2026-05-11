@@ -110,3 +110,109 @@ func TestRulesService_GroupEdit_UnknownIDReturnsError(t *testing.T) {
 	err := svc.GroupEdit("nope", "X", true)
 	require.ErrorContains(t, err, "group not found")
 }
+
+func makeRule(action rules.Action, ipcidr string) rules.Rule {
+	return rules.Rule{
+		Name: "Test", Enabled: true, Action: action,
+		Conditions: rules.Conditions{IPCIDRs: []string{ipcidr}},
+	}
+}
+
+func TestRulesService_RuleAdd_AssignsIDAndAppendsToGroup(t *testing.T) {
+	svc, _, _ := newRulesService(t)
+	gid, _ := svc.GroupAdd("Custom")
+	rid, err := svc.RuleAdd(gid, makeRule(rules.ActionBlock, "1.2.3.4/32"))
+	require.NoError(t, err)
+	require.Contains(t, rid, "r")
+	v, _ := svc.List()
+	last := v.Groups[len(v.Groups)-1]
+	require.Len(t, last.Rules, 1)
+	require.Equal(t, rid, last.Rules[0].ID)
+}
+
+func TestRulesService_RuleAdd_ValidatesShape(t *testing.T) {
+	svc, _, _ := newRulesService(t)
+	gid, _ := svc.GroupAdd("Custom")
+	bad := rules.Rule{Name: "Bad", Enabled: true, Action: rules.ActionProxy} // no conditions
+	_, err := svc.RuleAdd(gid, bad)
+	require.ErrorContains(t, err, "conditions cannot be all-empty")
+}
+
+func TestRulesService_RuleAdd_RejectsLockedGroup(t *testing.T) {
+	svc, _, _ := newRulesService(t)
+	_, err := svc.RuleAdd("safety", makeRule(rules.ActionDirect, "1.2.3.4/32"))
+	require.ErrorContains(t, err, "safety group is locked")
+}
+
+func TestRulesService_RuleEdit_ReplacesByID(t *testing.T) {
+	svc, _, _ := newRulesService(t)
+	gid, _ := svc.GroupAdd("Custom")
+	rid, _ := svc.RuleAdd(gid, makeRule(rules.ActionBlock, "1.2.3.4/32"))
+	updated := rules.Rule{
+		ID: rid, Name: "Renamed", Enabled: false, Action: rules.ActionProxy,
+		Conditions: rules.Conditions{IPCIDRs: []string{"5.6.7.8/32"}},
+	}
+	require.NoError(t, svc.RuleEdit(updated))
+	v, _ := svc.List()
+	last := v.Groups[len(v.Groups)-1].Rules[0]
+	require.Equal(t, "Renamed", last.Name)
+	require.False(t, last.Enabled)
+	require.Equal(t, []string{"5.6.7.8/32"}, last.Conditions.IPCIDRs)
+}
+
+func TestRulesService_RuleToggle_FlipsEnabled(t *testing.T) {
+	svc, _, _ := newRulesService(t)
+	gid, _ := svc.GroupAdd("Custom")
+	rid, _ := svc.RuleAdd(gid, makeRule(rules.ActionBlock, "1.2.3.4/32"))
+	require.NoError(t, svc.RuleToggle(rid))
+	v, _ := svc.List()
+	require.False(t, v.Groups[len(v.Groups)-1].Rules[0].Enabled)
+	require.NoError(t, svc.RuleToggle(rid))
+	v, _ = svc.List()
+	require.True(t, v.Groups[len(v.Groups)-1].Rules[0].Enabled)
+}
+
+func TestRulesService_RuleRemove_DeletesAcrossGroups(t *testing.T) {
+	svc, _, _ := newRulesService(t)
+	gid, _ := svc.GroupAdd("Custom")
+	rid, _ := svc.RuleAdd(gid, makeRule(rules.ActionBlock, "1.2.3.4/32"))
+	require.NoError(t, svc.RuleRemove(rid))
+	v, _ := svc.List()
+	require.Len(t, v.Groups[len(v.Groups)-1].Rules, 0)
+}
+
+func TestRulesService_RuleMove_BetweenGroups(t *testing.T) {
+	svc, _, _ := newRulesService(t)
+	src, _ := svc.GroupAdd("A")
+	dst, _ := svc.GroupAdd("B")
+	rid, _ := svc.RuleAdd(src, makeRule(rules.ActionBlock, "1.2.3.4/32"))
+	require.NoError(t, svc.RuleMove(rid, dst))
+	v, _ := svc.List()
+	var srcLen int
+	var moved hub.RuleView
+	var movedFound bool
+	for _, g := range v.Groups {
+		if g.ID == src {
+			srcLen = len(g.Rules)
+		}
+		if g.ID == dst {
+			require.Len(t, g.Rules, 1)
+			moved = g.Rules[0]
+			movedFound = true
+		}
+	}
+	require.Equal(t, 0, srcLen)
+	require.True(t, movedFound)
+	require.Equal(t, rid, moved.ID, "moved rule keeps its id")
+	require.Equal(t, "Test", moved.Name)
+	require.True(t, moved.Enabled)
+	require.Equal(t, "block", moved.Action)
+	require.Equal(t, []string{"1.2.3.4/32"}, moved.Conditions.IPCIDRs)
+}
+
+func TestRulesService_RuleMove_RejectsLockedTarget(t *testing.T) {
+	svc, _, _ := newRulesService(t)
+	src, _ := svc.GroupAdd("A")
+	rid, _ := svc.RuleAdd(src, makeRule(rules.ActionBlock, "1.2.3.4/32"))
+	require.ErrorContains(t, svc.RuleMove(rid, "safety"), "safety group is locked")
+}
