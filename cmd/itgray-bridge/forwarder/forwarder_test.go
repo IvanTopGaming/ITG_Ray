@@ -46,7 +46,7 @@ func waitForEvents(t *testing.T, e *recordingEmitter, n int) []emittedEvent {
 	return nil
 }
 
-func TestForwarderTranslatesAllSevenTopics(t *testing.T) {
+func TestForwarderTranslatesAllEightTopics(t *testing.T) {
 	cases := []struct {
 		hubName  string
 		dotTopic string
@@ -59,6 +59,7 @@ func TestForwarderTranslatesAllSevenTopics(t *testing.T) {
 		{hub.EventSubSynced, "sub.synced", map[string]any{"id": "u1"}},
 		{hub.EventProbeResult, "probe.result", map[string]any{"id": "s1", "ms": 42.0}},
 		{hub.EventServersChanged, "servers.changed", map[string]any{}},
+		{hub.EventRulesChanged, "rules.changed", map[string]any{"version": 3.0}},
 	}
 
 	h := hub.New()
