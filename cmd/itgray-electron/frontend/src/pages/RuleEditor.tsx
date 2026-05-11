@@ -1,10 +1,11 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import type React from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import { useRules, rulesEditRule, rulesMoveRule, type RuleView, type GroupView, type DomainMatcher, type PortSpec } from "@/lib/rulesStore";
 import { Segmented } from "@/components/controls/Segmented";
 import { Toggle } from "@/components/controls/Toggle";
+import { ConfirmDialog } from "@/components/controls/ConfirmDialog";
 
 export function RuleEditor() {
   const { ruleId = "" } = useParams<{ ruleId: string }>();
@@ -14,6 +15,8 @@ export function RuleEditor() {
   const initial = useMemo(() => findRule(groups, ruleId), [groups, ruleId]);
   const [draft, setDraft] = useState<RuleView | null>(initial.rule);
   const [groupId, setGroupId] = useState<string>(initial.groupId);
+  const initialSnapshot = useRef(JSON.stringify({ rule: initial.rule, groupId: initial.groupId }));
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   if (!draft) {
     return (
@@ -35,13 +38,21 @@ export function RuleEditor() {
     navigate("/routing");
   }
 
+  const currentSerialized = JSON.stringify({ rule: draft, groupId });
+  const dirty = initialSnapshot.current !== currentSerialized;
+
+  function handleBack() {
+    if (dirty) setConfirmDiscard(true);
+    else navigate("/routing");
+  }
+
   const userGroups = groups.filter((g) => !g.locked);
 
   return (
     <div className="flex flex-col gap-4">
       <header className="flex items-center justify-between">
         <button
-          onClick={() => navigate("/routing")}
+          onClick={handleBack}
           className="flex items-center gap-1 text-[12px] text-white/55 hover:text-white/90"
         >
           <ChevronLeft className="h-3.5 w-3.5" /> Routing
@@ -151,6 +162,15 @@ export function RuleEditor() {
           onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, protocols: next } })}
         />
       </Section>
+      <ConfirmDialog
+        open={confirmDiscard}
+        title="Discard changes?"
+        description="You have unsaved changes. Leave anyway?"
+        confirmLabel="Discard"
+        confirmVariant="danger"
+        onClose={() => setConfirmDiscard(false)}
+        onConfirm={() => navigate("/routing")}
+      />
     </div>
   );
 }

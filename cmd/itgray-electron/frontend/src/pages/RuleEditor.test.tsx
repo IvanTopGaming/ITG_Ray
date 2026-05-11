@@ -138,6 +138,14 @@ describe("RuleEditor", () => {
     }));
   });
 
+  it("shows a discard-changes confirm when leaving with unsaved edits", async () => {
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user], loading: false, lastError: null, bootstrapped: true });
+    renderEditor("r1");
+    await userEvent.type(screen.getByLabelText("Name"), " edit");
+    await userEvent.click(screen.getByRole("button", { name: /routing/i }));
+    expect(screen.getByText(/discard.*changes/i)).toBeInTheDocument();
+  });
+
   it("saves process conditions, trimmed on blur", async () => {
     const userWithRule = { ...user, rules: [{ id: "r1", name: "T", enabled: true, action: "proxy", conditions: { processes: [] } }] };
     useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, userWithRule], loading: false, lastError: null, bootstrapped: true });
