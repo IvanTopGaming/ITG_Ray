@@ -17,6 +17,12 @@ const Subscriptions = lazy(() =>
 const Settings = lazy(() =>
   import("./pages/Settings").then((m) => ({ default: m.Settings })),
 );
+const Routing = lazy(() =>
+  import("./pages/Routing").then((m) => ({ default: m.Routing })),
+);
+const RuleEditor = lazy(() =>
+  import("./pages/RuleEditor").then((m) => ({ default: m.RuleEditor })),
+);
 
 export default function App() {
   return (
@@ -27,6 +33,8 @@ export default function App() {
             <Route index element={<Dashboard />} />
             <Route path="servers" element={<Servers />} />
             <Route path="subscriptions" element={<Subscriptions />} />
+            <Route path="routing" element={<Routing />} />
+            <Route path="routing/:ruleId" element={<RuleEditor />} />
             <Route path="settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
