@@ -26,7 +26,7 @@ vi.mock("react-router-dom", async () => {
   return { ...actual, useNavigate: () => navigateMock };
 });
 
-import { Routing } from "./Routing";
+import { Routing, reorderRules } from "./Routing";
 
 const safety = {
   id: "safety",
@@ -137,5 +137,38 @@ describe("Routing page — add rule", () => {
     });
     renderRouting();
     expect(screen.queryByRole("button", { name: /add rule/i })).not.toBeInTheDocument();
+  });
+});
+
+describe("reorderRules", () => {
+  it("moves an element within a group", () => {
+    const g = {
+      id: "g1",
+      name: "G",
+      locked: false,
+      enabled: true,
+      rules: [
+        { id: "a", name: "A", enabled: true, action: "proxy", conditions: { ip_cidrs: ["1.0.0.0/8"] } },
+        { id: "b", name: "B", enabled: true, action: "proxy", conditions: { ip_cidrs: ["2.0.0.0/8"] } },
+        { id: "c", name: "C", enabled: true, action: "proxy", conditions: { ip_cidrs: ["3.0.0.0/8"] } },
+      ],
+    } as any;
+    const out = reorderRules([safety as any, g], "g1", 0, 2);
+    expect(out[1].rules.map((r: any) => r.id)).toEqual(["b", "c", "a"]);
+  });
+
+  it("returns groups unchanged when groupId not found", () => {
+    const g = {
+      id: "g1",
+      name: "G",
+      locked: false,
+      enabled: true,
+      rules: [
+        { id: "a", name: "A", enabled: true, action: "proxy", conditions: {} },
+        { id: "b", name: "B", enabled: true, action: "proxy", conditions: {} },
+      ],
+    } as any;
+    const out = reorderRules([g], "missing", 0, 1);
+    expect(out[0].rules.map((r: any) => r.id)).toEqual(["a", "b"]);
   });
 });

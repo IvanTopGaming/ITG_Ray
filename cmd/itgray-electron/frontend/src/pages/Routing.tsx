@@ -1,12 +1,16 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Lock, ChevronRight, Plus, MoreHorizontal } from "lucide-react";
+import { Lock, ChevronRight, Plus, MoreHorizontal, GripVertical } from "lucide-react";
+import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   useRules,
   rulesAddGroup,
   rulesEditGroup,
   rulesRemoveGroup,
   rulesAddRule,
+  rulesReplaceAll,
   type GroupView,
   type RuleView,
 } from "@/lib/rulesStore";
@@ -14,9 +18,32 @@ import { Toggle } from "@/components/controls/Toggle";
 import { ConfirmDialog } from "@/components/controls/ConfirmDialog";
 import { cn } from "@/lib/cn";
 
+export function reorderRules(groups: GroupView[], groupId: string, fromIdx: number, toIdx: number): GroupView[] {
+  return groups.map((g) => {
+    if (g.id !== groupId) return g;
+    const next = g.rules.slice();
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    return { ...g, rules: next };
+  });
+}
+
 export function Routing() {
-  const { groups, lastError } = useRules();
+  const { groups, defaultAction, lastError } = useRules();
   const [adding, setAdding] = useState(false);
+
+  function handleRuleDragEnd(groupId: string) {
+    return (e: DragEndEvent) => {
+      if (!e.over || e.over.id === e.active.id) return;
+      const group = groups.find((g) => g.id === groupId);
+      if (!group) return;
+      const fromIdx = group.rules.findIndex((r) => r.id === e.active.id);
+      const toIdx = group.rules.findIndex((r) => r.id === e.over!.id);
+      if (fromIdx < 0 || toIdx < 0) return;
+      const nextGroups = reorderRules(groups, groupId, fromIdx, toIdx);
+      void rulesReplaceAll({ defaultAction, groups: nextGroups });
+    };
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -39,7 +66,7 @@ export function Routing() {
         </div>
       )}
       {adding && <AddGroupRow onCancel={() => setAdding(false)} />}
-      {groups.map((g) => <GroupCard key={g.id} group={g} />)}
+      {groups.map((g) => <GroupCard key={g.id} group={g} onRuleDragEnd={handleRuleDragEnd(g.id)} />)}
     </div>
   );
 }
@@ -86,7 +113,7 @@ function AddGroupRow({ onCancel }: { onCancel: () => void }) {
   );
 }
 
-function GroupCard({ group }: { group: GroupView }) {
+function GroupCard({ group, onRuleDragEnd }: { group: GroupView; onRuleDragEnd: (e: DragEndEvent) => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -169,10 +196,22 @@ function GroupCard({ group }: { group: GroupView }) {
           <div className="rounded-md border border-white/[0.06] bg-white/[0.02] px-3 py-3 text-[11.5px] text-white/45">
             No rules in this group.
           </div>
-        ) : (
+        ) : group.locked ? (
           <ul className="flex flex-col gap-1">
-            {group.rules.map((r) => <RuleRow key={r.id} groupLocked={group.locked} rule={r} />)}
+            {group.rules.map((r) => (
+              <li key={r.id}>
+                <RuleRow rule={r} groupLocked />
+              </li>
+            ))}
           </ul>
+        ) : (
+          <DndContext collisionDetection={closestCenter} onDragEnd={onRuleDragEnd}>
+            <SortableContext items={group.rules.map((r) => r.id)} strategy={verticalListSortingStrategy}>
+              <ul className="flex flex-col gap-1">
+                {group.rules.map((r) => <SortableRuleRow key={r.id} rule={r} />)}
+              </ul>
+            </SortableContext>
+          </DndContext>
         )}
         {!group.locked && (
           <button
@@ -230,13 +269,38 @@ function InlineRename({ initial, onCancel, onCommit }: { initial: string; onCanc
   );
 }
 
+function SortableRuleRow({ rule }: { rule: RuleView }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: rule.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.7 : 1,
+  };
+  return (
+    <li ref={setNodeRef} style={style} className="flex items-center gap-2">
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        aria-label={`Drag ${rule.name}`}
+        className="cursor-grab text-white/35 hover:text-white/65"
+      >
+        <GripVertical className="h-3.5 w-3.5" />
+      </button>
+      <div className="flex-1">
+        <RuleRow rule={rule} groupLocked={false} />
+      </div>
+    </li>
+  );
+}
+
 function RuleRow({ rule, groupLocked }: { rule: RuleView; groupLocked: boolean }) {
   const actionStyle =
     rule.action === "proxy" ? "bg-sky-500/20 text-sky-200"
     : rule.action === "direct" ? "bg-amber-500/20 text-amber-200"
     : "bg-rose-500/20 text-rose-200";
   return (
-    <li
+    <div
       className={cn(
         "group flex items-center justify-between rounded-md px-3 py-2 text-[12.5px]",
         groupLocked ? "bg-white/[0.02]" : "bg-white/[0.04] hover:bg-white/[0.06] cursor-pointer",
@@ -250,7 +314,7 @@ function RuleRow({ rule, groupLocked }: { rule: RuleView; groupLocked: boolean }
         <span className="text-[11px] text-white/45">{summarise(rule.conditions)}</span>
       </div>
       {!groupLocked && <ChevronRight className="h-3.5 w-3.5 text-white/40 transition-transform group-hover:translate-x-0.5" />}
-    </li>
+    </div>
   );
 }
 
