@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
+import type React from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
-import { useRules, rulesEditRule, rulesMoveRule, type RuleView, type GroupView } from "@/lib/rulesStore";
+import { useRules, rulesEditRule, rulesMoveRule, type RuleView, type GroupView, type DomainMatcher } from "@/lib/rulesStore";
 import { Segmented } from "@/components/controls/Segmented";
 import { Toggle } from "@/components/controls/Toggle";
 
@@ -90,8 +91,75 @@ export function RuleEditor() {
           </select>
         </label>
       </div>
-      {/* Condition sections land in Tasks 21-26 */}
+      <Section
+        title="Domains"
+        count={draft.conditions.domains?.length ?? 0}
+        defaultOpen={(draft.conditions.domains?.length ?? 0) > 0}
+      >
+        <DomainsSection
+          value={draft.conditions.domains ?? []}
+          onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, domains: next } })}
+        />
+      </Section>
     </div>
+  );
+}
+
+function Section({ title, count, defaultOpen, children }: { title: string; count: number; defaultOpen: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section className="glass-regular flex flex-col gap-2 rounded-2xl p-4">
+      <button type="button" onClick={() => setOpen(!open)} className="flex items-center justify-between text-left">
+        <span className="text-[13px] font-medium text-white/90">
+          <span className="mr-1 inline-block w-3">{open ? "▼" : "▶"}</span>
+          {title}{count > 0 ? ` (${count})` : ` · empty`}
+        </span>
+      </button>
+      {open && <div className="flex flex-col gap-2 pt-1">{children}</div>}
+    </section>
+  );
+}
+
+function DomainsSection({ value, onChange }: { value: DomainMatcher[]; onChange: (next: DomainMatcher[]) => void }) {
+  return (
+    <>
+      {value.map((m, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <select
+            aria-label="Domain matcher kind"
+            value={m.kind}
+            onChange={(e) => onChange(value.map((x, j) => j === i ? { ...x, kind: e.target.value as DomainMatcher["kind"] } : x))}
+            className="rounded-md border border-white/10 bg-[#1c1f2a] px-2 py-1 text-[12px]"
+          >
+            <option value="exact">exact</option>
+            <option value="suffix">suffix</option>
+            <option value="keyword">keyword</option>
+            <option value="regex">regex</option>
+          </select>
+          <input
+            aria-label="Domain matcher value"
+            value={m.value}
+            onChange={(e) => onChange(value.map((x, j) => j === i ? { ...x, value: e.target.value } : x))}
+            className="flex-1 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
+          />
+          <button
+            type="button"
+            onClick={() => onChange(value.filter((_, j) => j !== i))}
+            aria-label={`Remove domain matcher ${i + 1}`}
+            className="text-white/45 hover:text-rose-300"
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange([...value, { kind: "suffix", value: "" }])}
+        className="self-start rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08]"
+      >
+        + Add domain matcher
+      </button>
+    </>
   );
 }
 

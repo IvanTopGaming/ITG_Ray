@@ -57,4 +57,26 @@ describe("RuleEditor", () => {
     await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
     expect(rulesEditRuleMock).toHaveBeenCalledWith(expect.objectContaining({ id: "r1", name: "Block ads v2", action: "block" }));
   });
+
+  it("adds a domain matcher row on +Add", async () => {
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user], loading: false, lastError: null, bootstrapped: true });
+    renderEditor("r1");
+    await userEvent.click(screen.getByRole("button", { name: /domains/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add domain matcher/i }));
+    expect(screen.getAllByLabelText(/domain matcher kind/i)).toHaveLength(1);
+  });
+
+  it("saves domain matcher conditions", async () => {
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user], loading: false, lastError: null, bootstrapped: true });
+    rulesEditRuleMock.mockResolvedValue(undefined);
+    renderEditor("r1");
+    await userEvent.click(screen.getByRole("button", { name: /domains/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add domain matcher/i }));
+    await userEvent.selectOptions(screen.getByLabelText(/domain matcher kind/i), "suffix");
+    await userEvent.type(screen.getByLabelText(/domain matcher value/i), "example.com");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    expect(rulesEditRuleMock).toHaveBeenCalledWith(expect.objectContaining({
+      conditions: expect.objectContaining({ domains: [{ kind: "suffix", value: "example.com" }] }),
+    }));
+  });
 });
