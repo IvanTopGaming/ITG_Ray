@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Lock, ChevronRight, Plus, MoreHorizontal } from "lucide-react";
 import {
   useRules,
   rulesAddGroup,
   rulesEditGroup,
   rulesRemoveGroup,
+  rulesAddRule,
   type GroupView,
   type RuleView,
 } from "@/lib/rulesStore";
@@ -88,6 +90,17 @@ function GroupCard({ group }: { group: GroupView }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  const navigate = useNavigate();
+
+  async function handleAddRule() {
+    const id = await rulesAddRule(group.id, {
+      name: "New rule",
+      enabled: true,
+      action: "proxy",
+      conditions: { ip_cidrs: ["0.0.0.0/0"] },
+    });
+    navigate(`/routing/${id}`);
+  }
 
   return (
     <>
@@ -160,6 +173,15 @@ function GroupCard({ group }: { group: GroupView }) {
           <ul className="flex flex-col gap-1">
             {group.rules.map((r) => <RuleRow key={r.id} groupLocked={group.locked} rule={r} />)}
           </ul>
+        )}
+        {!group.locked && (
+          <button
+            type="button"
+            onClick={handleAddRule}
+            className="self-start rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08] hover:text-white/90"
+          >
+            + Add rule
+          </button>
         )}
       </section>
       <ConfirmDialog

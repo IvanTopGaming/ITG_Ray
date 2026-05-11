@@ -7,6 +7,7 @@ const useRulesMock = vi.fn();
 const rulesAddGroupMock = vi.fn();
 const rulesEditGroupMock = vi.fn();
 const rulesRemoveGroupMock = vi.fn();
+const rulesAddRuleMock = vi.fn();
 vi.mock("@/lib/rulesStore", async () => {
   const actual = await vi.importActual<any>("@/lib/rulesStore");
   return {
@@ -15,7 +16,14 @@ vi.mock("@/lib/rulesStore", async () => {
     rulesAddGroup: (...a: any[]) => rulesAddGroupMock(...a),
     rulesEditGroup: (...a: any[]) => rulesEditGroupMock(...a),
     rulesRemoveGroup: (...a: any[]) => rulesRemoveGroupMock(...a),
+    rulesAddRule: (...a: any[]) => rulesAddRuleMock(...a),
   };
+});
+
+const navigateMock = vi.fn();
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<any>("react-router-dom");
+  return { ...actual, useNavigate: () => navigateMock };
 });
 
 import { Routing } from "./Routing";
@@ -97,5 +105,37 @@ describe("Routing page — group actions", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: /delete/i }));
     await userEvent.click(screen.getByRole("button", { name: /^delete$/i }));
     expect(rulesRemoveGroupMock).toHaveBeenCalledWith("g1");
+  });
+});
+
+describe("Routing page — add rule", () => {
+  beforeEach(() => {
+    rulesAddRuleMock.mockReset();
+    navigateMock.mockReset();
+  });
+
+  it("+ Add rule creates a stub and navigates to the editor", async () => {
+    useRulesMock.mockReturnValue({
+      defaultAction: "proxy",
+      groups: [safety, { ...user, id: "g1" }],
+      loading: false, lastError: null, bootstrapped: true,
+    });
+    rulesAddRuleMock.mockResolvedValue("r-new");
+    renderRouting();
+    await userEvent.click(screen.getByRole("button", { name: /add rule/i }));
+    expect(rulesAddRuleMock).toHaveBeenCalledWith("g1", expect.objectContaining({
+      action: "proxy", enabled: true, name: expect.any(String),
+    }));
+    expect(navigateMock).toHaveBeenCalledWith("/routing/r-new");
+  });
+
+  it("locked groups do not show + Add rule", () => {
+    useRulesMock.mockReturnValue({
+      defaultAction: "proxy",
+      groups: [safety],
+      loading: false, lastError: null, bootstrapped: true,
+    });
+    renderRouting();
+    expect(screen.queryByRole("button", { name: /add rule/i })).not.toBeInTheDocument();
   });
 });
