@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
+import { createPortal } from "react-dom";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
@@ -396,12 +397,22 @@ function AddConditionButton({
   prominent?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{ left: number; top: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open || !btnRef.current) return;
+    const r = btnRef.current.getBoundingClientRect();
+    setCoords({ left: r.left, top: r.bottom + 4 });
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t) || popRef.current?.contains(t)) return;
+      setOpen(false);
     };
     const esc = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
@@ -417,8 +428,9 @@ function AddConditionButton({
   if (availableTypes.length === 0) return null;
 
   return (
-    <div ref={ref} className="relative inline-block self-start">
+    <>
       <motion.button
+        ref={btnRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
         whileHover={{ y: -1 }}
@@ -428,38 +440,38 @@ function AddConditionButton({
         aria-expanded={open}
         className={
           prominent
-            ? "rounded-lg border border-sky-400/30 bg-sky-500/10 px-4 py-2 text-[12.5px] font-medium text-sky-200 hover:bg-sky-500/15"
-            : "rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08]"
+            ? "self-start rounded-lg border border-sky-400/30 bg-sky-500/10 px-4 py-2 text-[12.5px] font-medium text-sky-200 hover:bg-sky-500/15"
+            : "self-start rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08]"
         }
       >
         + Add condition
       </motion.button>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            role="menu"
-            initial={{ opacity: 0, y: -4, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -4, scale: 0.96 }}
-            transition={{ duration: 0.16, ease: SNAP_EASE }}
-            className="absolute left-0 z-30 mt-1 flex w-56 flex-col rounded-lg border border-white/10 bg-[#1c1f2a] p-1 shadow-xl"
-          >
-            {availableTypes.map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                role="menuitem"
-                onClick={() => { onPick(t.key); setOpen(false); }}
-                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] text-white/85 hover:bg-white/[0.06]"
-              >
-                <span aria-hidden className="text-[14px]">{t.icon}</span>
-                <span>{t.label}</span>
-              </button>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+      {open && coords && createPortal(
+        <motion.div
+          ref={popRef}
+          role="menu"
+          initial={{ opacity: 0, y: -4, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.16, ease: SNAP_EASE }}
+          style={{ position: "fixed", left: coords.left, top: coords.top, zIndex: 1000 }}
+          className="flex w-56 flex-col rounded-lg border border-white/15 bg-[#1c1f2a] p-1 shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
+        >
+          {availableTypes.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              role="menuitem"
+              onClick={() => { onPick(t.key); setOpen(false); }}
+              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] text-white/85 hover:bg-white/[0.06]"
+            >
+              <span aria-hidden className="text-[14px]">{t.icon}</span>
+              <span>{t.label}</span>
+            </button>
+          ))}
+        </motion.div>,
+        document.body,
+      )}
+    </>
   );
 }
 
