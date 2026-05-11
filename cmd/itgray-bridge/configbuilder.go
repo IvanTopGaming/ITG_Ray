@@ -1,13 +1,8 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io/fs"
 	"net"
-	"os"
-	"path/filepath"
 
 	"github.com/itg-team/itg-ray/internal/chainctl"
 	"github.com/itg-team/itg-ray/internal/config"
@@ -42,34 +37,18 @@ func resolveServerIPv4(host string) (string, error) {
 	return "", fmt.Errorf("no IPv4 address for server host %q", host)
 }
 
-// loadRulesFromDataDir mirrors cmd/itgray-cli/rules.go's loadRules: a
-// missing file means "use the default safety+user model", an unparsable
-// file degrades silently to "proxy by default" so a corrupt rules.json
-// can't block Connect. The GUI rule editor will land in a later task; for
-// now this is the source of routing model truth.
-func loadRulesFromDataDir(dataDir string) rules.Model {
-	path := filepath.Join(dataDir, "rules.json")
-	b, err := os.ReadFile(path) //nolint:gosec // dataDir is controlled by the user-config dir resolver
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return rules.Model{
-				DefaultAction: rules.ActionProxy,
-				Groups: []rules.Group{
-					{ID: "safety", Name: "Safety", Locked: true, Enabled: true, Rules: []rules.Rule{
-						{ID: "private", Name: "Private IPs", Enabled: true, Action: rules.ActionDirect,
-							Conditions: rules.Conditions{IPCIDRs: []string{
-								"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8",
-								"fc00::/7", "fe80::/10", "224.0.0.0/4",
-							}}},
-					}},
-					{ID: "user", Name: "My Rules", Enabled: true},
-				},
-			}
-		}
-		return rules.Model{DefaultAction: rules.ActionProxy}
+// loadRulesFromDataDir reads the user's rules.json via rules.Store,
+// returning the canonical Safety + My Rules default when the file is
+// missing or corrupt. The historical inline default now lives in
+// rules.DefaultModel so the RulesService bindings and the chain
+// builder agree on the same on-disk shape.
+func loadRulesFromDataDir(dataDir string, store *rules.Store) rules.Model {
+	if store != nil {
+		m, _ := store.Load()
+		return m
 	}
-	var m rules.Model
-	_ = json.Unmarshal(b, &m)
+	s := rules.NewStore(dataDir)
+	m, _ := s.Load()
 	return m
 }
 
@@ -82,7 +61,7 @@ func loadRulesFromDataDir(dataDir string) rules.Model {
 // Network values come from chainctl's per-Connect read of config.Network
 // (Tier 2b runtime wiring). chainctl.{ClampMTU,ResolveDNS,MapIPv6Strategy}
 // translate user-facing knobs into sing-box-compatible shapes.
-func buildConfigs(dataDir string) chainctl.ConfigBuilder {
+func buildConfigs(dataDir string, store *rules.Store) chainctl.ConfigBuilder {
 	return func(srv *server.Server, mode chainctl.Mode, net config.Network) (singboxJSON, xrayJSON []byte, err error) {
 		var sbInput configgen.SingboxInput
 		switch mode {
@@ -98,7 +77,7 @@ func buildConfigs(dataDir string) chainctl.ConfigBuilder {
 				DNSUpstreams:  chainctl.ResolveDNS(net.DNS),
 				AllowLAN:      net.AllowLAN,
 				IPv6Strategy:  chainctl.MapIPv6Strategy(net.IPv6Mode),
-				Rules:         loadRulesFromDataDir(dataDir),
+				Rules:         loadRulesFromDataDir(dataDir, store),
 			}
 		case chainctl.ModeSysProxy:
 			sbInput = configgen.SingboxInput{
@@ -110,7 +89,7 @@ func buildConfigs(dataDir string) chainctl.ConfigBuilder {
 				DNSUpstreams:     chainctl.ResolveDNS(net.DNS),
 				AllowLAN:         net.AllowLAN,
 				IPv6Strategy:     chainctl.MapIPv6Strategy(net.IPv6Mode),
-				Rules:            loadRulesFromDataDir(dataDir),
+				Rules:            loadRulesFromDataDir(dataDir, store),
 			}
 		default:
 			return nil, nil, fmt.Errorf("buildConfigs: unknown mode %q", mode)

@@ -20,9 +20,10 @@ import (
 	"github.com/itg-team/itg-ray/cmd/itgray-bridge/handlers"
 	"github.com/itg-team/itg-ray/internal/bindings"
 	"github.com/itg-team/itg-ray/internal/chainctl"
-	"github.com/itg-team/itg-ray/internal/hub"
 	"github.com/itg-team/itg-ray/internal/config"
+	"github.com/itg-team/itg-ray/internal/hub"
 	"github.com/itg-team/itg-ray/internal/hwid"
+	"github.com/itg-team/itg-ray/internal/rules"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/subscription"
 	"github.com/itg-team/itg-ray/internal/sysproxy"
@@ -166,13 +167,19 @@ func main() {
 		return c.Network, nil
 	}
 
+	ruleStore := rules.NewStore(dataDir)
+	rulesSvc := bindings.NewRulesService(bindings.RulesDeps{
+		Store: ruleStore,
+		Hub:   h,
+	})
+
 	chainCtrl := chainctl.New(&chainctl.Deps{
 		DataDir:      dataDir,
 		ServerStore:  serverStoreGetter{ss: serverStore},
 		Helper:       helperClient,
 		Sysproxy:     sysproxy.New(),
 		Hub:          h,
-		BuildConfigs: buildConfigs(dataDir),
+		BuildConfigs: buildConfigs(dataDir, ruleStore),
 		Network:      networkLoader,
 	})
 
@@ -241,6 +248,18 @@ func main() {
 	d.Register("subs.remove", subs.Remove)
 	d.Register("subs.syncOne", subs.SyncOne)
 	d.Register("subs.syncAll", subs.SyncAll)
+
+	rulesH := handlers.RulesHandlers{Svc: rulesSvc}
+	d.Register("rules.list", rulesH.List)
+	d.Register("rules.replaceAll", rulesH.ReplaceAll)
+	d.Register("rules.groupAdd", rulesH.GroupAdd)
+	d.Register("rules.groupEdit", rulesH.GroupEdit)
+	d.Register("rules.groupRemove", rulesH.GroupRemove)
+	d.Register("rules.ruleAdd", rulesH.RuleAdd)
+	d.Register("rules.ruleEdit", rulesH.RuleEdit)
+	d.Register("rules.ruleRemove", rulesH.RuleRemove)
+	d.Register("rules.ruleToggle", rulesH.RuleToggle)
+	d.Register("rules.ruleMove", rulesH.RuleMove)
 
 	run := handlers.RunHandlers{Svc: runSvc}
 	d.Register("run.connect", run.Connect)
