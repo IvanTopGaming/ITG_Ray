@@ -1,9 +1,11 @@
 // cmd/itgray-electron/frontend/src/lib/itg/runtime.ts
 //
-// Replaces wails-shim/runtime.ts. EventsOn now subscribes directly via
-// window.itg.on instead of going through the colon→dot translator,
-// because the renderer's call sites pass dotted topic names (matching
-// the protocol's EventTopic) directly. Window* + Quit are unchanged.
+// Replaces wails-shim/runtime.ts. EventsOn translates Wails-style colon
+// topic names ("vpn:status") to the dotted protocol topics ("vpn.status")
+// before subscribing through window.itg.on — the renderer's stores were
+// authored against the Wails event surface and still use colon. The
+// translation here keeps that contract working without touching every
+// call site. Window* + Quit are unchanged.
 
 declare global {
   interface Window {
@@ -21,8 +23,12 @@ type Callback = (payload: unknown) => void;
 
 const offByTopic = new Map<string, Map<Callback, () => void>>();
 
+function toBridgeTopic(name: string): string {
+  return name.replace(/:/g, ".");
+}
+
 export function EventsOn(topic: string, cb: Callback): () => void {
-  const off = window.itg.on(topic, cb);
+  const off = window.itg.on(toBridgeTopic(topic), cb);
   let perTopic = offByTopic.get(topic);
   if (!perTopic) {
     perTopic = new Map();
