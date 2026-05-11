@@ -228,9 +228,8 @@ function GroupCard({ group, onRuleDragEnd, dragHandle, allGroups }: { group: Gro
   return (
     <>
       <motion.section
-        layout
         variants={sectionVariants}
-        transition={{ duration: 0.18, ease: SNAP_EASE, layout: { duration: 0.22, ease: SNAP_EASE } }}
+        transition={{ duration: 0.18, ease: SNAP_EASE }}
         className={cn("glass-regular flex flex-col gap-2 rounded-2xl p-4", !group.enabled && "opacity-60")}
       >
         <header className="flex items-center justify-between">
