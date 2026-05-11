@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -91,8 +92,6 @@ func toRulesView(m rules.Model) hub.RulesView {
 // Used by T6/T7 mutations (Create rule, Create group) to mint
 // collision-resistant IDs without dragging in a UUID dependency.
 // Declared here so the helper lives next to its consumers.
-//
-//nolint:unused // consumed by Create* mutations landing in T6/T7.
 func newID(prefix string) string {
 	var b [2]byte
 	_, _ = rand.Read(b[:])
@@ -102,6 +101,103 @@ func newID(prefix string) string {
 // errLockedGroup is the sentinel returned by mutations that target the
 // safety group. Declared here so the upcoming T6/T7 handlers reach for
 // the same error string and renderer code can match on it.
-//
-//nolint:unused // consumed by Delete/Reorder mutations landing in T6/T7.
 var errLockedGroup = errors.New("safety group is locked")
+
+// GroupAdd appends a new enabled group with a freshly minted id and
+// publishes EventRulesChanged. The id shape is g<unix-ms>-<hex4>; the
+// renderer treats it as an opaque token.
+func (s *RulesService) GroupAdd(name string) (string, error) {
+	if strings.TrimSpace(name) == "" {
+		return "", errors.New("group name cannot be empty")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	m, err := s.store.Load()
+	if err != nil {
+		return "", err
+	}
+	id := newID("g")
+	m.Groups = append(m.Groups, rules.Group{
+		ID: id, Name: name, Enabled: true,
+	})
+	if err := s.store.Save(m); err != nil {
+		return "", err
+	}
+	s.publishChanged()
+	return id, nil
+}
+
+// GroupEdit renames a group and updates its enabled flag. The hardcoded
+// "safety" id and any group with Locked=true are rejected before Load
+// so we never half-mutate the model.
+func (s *RulesService) GroupEdit(id, name string, enabled bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if id == "safety" {
+		return errLockedGroup
+	}
+	m, err := s.store.Load()
+	if err != nil {
+		return err
+	}
+	idx := indexOfGroup(m, id)
+	if idx < 0 {
+		return fmt.Errorf("group not found: %s", id)
+	}
+	if m.Groups[idx].Locked {
+		return errLockedGroup
+	}
+	m.Groups[idx].Name = name
+	m.Groups[idx].Enabled = enabled
+	if err := s.store.Save(m); err != nil {
+		return err
+	}
+	s.publishChanged()
+	return nil
+}
+
+// GroupRemove deletes a non-locked group by id. Same guard as
+// GroupEdit: literal "safety" plus any Locked group are rejected.
+func (s *RulesService) GroupRemove(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if id == "safety" {
+		return errLockedGroup
+	}
+	m, err := s.store.Load()
+	if err != nil {
+		return err
+	}
+	idx := indexOfGroup(m, id)
+	if idx < 0 {
+		return fmt.Errorf("group not found: %s", id)
+	}
+	if m.Groups[idx].Locked {
+		return errLockedGroup
+	}
+	m.Groups = append(m.Groups[:idx], m.Groups[idx+1:]...)
+	if err := s.store.Save(m); err != nil {
+		return err
+	}
+	s.publishChanged()
+	return nil
+}
+
+// indexOfGroup returns the slice index of the group with the given id
+// or -1 if no match. Linear scan is fine — groups are user-visible and
+// expected to stay in the tens.
+func indexOfGroup(m rules.Model, id string) int {
+	for i := range m.Groups {
+		if m.Groups[i].ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+// publishChanged fires hub.EventRulesChanged so subscribed renderers
+// can refetch via List. Centralized so every mutation path uses the
+// same event name.
+func (s *RulesService) publishChanged() {
+	s.hub.Publish(hub.Event{Name: hub.EventRulesChanged})
+}
