@@ -81,6 +81,11 @@ export class BridgeSupervisor extends EventEmitter {
     this.restartCount++;
     if (this.restartCount > 5) {
       this.setState("failed", `bridge crashed ${this.restartCount}x in 60s (last: code=${code} signal=${signal})`);
+      // Clear references so a follow-up stop() returns immediately
+      // instead of waiting the 5s exit-event timeout against a dead
+      // process. Mirrors the restart branch's cleanup below.
+      this.child = undefined;
+      this.client = undefined;
       return;
     }
     const backoff = [1000, 5000, 30_000][Math.min(this.restartCount - 1, 2)];
