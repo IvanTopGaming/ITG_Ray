@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, type HTMLAttributes, type SyntheticEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { Lock, ChevronRight, Plus, MoreHorizontal, GripVertical } from "lucide-react";
-import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
@@ -66,6 +66,14 @@ export function Routing() {
   const { groups, defaultAction, lastError } = useRules();
   const [adding, setAdding] = useState(false);
 
+  // PointerSensor with a 3px activation threshold: drag starts as soon
+  // as the pointer moves enough to indicate intent, but a stray click
+  // on the handle (e.g. user just trying to focus or hover) doesn't
+  // accidentally initiate a drag.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
+  );
+
   const safetyGroup = groups.find((g) => g.id === "safety");
   const userGroups = groups.filter((g) => g.id !== "safety");
 
@@ -125,7 +133,7 @@ export function Routing() {
         {adding && <AddGroupRow key="add-group-row" onCancel={() => setAdding(false)} />}
       </AnimatePresence>
       {safetyGroup && <GroupCard group={safetyGroup} onRuleDragEnd={() => {}} allGroups={groups} />}
-      <DndContext collisionDetection={closestCenter} onDragEnd={onGroupDragEnd}>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onGroupDragEnd}>
         <SortableContext items={userGroups.map((g) => g.id)} strategy={verticalListSortingStrategy}>
           {userGroups.map((g) => (
             <SortableGroupCard
@@ -218,6 +226,9 @@ function GroupCard({ group, onRuleDragEnd, dragHandle, allGroups }: { group: Gro
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const navigate = useNavigate();
+  const ruleSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
+  );
 
   function handleAddRule() {
     // Don't persist a stub on the server — navigate to the editor in
@@ -240,9 +251,9 @@ function GroupCard({ group, onRuleDragEnd, dragHandle, allGroups }: { group: Gro
                 {...dragHandle.attributes}
                 {...dragHandle.listeners}
                 aria-label={`Drag ${group.name}`}
-                className="cursor-grab text-white/35 hover:text-white/65"
+                className="-ml-1 cursor-grab rounded p-1.5 text-white/35 hover:bg-white/[0.06] hover:text-white/80 active:cursor-grabbing"
               >
-                <GripVertical className="h-3.5 w-3.5" />
+                <GripVertical className="h-4 w-4" />
               </button>
             )}
             {group.locked && <Lock aria-label="locked" className="h-3.5 w-3.5 text-white/55" />}
@@ -326,7 +337,7 @@ function GroupCard({ group, onRuleDragEnd, dragHandle, allGroups }: { group: Gro
             ))}
           </ul>
         ) : (
-          <DndContext collisionDetection={closestCenter} onDragEnd={onRuleDragEnd}>
+          <DndContext sensors={ruleSensors} collisionDetection={closestCenter} onDragEnd={onRuleDragEnd}>
             <SortableContext items={group.rules.map((r) => r.id)} strategy={verticalListSortingStrategy}>
               <ul className="flex flex-col gap-1">
                 {group.rules.map((r) => <SortableRuleRow key={r.id} rule={r} group={group} allGroups={allGroups} />)}
@@ -421,9 +432,9 @@ function SortableRuleRow({ rule, group, allGroups }: { rule: RuleView; group: Gr
         {...attributes}
         {...listeners}
         aria-label={`Drag ${rule.name}`}
-        className="cursor-grab text-white/35 hover:text-white/65"
+        className="cursor-grab rounded p-1.5 text-white/35 hover:bg-white/[0.06] hover:text-white/80 active:cursor-grabbing"
       >
-        <GripVertical className="h-3.5 w-3.5" />
+        <GripVertical className="h-4 w-4" />
       </button>
       <div className="flex-1">
         <RuleRow rule={rule} groupLocked={false} group={group} allGroups={allGroups} />
