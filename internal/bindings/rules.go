@@ -353,3 +353,67 @@ func findRule(m rules.Model, id string) (groupIdx, ruleIdx int) {
 	}
 	return -1, -1
 }
+
+// ReplaceAll atomically swaps the on-disk model. Validates every rule
+// before writing. Refuses to mutate the safety group's identity (name,
+// enabled, rules); the caller may pass the existing safety group
+// verbatim but cannot change it. Use this for drag-reorder events
+// that touch many positions at once.
+func (s *RulesService) ReplaceAll(next rules.Model) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for gi := range next.Groups {
+		for ri := range next.Groups[gi].Rules {
+			if err := next.Groups[gi].Rules[ri].Validate(); err != nil {
+				return err
+			}
+		}
+	}
+	cur, err := s.store.Load()
+	if err != nil {
+		return err
+	}
+	if err := guardSafetyUnchanged(cur, next); err != nil {
+		return err
+	}
+	if err := s.store.Save(next); err != nil {
+		return err
+	}
+	s.publishChanged()
+	return nil
+}
+
+// guardSafetyUnchanged rejects ReplaceAll calls that try to rename
+// the safety group, change its rules, or drop it entirely. The
+// rendering layer never edits Safety, so any divergence here is a
+// bug or a malicious client.
+func guardSafetyUnchanged(cur, next rules.Model) error {
+	var curSafety, nextSafety *rules.Group
+	for i := range cur.Groups {
+		if cur.Groups[i].ID == "safety" {
+			curSafety = &cur.Groups[i]
+		}
+	}
+	for i := range next.Groups {
+		if next.Groups[i].ID == "safety" {
+			nextSafety = &next.Groups[i]
+		}
+	}
+	if curSafety == nil {
+		return nil // store had no safety group; nothing to guard
+	}
+	if nextSafety == nil {
+		return errLockedGroup
+	}
+	if nextSafety.Name != curSafety.Name ||
+		nextSafety.Enabled != curSafety.Enabled ||
+		len(nextSafety.Rules) != len(curSafety.Rules) {
+		return errLockedGroup
+	}
+	for i := range curSafety.Rules {
+		if curSafety.Rules[i].ID != nextSafety.Rules[i].ID {
+			return errLockedGroup
+		}
+	}
+	return nil
+}

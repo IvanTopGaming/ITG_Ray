@@ -216,3 +216,59 @@ func TestRulesService_RuleMove_RejectsLockedTarget(t *testing.T) {
 	rid, _ := svc.RuleAdd(src, makeRule(rules.ActionBlock, "1.2.3.4/32"))
 	require.ErrorContains(t, svc.RuleMove(rid, "safety"), "safety group is locked")
 }
+
+func TestRulesService_ReplaceAll_PersistsModelAtomically(t *testing.T) {
+	svc, _, h := newRulesService(t)
+	rcv := h.Subscribe(4)
+	defer h.Unsubscribe(rcv)
+	m := rules.Model{
+		DefaultAction: rules.ActionProxy,
+		Groups: []rules.Group{
+			{ID: "safety", Name: "Safety", Locked: true, Enabled: true, Rules: []rules.Rule{
+				// Rule ID must match the canonical "private" id from
+				// rules.DefaultModel so the strict guardSafetyUnchanged
+				// check passes — the renderer always sends back exactly
+				// what List returned for Safety.
+				{ID: "private", Name: "Private IPs", Enabled: true, Action: rules.ActionDirect,
+					Conditions: rules.Conditions{IPCIDRs: []string{
+						"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+						"127.0.0.0/8", "fc00::/7", "fe80::/10", "224.0.0.0/4",
+					}}},
+			}},
+			{ID: "user", Name: "My Rules", Enabled: true, Rules: []rules.Rule{
+				{ID: "r1", Name: "B", Enabled: true, Action: rules.ActionBlock,
+					Conditions: rules.Conditions{IPCIDRs: []string{"1.2.3.4/32"}}},
+			}},
+		},
+	}
+	require.NoError(t, svc.ReplaceAll(m))
+	v, _ := svc.List()
+	require.Len(t, v.Groups, 2)
+	require.Equal(t, "r1", v.Groups[1].Rules[0].ID)
+	waitForRulesChanged(t, rcv, time.Second)
+}
+
+func TestRulesService_ReplaceAll_RejectsInvalidRule(t *testing.T) {
+	svc, _, _ := newRulesService(t)
+	bad := rules.Model{
+		DefaultAction: rules.ActionProxy,
+		Groups: []rules.Group{{ID: "user", Name: "My Rules", Enabled: true, Rules: []rules.Rule{
+			{ID: "x", Name: "X", Enabled: true, Action: rules.ActionProxy}, // no conditions
+		}}},
+	}
+	err := svc.ReplaceAll(bad)
+	require.ErrorContains(t, err, "conditions cannot be all-empty")
+}
+
+func TestRulesService_ReplaceAll_RejectsSafetyMutation(t *testing.T) {
+	svc, _, _ := newRulesService(t)
+	tampered := rules.Model{
+		DefaultAction: rules.ActionProxy,
+		Groups: []rules.Group{
+			{ID: "safety", Name: "Tampered", Locked: true, Enabled: true},
+			{ID: "user", Name: "My Rules", Enabled: true},
+		},
+	}
+	err := svc.ReplaceAll(tampered)
+	require.ErrorContains(t, err, "safety group is locked")
+}
