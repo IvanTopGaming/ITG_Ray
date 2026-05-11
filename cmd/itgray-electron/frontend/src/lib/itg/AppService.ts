@@ -13,3 +13,11 @@ export function GetSnapshot(): Promise<unknown> {
 export function GetPublicIP(): Promise<unknown> {
   return itgApp().getPublicIP?.() ?? Promise.resolve(null);
 }
+
+export function SetAutostart(enabled: boolean): Promise<boolean> {
+  return (itgApp().setAutostart?.(enabled) as Promise<boolean>) ?? Promise.resolve(enabled);
+}
+
+export function GetAutostart(): Promise<boolean> {
+  return (itgApp().getAutostart?.() as Promise<boolean>) ?? Promise.resolve(false);
+}

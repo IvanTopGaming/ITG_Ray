@@ -14,6 +14,7 @@ import { useHelperState } from '@/lib/helperAdapter';
 import type { HelperState } from '@/lib/helperAdapter';
 import { ScrollSpy, useScrollSpy, scrollToSection } from '@/components/controls/ScrollSpy';
 import { Get as GetSettings } from '@/lib/itg/SettingsService';
+import { SetAutostart } from '@/lib/itg/AppService';
 import type { hub } from '@/lib/itg/models';
 
 const pageVariants: Variants = {
@@ -196,7 +197,14 @@ export function Settings() {
           />
         </SettingRow>
         <SettingRow label="Launch on system startup" hint="Start ITG Ray automatically when you log in.">
-          <Toggle value={s.autostart} onChange={(v) => update({ autostart: v })} />
+          <Toggle
+            value={s.autostart}
+            aria-label="Launch on system startup"
+            onChange={(v) => {
+              update({ autostart: v });
+              void SetAutostart(v);
+            }}
+          />
         </SettingRow>
         <SettingRow label="Start minimized to tray" hint="Open in background, no main window on launch.">
           <Toggle value={s.startMinimized} onChange={(v) => update({ startMinimized: v })} />

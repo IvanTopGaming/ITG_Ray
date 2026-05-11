@@ -256,9 +256,16 @@ vi.mock('@/lib/itg/HelperService', () => ({
   IsWindows: vi.fn().mockResolvedValue(false),
 }));
 
+vi.mock('@/lib/itg/AppService', () => ({
+  GetSnapshot: vi.fn().mockResolvedValue(null),
+  GetPublicIP: vi.fn().mockResolvedValue(null),
+  SetAutostart: vi.fn().mockResolvedValue(true),
+}));
+
 import { Settings as SettingsPage } from './Settings';
 import { __resetForTests } from '@/lib/settings';
 import * as SettingsService from '@/lib/itg/SettingsService';
+import * as AppService from '@/lib/itg/AppService';
 
 class MockIntersectionObserver {
   observe = vi.fn();
@@ -397,5 +404,64 @@ describe('Settings — Subscription Identity', () => {
       (c) => c[0] === 'subscriptions',
     )?.[1];
     expect(subsPatch).toMatchObject({ userAgent: '' });
+  });
+});
+
+describe('Settings — Autostart toggle', () => {
+  beforeEach(() => {
+    (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver =
+      MockIntersectionObserver as unknown as typeof IntersectionObserver;
+    (window as unknown as { go: object }).go = {};
+    __resetForTests();
+    vi.clearAllMocks();
+    (SettingsService.Get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      general: { language: 'en', autostart: false, startMinimized: false },
+      network: {
+        defaultMode: 'tun',
+        socksPort: 1080,
+        httpPort: 8888,
+        allowLan: false,
+        ipv6Mode: 'prefer-v4',
+        tunCidr: '198.18.0.1/15',
+        tunMtu: 1500,
+        dns: { mode: 'auto', servers: [] },
+      },
+      killSwitch: { enabled: true, alwaysOn: false },
+      subscriptions: {
+        defaultUpdateInterval: 3600,
+        userAgent: 'ITGRay/0.1',
+        hwidEnabled: true,
+        sendDeviceOS: true,
+        sendOSVersion: true,
+        sendDeviceModel: true,
+      },
+      notifications: {
+        onConnected: true,
+        onDisconnected: true,
+        quotaLow: true,
+        onSubSynced: true,
+        sound: true,
+      },
+      debug: { logLevel: 'info' },
+      about: { version: '0.1', gitRev: '', buildDate: '' },
+      security: { method: 'Unencrypted' },
+    });
+  });
+
+  afterEach(() => {
+    __resetForTests();
+    delete (window as unknown as { go?: object }).go;
+  });
+
+  it('flipping the autostart toggle calls SetAutostart with the new value', async () => {
+    await renderSettings();
+    const setAutostartMock = AppService.SetAutostart as ReturnType<typeof vi.fn>;
+    setAutostartMock.mockClear();
+    const toggle = screen.getByRole('switch', { name: 'Launch on system startup' });
+    await userEvent.click(toggle);
+    await act(async () => {
+      await new Promise<void>((r) => setTimeout(r, 0));
+    });
+    expect(setAutostartMock).toHaveBeenCalledWith(true);
   });
 });
