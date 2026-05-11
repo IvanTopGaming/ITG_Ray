@@ -101,6 +101,16 @@ export function RuleEditor() {
           onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, domains: next } })}
         />
       </Section>
+      <Section
+        title="IP CIDRs"
+        count={draft.conditions.ip_cidrs?.length ?? 0}
+        defaultOpen={(draft.conditions.ip_cidrs?.length ?? 0) > 0}
+      >
+        <CidrsSection
+          value={draft.conditions.ip_cidrs ?? []}
+          onChange={(next) => setDraft({ ...draft, conditions: { ...draft.conditions, ip_cidrs: next } })}
+        />
+      </Section>
     </div>
   );
 }
@@ -158,6 +168,39 @@ function DomainsSection({ value, onChange }: { value: DomainMatcher[]; onChange:
         className="self-start rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08]"
       >
         + Add domain matcher
+      </button>
+    </>
+  );
+}
+
+function CidrsSection({ value, onChange }: { value: string[]; onChange: (next: string[]) => void }) {
+  return (
+    <>
+      {value.map((cidr, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <input
+            aria-label={`CIDR value ${i + 1}`}
+            value={cidr}
+            onChange={(e) => onChange(value.map((x, j) => j === i ? e.target.value : x))}
+            placeholder="e.g. 10.0.0.0/8 or 1.2.3.4"
+            className="flex-1 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[12.5px] outline-none focus:border-sky-400/40"
+          />
+          <button
+            type="button"
+            onClick={() => onChange(value.filter((_, j) => j !== i))}
+            aria-label={`Remove CIDR ${i + 1}`}
+            className="text-white/45 hover:text-rose-300"
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange([...value, ""])}
+        className="self-start rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08]"
+      >
+        + Add CIDR
       </button>
     </>
   );

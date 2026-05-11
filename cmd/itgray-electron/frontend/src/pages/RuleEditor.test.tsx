@@ -79,4 +79,18 @@ describe("RuleEditor", () => {
       conditions: expect.objectContaining({ domains: [{ kind: "suffix", value: "example.com" }] }),
     }));
   });
+
+  it("saves IP CIDR conditions", async () => {
+    const userWithRule = { ...user, rules: [{ id: "r1", name: "T", enabled: true, action: "proxy", conditions: { ip_cidrs: [] } }] };
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, userWithRule], loading: false, lastError: null, bootstrapped: true });
+    rulesEditRuleMock.mockResolvedValue(undefined);
+    renderEditor("r1");
+    await userEvent.click(screen.getByRole("button", { name: /ip cidrs/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add cidr/i }));
+    await userEvent.type(screen.getByLabelText(/cidr value/i), "10.0.0.0/8");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    expect(rulesEditRuleMock).toHaveBeenCalledWith(expect.objectContaining({
+      conditions: expect.objectContaining({ ip_cidrs: ["10.0.0.0/8"] }),
+    }));
+  });
 });
