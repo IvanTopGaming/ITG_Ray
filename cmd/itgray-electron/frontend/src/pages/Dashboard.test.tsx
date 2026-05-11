@@ -94,6 +94,15 @@ describe("Dashboard", () => {
     expect(screen.getByText("No servers added")).toBeInTheDocument();
   });
 
+  it("announces the empty QuickSwitch state to screen readers", () => {
+    useDashMock.mockReturnValue(baseDash);
+    renderDash();
+    const liveRegion = screen.getByRole("status", {
+      name: /no servers added/i,
+    });
+    expect(liveRegion).toHaveAttribute("aria-live", "polite");
+  });
+
   it("uses grid-cols-1 with 1 server", () => {
     useDashMock.mockReturnValue({
       ...baseDash,

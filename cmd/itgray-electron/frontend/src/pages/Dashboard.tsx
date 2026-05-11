@@ -546,7 +546,12 @@ function QuickSwitch({
 
 function QuickSwitchEmpty() {
   return (
-    <div className="glass-regular flex items-center justify-between gap-4 rounded-xl px-5 py-4">
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label="No servers added"
+      className="glass-regular flex items-center justify-between gap-4 rounded-xl px-5 py-4"
+    >
       <div className="flex flex-col gap-1">
         <span className="text-[13px] font-semibold text-white/85">
           No servers added
