@@ -52,11 +52,3 @@
 [style*="--wails-draggable: no-drag"] {
   -webkit-app-region: no-drag;
 }
-
-@keyframes routing-group-fade-in {
-  from { opacity: 0; transform: scale(0.96); }
-  to { opacity: 1; transform: scale(1); }
-}
-.routing-group-fade-in {
-  animation: routing-group-fade-in 0.28s cubic-bezier(0.32, 0.72, 0, 1);
-}
