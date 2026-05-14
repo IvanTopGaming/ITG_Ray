@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, type HTMLAttributes, type SyntheticEvent }
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Lock, ChevronRight, Plus, MoreHorizontal, GripVertical } from "lucide-react";
-import { DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
+import { DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
@@ -144,15 +144,73 @@ export function Routing() {
     setActiveId(String(e.active.id));
   }
 
+  // Cross-group live preview. While the user drags a rule into a
+  // different group, rebuild localGroups so the rule visually appears in
+  // the target group. dnd-kit's sortable strategy then animates the
+  // target group's rules to make room (and the source group to close
+  // the gap) using its CSS transitions. State updates are no-ops when
+  // the rule is already in the target group (moveRuleAcrossGroups
+  // returns the same reference), so this is safe to call on every drag
+  // event.
+  function onDragOver(e: DragOverEvent) {
+    const { active, over } = e;
+    if (!over) return;
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    if (activeId === overId) return;
+
+    // Skip group reordering — handled visually by the sortable strategy
+    // inside the user-groups SortableContext.
+    if (localGroups.some((g) => g.id === activeId)) return;
+
+    const sourceGroup = localGroups.find((g) => g.rules.some((r) => r.id === activeId));
+    if (!sourceGroup) return;
+
+    let targetGroup: GroupView | undefined;
+    let overRuleId: string | null = null;
+    const directOverGroup = localGroups.find((g) => g.id === overId);
+    if (directOverGroup) {
+      targetGroup = directOverGroup;
+    } else {
+      targetGroup = localGroups.find((g) => g.rules.some((r) => r.id === overId));
+      overRuleId = overId;
+    }
+    if (!targetGroup || targetGroup.locked) return;
+    // Same-group sort is handled by dnd-kit's strategy transforms; no
+    // state update needed mid-drag.
+    if (sourceGroup.id === targetGroup.id) return;
+
+    // Insert before/after the over rule based on which half of it the
+    // active rect overlaps. Standard kanban heuristic.
+    let newIndex: number;
+    if (overRuleId) {
+      const overIdx = targetGroup.rules.findIndex((r) => r.id === overRuleId);
+      const activeTop = active.rect.current.translated?.top ?? 0;
+      const overMid = over.rect.top + over.rect.height / 2;
+      const isBelowOverItem = activeTop > overMid;
+      newIndex = overIdx + (isBelowOverItem ? 1 : 0);
+    } else {
+      newIndex = targetGroup.rules.length;
+    }
+
+    const targetId = targetGroup.id;
+    setLocalGroups((prev) => moveRuleAcrossGroups(prev, activeId, targetId, newIndex));
+  }
+
   function onDragEnd(e: DragEndEvent) {
     setActiveId(null);
-    if (!e.over || e.over.id === e.active.id) return;
+    if (!e.over) {
+      // Dropped outside any droppable. Revert any onDragOver preview
+      // moves so we don't persist a partially-thought-out change.
+      if (localGroups !== backendGroups) setLocalGroups(backendGroups);
+      return;
+    }
     const activeId = String(e.active.id);
     const overId = String(e.over.id);
 
-    // Group reorder: active is a group id
-    const activeIsGroup = localGroups.some((g) => g.id === activeId);
-    if (activeIsGroup) {
+    // Group reorder
+    if (localGroups.some((g) => g.id === activeId)) {
+      if (activeId === overId) return;
       const nextUser = reorderGroups(userGroups, activeId, overId);
       const finalGroups = safetyGroup ? [safetyGroup, ...nextUser] : nextUser;
       setLocalGroups(finalGroups);
@@ -160,43 +218,34 @@ export function Routing() {
       return;
     }
 
-    // Rule drag: locate source group
-    const sourceGroup = localGroups.find((g) => g.rules.some((r) => r.id === activeId));
-    if (!sourceGroup || sourceGroup.locked) return;
-
-    // Resolve target group + insertion index.
-    // - If `over` is a group id: drop at end of that group's rules.
-    // - If `over` is a rule id: drop at that rule's index within its group.
-    let targetGroupId: string;
-    let targetIndex: number;
-    const overGroupDirect = localGroups.find((g) => g.id === overId);
-    if (overGroupDirect) {
-      targetGroupId = overGroupDirect.id;
-      targetIndex = overGroupDirect.rules.length;
-    } else {
-      const overRuleGroup = localGroups.find((g) => g.rules.some((r) => r.id === overId));
-      if (!overRuleGroup) return;
-      targetGroupId = overRuleGroup.id;
-      targetIndex = overRuleGroup.rules.findIndex((r) => r.id === overId);
-    }
-
-    // Refuse drops into locked groups (safety isn't even a registered droppable, but be defensive).
-    const targetGroup = localGroups.find((g) => g.id === targetGroupId);
-    if (!targetGroup || targetGroup.locked) return;
-
-    if (sourceGroup.id === targetGroupId) {
-      const fromIdx = sourceGroup.rules.findIndex((r) => r.id === activeId);
-      if (fromIdx === targetIndex || fromIdx < 0) return;
-      const nextGroups = reorderRules(localGroups, sourceGroup.id, fromIdx, targetIndex);
-      setLocalGroups(nextGroups);
-      void rulesReplaceAll({ defaultAction, groups: nextGroups });
+    // Rule drop. After onDragOver, the active rule already lives in
+    // whichever group the user dragged it into; we only need to settle
+    // the final position within that group and persist.
+    const activeGroup = localGroups.find((g) => g.rules.some((r) => r.id === activeId));
+    if (!activeGroup || activeGroup.locked) {
+      if (localGroups !== backendGroups) setLocalGroups(backendGroups);
       return;
     }
 
-    const newGroups = moveRuleAcrossGroups(localGroups, activeId, targetGroupId, targetIndex);
-    if (newGroups === localGroups) return;
-    setLocalGroups(newGroups);
-    void rulesReplaceAll({ defaultAction, groups: newGroups });
+    // If dropped on another rule in the same group, finalize the sort
+    // position; otherwise the onDragOver-applied state is already right.
+    const overInGroup = activeGroup.rules.find((r) => r.id === overId);
+    if (overInGroup && activeId !== overId) {
+      const fromIdx = activeGroup.rules.findIndex((r) => r.id === activeId);
+      const toIdx = activeGroup.rules.findIndex((r) => r.id === overId);
+      if (fromIdx !== toIdx) {
+        const nextGroups = reorderRules(localGroups, activeGroup.id, fromIdx, toIdx);
+        setLocalGroups(nextGroups);
+        void rulesReplaceAll({ defaultAction, groups: nextGroups });
+        return;
+      }
+    }
+
+    // Persist whatever state we ended up in (may already differ from
+    // backend because of onDragOver moves).
+    if (localGroups !== backendGroups) {
+      void rulesReplaceAll({ defaultAction, groups: localGroups });
+    }
   }
 
   return (
@@ -237,8 +286,12 @@ export function Routing() {
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragStart={onDragStart}
+        onDragOver={onDragOver}
         onDragEnd={onDragEnd}
-        onDragCancel={() => setActiveId(null)}
+        onDragCancel={() => {
+          setActiveId(null);
+          if (localGroups !== backendGroups) setLocalGroups(backendGroups);
+        }}
       >
         {safetyGroup && <GroupCard group={safetyGroup} allGroups={localGroups} />}
         <SortableContext items={userGroups.map((g) => g.id)} strategy={verticalListSortingStrategy}>
@@ -258,8 +311,14 @@ export function Routing() {
             element when it crosses card boundaries). */}
         <DragOverlay dropAnimation={null} style={{ cursor: "grabbing" }}>
           {activeRule ? (
-            <div className="rounded-md bg-bg-1/95 px-3 py-2 text-[12.5px] shadow-[0_18px_36px_-10px_rgba(0,0,0,0.7)] ring-1 ring-white/15 backdrop-blur-xl">
-              <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              {/* Grip handle replica — matches the actual SortableRuleRow handle */}
+              <div className="rounded p-1.5 text-white/55">
+                <GripVertical className="h-4 w-4" />
+              </div>
+              {/* Rule card — same colors as the in-list rule row, sized to
+                  content so the overlay is visibly shorter than the real row. */}
+              <div className="inline-flex items-center gap-3 rounded-md bg-white/[0.06] px-3 py-2 text-[12.5px] shadow-[0_18px_36px_-10px_rgba(0,0,0,0.55)] ring-1 ring-white/15">
                 <span
                   className={cn(
                     "rounded px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider",
@@ -270,7 +329,8 @@ export function Routing() {
                 >
                   {activeRule.action}
                 </span>
-                <span className="text-white/90">{activeRule.name}</span>
+                <span className="text-white/85">{activeRule.name}</span>
+                <span className="text-[11px] text-white/45">{summarise(activeRule.conditions)}</span>
               </div>
             </div>
           ) : null}
