@@ -75,6 +75,36 @@ export function reorderGroups(groups: GroupView[], activeId: string, overId: str
   return next;
 }
 
+// Move a rule from its current group into another group at a specific
+// index. No-op when the source group is locked, the target group is
+// missing/locked, or when the rule isn't found anywhere.
+export function moveRuleAcrossGroups(
+  groups: GroupView[],
+  ruleId: string,
+  targetGroupId: string,
+  targetIndex: number,
+): GroupView[] {
+  const sourceGroup = groups.find((g) => g.rules.some((r) => r.id === ruleId));
+  if (!sourceGroup || sourceGroup.locked) return groups;
+  const targetGroup = groups.find((g) => g.id === targetGroupId);
+  if (!targetGroup || targetGroup.locked) return groups;
+  if (sourceGroup.id === targetGroupId) return groups;
+  const fromIdx = sourceGroup.rules.findIndex((r) => r.id === ruleId);
+  if (fromIdx < 0) return groups;
+  const rule = sourceGroup.rules[fromIdx];
+  return groups.map((g) => {
+    if (g.id === sourceGroup.id) {
+      return { ...g, rules: g.rules.filter((_, i) => i !== fromIdx) };
+    }
+    if (g.id === targetGroupId) {
+      const next = g.rules.slice();
+      next.splice(Math.max(0, Math.min(targetIndex, next.length)), 0, rule);
+      return { ...g, rules: next };
+    }
+    return g;
+  });
+}
+
 export function Routing() {
   const { groups: backendGroups, defaultAction, lastError } = useRules();
   const [localGroups, setLocalGroups] = useState(backendGroups);
@@ -96,26 +126,58 @@ export function Routing() {
   const safetyGroup = localGroups.find((g) => g.id === "safety");
   const userGroups = localGroups.filter((g) => g.id !== "safety");
 
-  function handleRuleDragEnd(groupId: string) {
-    return (e: DragEndEvent) => {
-      if (!e.over || e.over.id === e.active.id) return;
-      const group = localGroups.find((g) => g.id === groupId);
-      if (!group) return;
-      const fromIdx = group.rules.findIndex((r) => r.id === e.active.id);
-      const toIdx = group.rules.findIndex((r) => r.id === e.over!.id);
-      if (fromIdx < 0 || toIdx < 0) return;
-      const nextGroups = reorderRules(localGroups, groupId, fromIdx, toIdx);
+  function onDragEnd(e: DragEndEvent) {
+    if (!e.over || e.over.id === e.active.id) return;
+    const activeId = String(e.active.id);
+    const overId = String(e.over.id);
+
+    // Group reorder: active is a group id
+    const activeIsGroup = localGroups.some((g) => g.id === activeId);
+    if (activeIsGroup) {
+      const nextUser = reorderGroups(userGroups, activeId, overId);
+      const finalGroups = safetyGroup ? [safetyGroup, ...nextUser] : nextUser;
+      setLocalGroups(finalGroups);
+      void rulesReplaceAll({ defaultAction, groups: finalGroups });
+      return;
+    }
+
+    // Rule drag: locate source group
+    const sourceGroup = localGroups.find((g) => g.rules.some((r) => r.id === activeId));
+    if (!sourceGroup || sourceGroup.locked) return;
+
+    // Resolve target group + insertion index.
+    // - If `over` is a group id: drop at end of that group's rules.
+    // - If `over` is a rule id: drop at that rule's index within its group.
+    let targetGroupId: string;
+    let targetIndex: number;
+    const overGroupDirect = localGroups.find((g) => g.id === overId);
+    if (overGroupDirect) {
+      targetGroupId = overGroupDirect.id;
+      targetIndex = overGroupDirect.rules.length;
+    } else {
+      const overRuleGroup = localGroups.find((g) => g.rules.some((r) => r.id === overId));
+      if (!overRuleGroup) return;
+      targetGroupId = overRuleGroup.id;
+      targetIndex = overRuleGroup.rules.findIndex((r) => r.id === overId);
+    }
+
+    // Refuse drops into locked groups (safety isn't even a registered droppable, but be defensive).
+    const targetGroup = localGroups.find((g) => g.id === targetGroupId);
+    if (!targetGroup || targetGroup.locked) return;
+
+    if (sourceGroup.id === targetGroupId) {
+      const fromIdx = sourceGroup.rules.findIndex((r) => r.id === activeId);
+      if (fromIdx === targetIndex || fromIdx < 0) return;
+      const nextGroups = reorderRules(localGroups, sourceGroup.id, fromIdx, targetIndex);
       setLocalGroups(nextGroups);
       void rulesReplaceAll({ defaultAction, groups: nextGroups });
-    };
-  }
+      return;
+    }
 
-  function onGroupDragEnd(e: DragEndEvent) {
-    if (!e.over || e.over.id === e.active.id) return;
-    const nextUser = reorderGroups(userGroups, String(e.active.id), String(e.over.id));
-    const finalGroups = safetyGroup ? [safetyGroup, ...nextUser] : nextUser;
-    setLocalGroups(finalGroups);
-    void rulesReplaceAll({ defaultAction, groups: finalGroups });
+    const newGroups = moveRuleAcrossGroups(localGroups, activeId, targetGroupId, targetIndex);
+    if (newGroups === localGroups) return;
+    setLocalGroups(newGroups);
+    void rulesReplaceAll({ defaultAction, groups: newGroups });
   }
 
   return (
@@ -152,15 +214,14 @@ export function Routing() {
       <AnimatePresence initial={false}>
         {adding && <AddGroupRow key="add-group-row" onCancel={() => setAdding(false)} />}
       </AnimatePresence>
-      {safetyGroup && <GroupCard group={safetyGroup} onRuleDragEnd={() => {}} allGroups={localGroups} />}
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onGroupDragEnd}>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        {safetyGroup && <GroupCard group={safetyGroup} allGroups={localGroups} />}
         <SortableContext items={userGroups.map((g) => g.id)} strategy={verticalListSortingStrategy}>
           <AnimatePresence initial={false}>
             {userGroups.map((g) => (
               <SortableGroupCard
                 key={g.id}
                 group={g}
-                onRuleDragEnd={handleRuleDragEnd(g.id)}
                 allGroups={localGroups}
               />
             ))}
@@ -245,7 +306,7 @@ type DragHandleProps = {
   listeners: Record<string, (event: SyntheticEvent) => void> | undefined;
 };
 
-function GroupCard({ group, onRuleDragEnd, dragHandle, allGroups }: { group: GroupView; onRuleDragEnd: (e: DragEndEvent) => void; dragHandle?: DragHandleProps; allGroups: GroupView[] }) {
+function GroupCard({ group, dragHandle, allGroups }: { group: GroupView; dragHandle?: DragHandleProps; allGroups: GroupView[] }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuCoords, setMenuCoords] = useState<{ left: number; top: number } | null>(null);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
@@ -253,9 +314,6 @@ function GroupCard({ group, onRuleDragEnd, dragHandle, allGroups }: { group: Gro
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const navigate = useNavigate();
-  const ruleSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
-  );
 
   useEffect(() => {
     if (!menuOpen || !menuBtnRef.current) return;
@@ -401,15 +459,13 @@ function GroupCard({ group, onRuleDragEnd, dragHandle, allGroups }: { group: Gro
             </AnimatePresence>
           </ul>
         ) : (
-          <DndContext sensors={ruleSensors} collisionDetection={closestCenter} onDragEnd={onRuleDragEnd}>
-            <SortableContext items={group.rules.map((r) => r.id)} strategy={verticalListSortingStrategy}>
-              <ul className="flex flex-col gap-1">
-                <AnimatePresence initial={false}>
-                  {group.rules.map((r) => <SortableRuleRow key={r.id} rule={r} group={group} allGroups={allGroups} />)}
-                </AnimatePresence>
-              </ul>
-            </SortableContext>
-          </DndContext>
+          <SortableContext items={group.rules.map((r) => r.id)} strategy={verticalListSortingStrategy}>
+            <ul className="flex flex-col gap-1">
+              <AnimatePresence initial={false}>
+                {group.rules.map((r) => <SortableRuleRow key={r.id} rule={r} group={group} allGroups={allGroups} />)}
+              </AnimatePresence>
+            </ul>
+          </SortableContext>
         )}
         {!group.locked && (
           <motion.button
@@ -470,7 +526,7 @@ function InlineRename({ initial, onCancel, onCommit }: { initial: string; onCanc
   );
 }
 
-function SortableGroupCard({ group, onRuleDragEnd, allGroups }: { group: GroupView; onRuleDragEnd: (e: DragEndEvent) => void; allGroups: GroupView[] }) {
+function SortableGroupCard({ group, allGroups }: { group: GroupView; allGroups: GroupView[] }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: group.id });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -485,7 +541,7 @@ function SortableGroupCard({ group, onRuleDragEnd, allGroups }: { group: GroupVi
       exit="exit"
     >
       <div ref={setNodeRef} style={style}>
-        <GroupCard group={group} onRuleDragEnd={onRuleDragEnd} allGroups={allGroups} dragHandle={{ attributes: attributes as HTMLAttributes<HTMLElement>, listeners: listeners as Record<string, (event: SyntheticEvent) => void> | undefined }} />
+        <GroupCard group={group} allGroups={allGroups} dragHandle={{ attributes: attributes as HTMLAttributes<HTMLElement>, listeners: listeners as Record<string, (event: SyntheticEvent) => void> | undefined }} />
       </div>
     </motion.div>
   );

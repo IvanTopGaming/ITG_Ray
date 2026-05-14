@@ -41,7 +41,7 @@ vi.mock("react-router-dom", async () => {
   return { ...actual, useNavigate: () => navigateMock };
 });
 
-import { Routing, reorderRules, reorderGroups } from "./Routing";
+import { Routing, reorderRules, reorderGroups, moveRuleAcrossGroups } from "./Routing";
 
 const safety = {
   id: "safety",
@@ -285,5 +285,62 @@ describe("reorderGroups", () => {
     const a = { id: "a", name: "A", locked: false, enabled: true, rules: [] } as any;
     const out = reorderGroups([safety as any, a], "a", "safety");
     expect(out.map((g) => g.id)).toEqual(["safety", "a"]);
+  });
+});
+
+describe("moveRuleAcrossGroups", () => {
+  const mkRule = (id: string) => ({ id, name: id.toUpperCase(), enabled: true, action: "proxy", conditions: { ip_cidrs: ["1.0.0.0/8"] } });
+
+  it("moves a rule between groups at the specified index", () => {
+    const a = { id: "a", name: "A", locked: false, enabled: true, rules: [mkRule("r1"), mkRule("r2")] } as any;
+    const b = { id: "b", name: "B", locked: false, enabled: true, rules: [mkRule("r3")] } as any;
+    const out = moveRuleAcrossGroups([a, b], "r1", "b", 0);
+    expect(out[0].rules.map((r: any) => r.id)).toEqual(["r2"]);
+    expect(out[1].rules.map((r: any) => r.id)).toEqual(["r1", "r3"]);
+  });
+
+  it("moves into an empty group", () => {
+    const a = { id: "a", name: "A", locked: false, enabled: true, rules: [mkRule("r1")] } as any;
+    const b = { id: "b", name: "B", locked: false, enabled: true, rules: [] } as any;
+    const out = moveRuleAcrossGroups([a, b], "r1", "b", 0);
+    expect(out[0].rules).toEqual([]);
+    expect(out[1].rules.map((r: any) => r.id)).toEqual(["r1"]);
+  });
+
+  it("clamps targetIndex into the valid range", () => {
+    const a = { id: "a", name: "A", locked: false, enabled: true, rules: [mkRule("r1")] } as any;
+    const b = { id: "b", name: "B", locked: false, enabled: true, rules: [mkRule("r2"), mkRule("r3")] } as any;
+    const out = moveRuleAcrossGroups([a, b], "r1", "b", 999);
+    expect(out[1].rules.map((r: any) => r.id)).toEqual(["r2", "r3", "r1"]);
+  });
+
+  it("refuses moves out of a locked source group", () => {
+    const a = { id: "a", name: "A", locked: false, enabled: true, rules: [] } as any;
+    const out = moveRuleAcrossGroups([safety as any, a], "private", "a", 0);
+    expect(out).toBe(out);
+    expect(out[0].rules.map((r: any) => r.id)).toEqual(["private"]);
+    expect(out[1].rules).toEqual([]);
+  });
+
+  it("refuses moves into a locked target group", () => {
+    const a = { id: "a", name: "A", locked: false, enabled: true, rules: [mkRule("r1")] } as any;
+    const out = moveRuleAcrossGroups([safety as any, a], "r1", "safety", 0);
+    expect(out[0].rules.map((r: any) => r.id)).toEqual(["private"]);
+    expect(out[1].rules.map((r: any) => r.id)).toEqual(["r1"]);
+  });
+
+  it("returns input unchanged when source group equals target group", () => {
+    const a = { id: "a", name: "A", locked: false, enabled: true, rules: [mkRule("r1")] } as any;
+    const out = moveRuleAcrossGroups([a], "r1", "a", 0);
+    expect(out).toBe(out);
+    expect(out[0].rules.map((r: any) => r.id)).toEqual(["r1"]);
+  });
+
+  it("returns input unchanged when rule is not found", () => {
+    const a = { id: "a", name: "A", locked: false, enabled: true, rules: [mkRule("r1")] } as any;
+    const b = { id: "b", name: "B", locked: false, enabled: true, rules: [] } as any;
+    const input = [a, b];
+    const out = moveRuleAcrossGroups(input, "missing", "b", 0);
+    expect(out).toBe(input);
   });
 });
