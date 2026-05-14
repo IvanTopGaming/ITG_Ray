@@ -48,17 +48,6 @@ const groupCardVariants: Variants = {
   exit: { opacity: 0, scale: 0.96, height: 0, overflow: "hidden", transition: { duration: 0.25, ease: SMOOTH_EASE } },
 };
 
-// Note: intentionally no `scale` here — even `scale: 1` in the steady
-// state applies `transform: scale(1)` on motion.li, creating a new
-// stacking context + compositing layer per rule. That fights with
-// dnd-kit's transform on the inner element and amplifies jerks during
-// sortable reorder. Fade + height collapse is enough for enter/exit.
-const ruleRowVariants: Variants = {
-  initial: { opacity: 0, height: 0, overflow: "hidden" },
-  animate: { opacity: 1, height: "auto", overflow: "visible", transition: { duration: 0.3, ease: SMOOTH_EASE } },
-  exit: { opacity: 0, height: 0, overflow: "hidden", transition: { duration: 0.25, ease: SMOOTH_EASE } },
-};
-
 export function reorderRules(groups: GroupView[], groupId: string, fromIdx: number, toIdx: number): GroupView[] {
   return groups.map((g) => {
     if (g.id !== groupId) return g;
@@ -180,14 +169,19 @@ export function Routing() {
     // state update needed mid-drag.
     if (sourceGroup.id === targetGroup.id) return;
 
-    // Insert before/after the over rule based on which half of it the
-    // active rect overlaps. Standard kanban heuristic.
+    // Insert before/after the over rule based on whether the active
+    // rule's *center* is below the over rule's center. Earlier we
+    // compared active-TOP to over-MIDDLE, which is asymmetric and made
+    // it impossible to drop *after* the last row in a group (the active
+    // top would still be above the last row's middle even when the
+    // user was clearly aiming below it).
     let newIndex: number;
     if (overRuleId) {
       const overIdx = targetGroup.rules.findIndex((r) => r.id === overRuleId);
-      const activeTop = active.rect.current.translated?.top ?? 0;
+      const activeRect = active.rect.current.translated;
+      const activeMid = activeRect ? activeRect.top + activeRect.height / 2 : 0;
       const overMid = over.rect.top + over.rect.height / 2;
-      const isBelowOverItem = activeTop > overMid;
+      const isBelowOverItem = activeMid > overMid;
       newIndex = overIdx + (isBelowOverItem ? 1 : 0);
     } else {
       newIndex = targetGroup.rules.length;
@@ -552,26 +546,16 @@ function GroupCard({ group, dragHandle, allGroups }: { group: GroupView; dragHan
           </div>
         ) : group.locked ? (
           <ul className="flex flex-col gap-1">
-            <AnimatePresence initial={false}>
-              {group.rules.map((r) => (
-                <motion.li
-                  key={r.id}
-                  variants={ruleRowVariants}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                >
-                  <RuleRow rule={r} groupLocked />
-                </motion.li>
-              ))}
-            </AnimatePresence>
+            {group.rules.map((r) => (
+              <li key={r.id}>
+                <RuleRow rule={r} groupLocked />
+              </li>
+            ))}
           </ul>
         ) : (
           <SortableContext items={group.rules.map((r) => r.id)} strategy={verticalListSortingStrategy}>
             <ul className="flex flex-col gap-1">
-              <AnimatePresence initial={false}>
-                {group.rules.map((r) => <SortableRuleRow key={r.id} rule={r} group={group} allGroups={allGroups} />)}
-              </AnimatePresence>
+              {group.rules.map((r) => <SortableRuleRow key={r.id} rule={r} group={group} allGroups={allGroups} />)}
             </ul>
           </SortableContext>
         )}
@@ -660,34 +644,32 @@ function SortableRuleRow({ rule, group, allGroups }: { rule: RuleView; group: Gr
   // While this row is the active drag target, hide it entirely — the
   // DragOverlay ghost is what the user sees following the cursor.
   // Keeping opacity 0 (not display:none) preserves the slot height so
-  // the surrounding list layout doesn't collapse.
+  // the surrounding list layout doesn't collapse. No framer-motion
+  // wrapper here: when onDragOver moves the row across groups, React
+  // remounts it under a new parent, and any AnimatePresence-driven
+  // exit/enter would duplicate the slot visually (height collapsing in
+  // source + height growing in target = overlap). dnd-kit's own CSS
+  // transitions handle the visible reorder smoothly.
   const style = {
     transform: CSS.Transform.toString(transform),
     transition: isDragging ? "none" : transition,
     opacity: isDragging ? 0 : 1,
   };
   return (
-    <motion.li
-      variants={ruleRowVariants}
-      initial="initial"
-      animate="animate"
-      exit="exit"
-    >
-      <div ref={setNodeRef} style={style} className="flex items-center gap-2">
-        <button
-          type="button"
-          {...attributes}
-          {...listeners}
-          aria-label={`Drag ${rule.name}`}
-          className="cursor-grab rounded p-1.5 text-white/35 hover:bg-white/[0.06] hover:text-white/80 active:cursor-grabbing"
-        >
-          <GripVertical className="h-4 w-4" />
-        </button>
-        <div className="flex-1">
-          <RuleRow rule={rule} groupLocked={false} group={group} allGroups={allGroups} />
-        </div>
+    <li ref={setNodeRef} style={style} className="flex items-center gap-2">
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        aria-label={`Drag ${rule.name}`}
+        className="cursor-grab rounded p-1.5 text-white/35 hover:bg-white/[0.06] hover:text-white/80 active:cursor-grabbing"
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <div className="flex-1">
+        <RuleRow rule={rule} groupLocked={false} group={group} allGroups={allGroups} />
       </div>
-    </motion.li>
+    </li>
   );
 }
 
