@@ -87,7 +87,7 @@ describe("RuleEditor", () => {
     rulesEditRuleMock.mockResolvedValue(undefined);
     renderEditor("r1");
     await userEvent.type(screen.getByLabelText("Name"), " v2");
-    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
     expect(rulesEditRuleMock).toHaveBeenCalledWith(expect.objectContaining({ id: "r1", name: "Block ads v2", action: "block" }));
   });
 
@@ -137,7 +137,7 @@ describe("RuleEditor", () => {
     await waitFor(() => {
       expect(screen.queryByRole("heading", { name: /ip cidrs/i })).not.toBeInTheDocument();
     });
-    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
     // After remove, ip_cidrs should not be present in the saved conditions.
     const arg = rulesEditRuleMock.mock.calls[0][0];
     expect(arg.conditions.ip_cidrs).toBeUndefined();
@@ -161,7 +161,8 @@ describe("RuleEditor", () => {
     rulesAddRuleMock.mockResolvedValue("r-new");
     renderCreateEditor("user");
     await addConditionPick(/^geo$/i);
-    await userEvent.selectOptions(screen.getByLabelText(/^geo prefix$/i), "geoip");
+    await userEvent.click(screen.getByRole("button", { name: /^geo prefix$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^geoip$/i }));
     await userEvent.type(screen.getByLabelText(/^geo value$/i), "ru{enter}");
     await userEvent.click(screen.getByRole("button", { name: /create rule/i }));
     expect(rulesAddRuleMock).toHaveBeenCalledWith("user", expect.objectContaining({
@@ -300,10 +301,11 @@ describe("RuleEditor", () => {
     useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, userWithRule], loading: false, lastError: null, bootstrapped: true });
     rulesEditRuleMock.mockResolvedValue(undefined);
     renderEditor("r1");
-    const chipKind = screen.getByLabelText(/^domain matcher kind 1$/i) as HTMLSelectElement;
-    expect(chipKind.value).toBe("exact");
-    await userEvent.selectOptions(chipKind, "regex");
-    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    const chipKindTrigger = screen.getByRole("button", { name: /^domain matcher kind 1$/i });
+    expect(chipKindTrigger).toHaveTextContent(/exact/i);
+    await userEvent.click(chipKindTrigger);
+    await userEvent.click(screen.getByRole("button", { name: /^regex$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
     expect(rulesEditRuleMock).toHaveBeenCalledWith(expect.objectContaining({
       conditions: expect.objectContaining({ domains: [{ kind: "regex", value: "example.com" }] }),
     }));

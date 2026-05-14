@@ -7,8 +7,12 @@ import { AnimatePresence, motion, type Variants } from "framer-motion";
 import { useRules, rulesAddRule, rulesEditRule, rulesMoveRule, type RuleView, type GroupView, type DomainMatcher, type PortSpec } from "@/lib/rulesStore";
 import { Toggle } from "@/components/controls/Toggle";
 import { ConfirmDialog } from "@/components/controls/ConfirmDialog";
+import { Dropdown } from "@/components/controls/Dropdown";
+import { Segmented } from "@/components/controls/Segmented";
 
 const SNAP_EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+const SMOOTH_EASE: [number, number, number, number] = [0.32, 0.72, 0, 1];
+const LAYOUT_SPRING = { type: "spring", stiffness: 380, damping: 34, mass: 0.85 } as const;
 
 const pageVariants: Variants = {
   hidden: { opacity: 0 },
@@ -54,7 +58,7 @@ function isCreateState(s: unknown): s is CreateState {
 }
 
 const EMPTY_DRAFT: Omit<RuleView, "id"> = {
-  name: "New rule",
+  name: "",
   enabled: true,
   action: "proxy",
   conditions: {},
@@ -213,17 +217,20 @@ export function RuleEditor() {
       variants={pageVariants}
     >
       {/* Header — back link + Save */}
-      <motion.header variants={sectionVariants} className="flex items-center justify-between">
+      <motion.header variants={sectionVariants} className="flex items-center justify-between pb-2">
         <motion.button
           onClick={handleBack}
           whileHover={{ x: -2 }}
           whileTap={{ scale: 0.96 }}
           transition={{ duration: 0.18, ease: SNAP_EASE }}
-          className="flex items-center gap-1 text-[13px] text-white/70 hover:text-white/95"
+          className="group flex items-center gap-2 rounded-full border border-white/0 bg-white/0 px-3 py-1.5 text-[13px] font-medium text-white/60 transition-all hover:border-white/10 hover:bg-white/[0.03] hover:text-white/95"
         >
-          <ChevronLeft className="h-4 w-4" /> Routing
+          <ChevronLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" /> Routing
         </motion.button>
-        <div className="flex flex-col items-end gap-1">
+        <div className="flex items-center gap-3">
+          {conditionsEmpty && (
+            <span className="text-[11.5px] font-medium text-amber-400/70">Add a condition to save</span>
+          )}
           <motion.button
             onClick={handleSave}
             disabled={conditionsEmpty}
@@ -232,15 +239,12 @@ export function RuleEditor() {
             transition={{ duration: 0.18, ease: SNAP_EASE }}
             className={
               conditionsEmpty
-                ? "rounded-md bg-white/[0.06] px-5 py-2 text-[13px] font-semibold text-white/45 cursor-not-allowed"
-                : "rounded-md bg-sky-500/70 px-5 py-2 text-[13px] font-semibold text-white shadow-[0_8px_24px_-8px_rgba(56,189,248,0.75)] hover:bg-sky-400/80"
+                ? "rounded-full bg-white/[0.06] px-5 py-2 text-[13px] font-semibold text-white/40 cursor-not-allowed"
+                : "rounded-full bg-sky-500/80 px-5 py-2 text-[13px] font-semibold text-white shadow-[0_4px_20px_-4px_rgba(56,189,248,0.6)] hover:bg-sky-400"
             }
           >
-            {isCreate ? "Create rule" : "Save"}
+            {isCreate ? "Create rule" : "Save changes"}
           </motion.button>
-          {conditionsEmpty && (
-            <span className="text-[10.5px] text-white/45">Add at least one condition to save.</span>
-          )}
         </div>
       </motion.header>
 
@@ -254,53 +258,69 @@ export function RuleEditor() {
         </motion.div>
       )}
 
-      {/* Rule basics — borderless, page-title style. No outer card chrome. */}
-      <motion.div variants={sectionVariants} className="flex flex-col gap-3">
-        <div className="flex items-center gap-4">
-          <input
-            aria-label="Name"
-            value={draft.name}
-            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-            placeholder="Rule name"
-            className="min-w-0 flex-1 border-0 border-b border-white/10 bg-transparent px-0 pb-1.5 text-[18px] font-semibold text-white/95 outline-none transition-colors duration-200 placeholder:font-normal placeholder:text-white/30 focus:border-sky-400/50"
-          />
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-[0.16em] text-white/40">Enabled</span>
-            <Toggle value={draft.enabled} aria-label="Enabled" onChange={(v) => setDraft({ ...draft, enabled: v })} />
+      {/* Rule basics */}
+      <motion.div variants={sectionVariants} className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5 shadow-sm transition-colors hover:border-white/[0.12] hover:bg-white/[0.03]">
+        <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-sky-500/10 blur-[40px] pointer-events-none" />
+        <div className="relative flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-4">
+            <input
+              aria-label="Name"
+              value={draft.name}
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              placeholder="Rule name"
+              className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[20px] font-medium text-white/95 outline-none placeholder:text-white/20 focus:ring-0"
+            />
+            <div className="flex shrink-0 items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-1.5 shadow-inner">
+              <span className="text-[10.5px] font-medium uppercase tracking-[0.12em] text-white/50">Enabled</span>
+              <Toggle value={draft.enabled} aria-label="Enabled" onChange={(v) => setDraft({ ...draft, enabled: v })} />
+            </div>
           </div>
+          {!isCreate && userGroups.length > 0 && (
+            <div className="flex items-center gap-3 border-t border-white/[0.06] pt-4">
+              <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-white/40">Group</span>
+              <select
+                aria-label="Group"
+                value={groupId}
+                onChange={(e) => setGroupId(e.target.value)}
+                className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[12px] font-medium text-white/85 outline-none transition-colors duration-200 hover:bg-black/40 focus:border-sky-400/40"
+              >
+                {userGroups.map((g) => <option key={g.id} value={g.id} className="bg-[#1c1f2a]">{g.name}</option>)}
+              </select>
+            </div>
+          )}
         </div>
-        {!isCreate && userGroups.length > 0 && (
-          <label className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-[0.16em] text-white/40">Group</span>
-            <select
-              aria-label="Group"
-              value={groupId}
-              onChange={(e) => setGroupId(e.target.value)}
-              className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[12px] text-white/85 outline-none transition-colors duration-200 hover:bg-white/[0.06] focus:border-sky-400/40"
-            >
-              {userGroups.map((g) => <option key={g.id} value={g.id} className="bg-[#1c1f2a]">{g.name}</option>)}
-            </select>
-          </label>
-        )}
       </motion.div>
 
-      {/* IF (conditions) — tight gap to Rule basics */}
-      <motion.section variants={sectionVariants} className="flex flex-col gap-2.5">
-        <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/45">
+      {/* IF (conditions) */}
+      <motion.section
+        layout
+        variants={sectionVariants}
+        transition={{ layout: LAYOUT_SPRING }}
+        className="mt-2 flex flex-col gap-3"
+      >
+        <span className="pl-1 text-[11px] font-medium uppercase tracking-[0.18em] text-white/50">
           If matches all of
         </span>
         {visibleConditionList.length === 0 ? (
-          <div className="flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-dashed border-white/10 px-4 py-8 text-center">
-            <p className="text-[13px] text-white/55">No conditions yet —</p>
-            <AddConditionButton
-              availableTypes={availableTypes}
-              onPick={addConditionType}
-              prominent
-            />
+          <div key="if-empty" className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-white/[0.15] bg-white/[0.01] px-4 py-12 text-center hover:bg-white/[0.02]">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/[0.04]">
+              <span className="text-xl opacity-60">🔮</span>
+            </div>
+            <div className="flex flex-col gap-1">
+              <p className="text-[14px] font-medium text-white/80">No conditions specified</p>
+              <p className="text-[12.5px] text-white/40">Add rules to define what traffic should be routed.</p>
+            </div>
+            <div className="mt-2">
+              <AddConditionButton
+                availableTypes={availableTypes}
+                onPick={addConditionType}
+                prominent
+              />
+            </div>
           </div>
         ) : (
-          <div className="flex flex-col gap-3">
-            <AnimatePresence initial={false}>
+          <div key="if-list" className="relative flex flex-col gap-3">
+            <AnimatePresence initial={false} mode="popLayout">
               {visibleConditionList.map((c) => {
                 const count = conditionCount(draft, c.key);
                 return (
@@ -310,16 +330,24 @@ export function RuleEditor() {
                     variants={sectionVariants}
                     initial="hidden"
                     animate="show"
-                    exit={{ opacity: 0, y: -4, transition: { duration: 0.16, ease: SNAP_EASE } }}
-                    className="flex flex-col gap-2.5 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4 transition-colors duration-200 hover:border-white/[0.12]"
+                    exit={{
+                      opacity: 0,
+                      scale: 0.94,
+                      y: -6,
+                      pointerEvents: "none",
+                      transition: { duration: 0.22, ease: SMOOTH_EASE },
+                    }}
+                    transition={{ layout: LAYOUT_SPRING }}
+                    className="relative flex flex-col gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 shadow-sm transition-colors duration-200 hover:border-white/[0.12] hover:bg-white/[0.03]"
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <h3 className="flex items-center gap-2 text-[13.5px] font-medium text-white/90">
-                        <span aria-hidden className="text-[16px] leading-none">{c.icon}</span>
+                    <div className="absolute bottom-0 left-0 top-0 w-1 rounded-l-2xl bg-gradient-to-b from-sky-400/40 to-transparent opacity-40" />
+                    <div className="flex items-center justify-between gap-2 pl-2">
+                      <h3 className="flex items-center gap-2.5 text-[14px] font-medium text-white/90">
+                        <span aria-hidden className="flex h-7 w-7 items-center justify-center rounded-md bg-white/[0.06] text-[14px] shadow-inner">{c.icon}</span>
                         <span>{c.label === "Domain matcher" ? "Domains" : c.label}</span>
                         {count > 0 && (
-                          <span className="text-[11.5px] font-normal tabular-nums text-white/35">
-                            ({count})
+                          <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10.5px] font-medium text-white/60">
+                            {count}
                           </span>
                         )}
                       </h3>
@@ -330,28 +358,31 @@ export function RuleEditor() {
                         whileHover={{ scale: 1.15 }}
                         whileTap={{ scale: 0.85 }}
                         transition={{ duration: 0.18, ease: SNAP_EASE }}
-                        className="rounded-full p-1 text-white/40 hover:bg-rose-500/10 hover:text-rose-300"
+                        className="flex h-7 w-7 items-center justify-center rounded-full text-white/40 hover:bg-rose-500/15 hover:text-rose-300"
                       >
                         ✕
                       </motion.button>
                     </div>
-                    <ConditionCardBody
-                      type={c.key}
-                      draft={draft}
-                      setDraft={setDraft}
-                    />
+                    <div className="pl-2">
+                      <ConditionCardBody
+                        type={c.key}
+                        draft={draft}
+                        setDraft={setDraft}
+                      />
+                    </div>
                   </motion.div>
                 );
               })}
             </AnimatePresence>
-            <AnimatePresence initial={false}>
+            <AnimatePresence initial={false} mode="popLayout">
               {availableTypes.length > 0 && (
                 <motion.div
                   key="add-more"
-                  initial={{ opacity: 0, y: -4 }}
+                  layout
+                  initial={{ opacity: 0, y: -6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.18, ease: SNAP_EASE }}
+                  exit={{ opacity: 0, y: -6, pointerEvents: "none" }}
+                  transition={{ duration: 0.22, ease: SMOOTH_EASE, layout: LAYOUT_SPRING }}
                   className="flex"
                 >
                   <AddConditionButton
@@ -365,9 +396,14 @@ export function RuleEditor() {
         )}
       </motion.section>
 
-      {/* THEN (action) — extra breathing room above */}
-      <motion.section variants={sectionVariants} className="mt-2 flex flex-col gap-2.5">
-        <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/45">
+      {/* THEN (action) */}
+      <motion.section
+        layout
+        variants={sectionVariants}
+        transition={{ layout: LAYOUT_SPRING }}
+        className="mt-4 flex flex-col gap-3"
+      >
+        <span className="pl-1 text-[11px] font-medium uppercase tracking-[0.18em] text-white/50">
           Then action
         </span>
         <ActionPicker
@@ -402,19 +438,19 @@ const ACTION_DEFS: ReadonlyArray<{ value: ActionValue; label: string; on: string
   {
     value: "proxy",
     label: "Proxy",
-    on: "bg-sky-500/40 text-sky-50 shadow-[0_4px_14px_-4px_rgba(56,189,248,0.45)]",
+    on: "bg-sky-500 text-white shadow-[0_2px_12px_-2px_rgba(56,189,248,0.7)]",
     ring: "ring-sky-300/30",
   },
   {
     value: "direct",
     label: "Direct",
-    on: "bg-amber-500/35 text-amber-50 shadow-[0_4px_14px_-4px_rgba(245,158,11,0.40)]",
+    on: "bg-amber-500 text-amber-50 shadow-[0_2px_12px_-2px_rgba(245,158,11,0.6)]",
     ring: "ring-amber-300/30",
   },
   {
     value: "block",
     label: "Block",
-    on: "bg-rose-500/40 text-rose-50 shadow-[0_4px_14px_-4px_rgba(244,63,94,0.50)]",
+    on: "bg-rose-500 text-rose-50 shadow-[0_2px_12px_-2px_rgba(244,63,94,0.7)]",
     ring: "ring-rose-300/30",
   },
 ];
@@ -422,20 +458,20 @@ const ACTION_DEFS: ReadonlyArray<{ value: ActionValue; label: string; on: string
 function actionWrapperTint(action: ActionValue): string {
   switch (action) {
     case "proxy":
-      return "bg-sky-500/[0.12] border-sky-500/40 shadow-[0_0_32px_-4px_rgba(56,189,248,0.22)]";
+      return "bg-sky-500/[0.04] border-sky-500/30 shadow-[0_0_40px_-10px_rgba(56,189,248,0.15)]";
     case "direct":
-      return "bg-amber-500/[0.08] border-amber-500/30 shadow-[0_0_28px_-4px_rgba(245,158,11,0.18)]";
+      return "bg-amber-500/[0.03] border-amber-500/25 shadow-[0_0_36px_-10px_rgba(245,158,11,0.12)]";
     case "block":
-      return "bg-rose-500/[0.12] border-rose-500/40 shadow-[0_0_32px_-4px_rgba(244,63,94,0.26)]";
+      return "bg-rose-500/[0.04] border-rose-500/30 shadow-[0_0_40px_-10px_rgba(244,63,94,0.18)]";
   }
 }
 
 function ActionPicker({ value, onChange }: { value: ActionValue; onChange: (v: ActionValue) => void }) {
   return (
     <div
-      className={`flex flex-col gap-2 rounded-2xl border p-4 transition-all duration-200 ${actionWrapperTint(value)}`}
+      className={`flex flex-col rounded-2xl border p-2 transition-all duration-300 ${actionWrapperTint(value)}`}
     >
-      <div className="flex w-full gap-1 rounded-full bg-black/30 p-1">
+      <div className="flex w-full gap-1 rounded-xl bg-black/40 p-1 shadow-inner">
         {ACTION_DEFS.map((a) => {
           const selected = value === a.value;
           return (
@@ -448,18 +484,18 @@ function ActionPicker({ value, onChange }: { value: ActionValue; onChange: (v: A
               whileTap={{ scale: 0.97 }}
               transition={{ duration: 0.18, ease: SNAP_EASE }}
               className={
-                "relative flex-1 rounded-full px-3 py-1.5 text-[12.5px] font-medium transition-colors duration-200 " +
-                (selected ? "text-white" : "text-white/55 hover:text-white/85")
+                "relative flex-1 rounded-lg px-4 py-2.5 text-[13.5px] font-medium transition-all duration-200 " +
+                (selected ? "text-white" : "text-white/50 hover:text-white/80 hover:bg-white/[0.03]")
               }
             >
               {selected && (
                 <motion.span
                   layoutId="action-pill"
-                  className={`absolute inset-0 rounded-full ${a.on}`}
-                  transition={{ type: "spring", stiffness: 500, damping: 32 }}
+                  className={`absolute inset-0 rounded-lg ${a.on}`}
+                  transition={{ type: "spring", stiffness: 400, damping: 30 }}
                 />
               )}
-              <span className="relative">{a.label}</span>
+              <span className="relative z-10">{a.label}</span>
             </motion.button>
           );
         })}
@@ -516,28 +552,29 @@ function AddConditionButton({
         ref={btnRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
-        whileHover={prominent ? { y: -1 } : { y: -1 }}
+        whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.96 }}
         transition={{ duration: 0.18, ease: SNAP_EASE }}
         aria-haspopup="menu"
         aria-expanded={open}
         className={
           prominent
-            ? "self-center rounded-full border border-sky-400/40 bg-sky-500/15 px-3.5 py-1.5 text-[12.5px] font-medium text-sky-100 shadow-[0_4px_14px_-4px_rgba(56,189,248,0.45)] hover:bg-sky-500/25"
-            : "self-start rounded-md border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-[11.5px] font-medium text-white/65 hover:border-white/[0.12] hover:bg-white/[0.06] hover:text-white/85"
+            ? "flex items-center gap-2 rounded-full border border-sky-400/30 bg-sky-500/15 px-4 py-2 text-[13px] font-medium text-sky-100 shadow-[0_4px_20px_-4px_rgba(56,189,248,0.3)] transition-all hover:bg-sky-500/25"
+            : "group flex items-center gap-2 self-start rounded-full border border-white/[0.08] bg-white/[0.03] px-3.5 py-1.5 text-[12.5px] font-medium text-white/70 transition-all hover:border-white/[0.15] hover:bg-white/[0.08] hover:text-white/95"
         }
       >
-        + Add condition
+        <span className="text-lg leading-none opacity-70 group-hover:opacity-100">{open ? "×" : "+"}</span>
+        <span>Add condition</span>
       </motion.button>
       {open && coords && createPortal(
         <motion.div
           ref={popRef}
           role="menu"
-          initial={{ opacity: 0, y: -4, scale: 0.96 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
+          initial={{ opacity: 0, y: -4, scale: 0.96, filter: "blur(4px)" }}
+          animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
           transition={{ duration: 0.16, ease: SNAP_EASE }}
           style={{ position: "fixed", left: coords.left, top: coords.top, zIndex: 1000 }}
-          className="flex w-56 flex-col rounded-lg border border-white/15 bg-[#1c1f2a] p-1 shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
+          className="flex w-56 flex-col gap-0.5 rounded-xl border border-white/[0.12] bg-[#1a1c24]/95 p-1.5 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.6)] backdrop-blur-xl"
         >
           {availableTypes.map((t) => (
             <button
@@ -545,9 +582,9 @@ function AddConditionButton({
               type="button"
               role="menuitem"
               onClick={() => { onPick(t.key); setOpen(false); }}
-              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] text-white/85 hover:bg-white/[0.06]"
+              className="group flex items-center gap-3 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-white/70 transition-colors duration-150 hover:bg-white/[0.06] hover:text-white/95"
             >
-              <span aria-hidden className="text-[14px]">{t.icon}</span>
+              <span aria-hidden className="flex h-6 w-6 items-center justify-center rounded-md bg-white/[0.04] text-[14px] shadow-sm transition-colors group-hover:bg-white/[0.08]">{t.icon}</span>
               <span>{t.label}</span>
             </button>
           ))}
@@ -577,7 +614,7 @@ function Chip({
       animate="show"
       exit="exit"
       whileHover={{ y: -1 }}
-      transition={{ duration: 0.18, ease: SNAP_EASE }}
+      transition={{ duration: 0.18, ease: SNAP_EASE, layout: LAYOUT_SPRING }}
       className="group inline-flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.05] px-2.5 py-1 text-[12px] text-white/90 transition-colors duration-200 hover:border-white/[0.16] hover:bg-white/[0.10]"
     >
       {children}
@@ -660,12 +697,10 @@ function ConditionCardBody({
 const ADD_INPUT_CLASSES =
   "flex-1 rounded-md border border-white/[0.08] bg-white/[0.02] px-2.5 py-1.5 text-[12.5px] text-white/90 outline-none transition-colors duration-200 placeholder:text-white/30 focus:border-sky-400/45 focus:bg-white/[0.04]";
 
-const ADD_KIND_SELECT_CLASSES =
-  "rounded-md border border-white/[0.08] bg-[#1c1f2a] px-2 py-1.5 text-[12px] text-white/85 outline-none hover:border-white/[0.16] focus:border-sky-400/45";
-
 // ----- Domains -----
 
 const DOMAIN_KINDS: DomainMatcher["kind"][] = ["exact", "suffix", "keyword", "regex"];
+const DOMAIN_OPTIONS = DOMAIN_KINDS.map(k => ({ value: k, label: k }));
 
 function DomainsBody({ value, onChange }: { value: DomainMatcher[]; onChange: (next: DomainMatcher[]) => void }) {
   const [addKind, setAddKind] = useState<DomainMatcher["kind"]>("suffix");
@@ -680,22 +715,24 @@ function DomainsBody({ value, onChange }: { value: DomainMatcher[]; onChange: (n
   return (
     <div className="flex flex-col gap-2.5">
       {value.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <AnimatePresence initial={false}>
+        <div className="relative flex flex-wrap items-center gap-1.5">
+          <AnimatePresence initial={false} mode="popLayout">
             {value.map((m, i) => (
               <Chip
                 key={`${i}-${m.kind}-${m.value}`}
                 onRemove={() => onChange(value.filter((_, j) => j !== i))}
                 removeLabel={`Remove domain matcher ${i + 1}`}
               >
-                <select
-                  aria-label={`Domain matcher kind ${i + 1}`}
-                  value={m.kind}
-                  onChange={(e) => onChange(value.map((x, j) => j === i ? { ...x, kind: e.target.value as DomainMatcher["kind"] } : x))}
-                  className="cursor-pointer bg-transparent text-[11px] uppercase tracking-wider text-white/45 outline-none transition-colors duration-150 hover:text-white/80"
-                >
-                  {DOMAIN_KINDS.map((k) => <option key={k} value={k} className="bg-[#1c1f2a] text-white/85 normal-case">{k}</option>)}
-                </select>
+                <div className="w-[88px] shrink-0">
+                  <Dropdown
+                    value={m.kind}
+                    onChange={(v) => onChange(value.map((x, j) => j === i ? { ...x, kind: v as DomainMatcher["kind"] } : x))}
+                    options={DOMAIN_OPTIONS}
+                    triggerClassName="border-transparent bg-transparent px-1 py-0.5 text-[11px] uppercase tracking-wider text-white/45 hover:border-white/10 hover:bg-white/[0.06] hover:text-white/80"
+                    menuClassName="w-32"
+                    ariaLabel={`Domain matcher kind ${i + 1}`}
+                  />
+                </div>
                 <span className="text-white/25">·</span>
                 <span className="text-white/95">{m.value}</span>
               </Chip>
@@ -704,14 +741,13 @@ function DomainsBody({ value, onChange }: { value: DomainMatcher[]; onChange: (n
         </div>
       )}
       <div className="flex items-center gap-2">
-        <select
-          aria-label="Domain matcher kind"
-          value={addKind}
-          onChange={(e) => setAddKind(e.target.value as DomainMatcher["kind"])}
-          className={ADD_KIND_SELECT_CLASSES}
-        >
-          {DOMAIN_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
-        </select>
+        <div className="w-32 shrink-0">
+          <Dropdown
+            value={addKind}
+            onChange={(v) => setAddKind(v as DomainMatcher["kind"])}
+            options={DOMAIN_OPTIONS}
+          />
+        </div>
         <input
           aria-label="Domain matcher value"
           value={addValue}
@@ -738,8 +774,8 @@ function CidrsBody({ value, onChange }: { value: string[]; onChange: (next: stri
   return (
     <div className="flex flex-col gap-2.5">
       {value.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <AnimatePresence initial={false}>
+        <div className="relative flex flex-wrap items-center gap-1.5">
+          <AnimatePresence initial={false} mode="popLayout">
             {value.map((cidr, i) => (
               <Chip
                 key={`${i}-${cidr}`}
@@ -768,6 +804,7 @@ function CidrsBody({ value, onChange }: { value: string[]; onChange: (next: stri
 
 const GEO_PREFIXES = ["geosite", "geoip"] as const;
 type GeoPrefix = typeof GEO_PREFIXES[number];
+const GEO_OPTIONS = GEO_PREFIXES.map(p => ({ value: p, label: p }));
 
 function splitGeo(entry: string): { prefix: GeoPrefix; rest: string } {
   const idx = entry.indexOf(":");
@@ -789,8 +826,8 @@ function GeoBody({ value, onChange }: { value: string[]; onChange: (next: string
   return (
     <div className="flex flex-col gap-2.5">
       {value.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <AnimatePresence initial={false}>
+        <div className="relative flex flex-wrap items-center gap-1.5">
+          <AnimatePresence initial={false} mode="popLayout">
             {value.map((entry, i) => {
               const { prefix, rest } = splitGeo(entry);
               return (
@@ -799,14 +836,15 @@ function GeoBody({ value, onChange }: { value: string[]; onChange: (next: string
                   onRemove={() => onChange(value.filter((_, j) => j !== i))}
                   removeLabel={`Remove geo ${i + 1}`}
                 >
-                  <select
-                    aria-label={`Geo prefix ${i + 1}`}
-                    value={prefix}
-                    onChange={(e) => onChange(value.map((x, j) => j === i ? `${e.target.value}:${splitGeo(x).rest}` : x))}
-                    className="cursor-pointer bg-transparent text-[11px] uppercase tracking-wider text-white/45 outline-none transition-colors duration-150 hover:text-white/80"
-                  >
-                    {GEO_PREFIXES.map((p) => <option key={p} value={p} className="bg-[#1c1f2a] text-white/85 normal-case">{p}</option>)}
-                  </select>
+                  <div className="w-[88px] shrink-0">
+                    <Dropdown
+                      value={prefix}
+                      onChange={(v) => onChange(value.map((x, j) => j === i ? `${v}:${splitGeo(x).rest}` : x))}
+                      options={GEO_OPTIONS}
+                      triggerClassName="border-transparent bg-transparent px-1 py-0.5 text-[11px] uppercase tracking-wider text-white/45 hover:border-white/10 hover:bg-white/[0.06] hover:text-white/80"
+                      menuClassName="w-32"
+                    />
+                  </div>
                   <span className="text-white/25">·</span>
                   <span className="text-white/95">{rest}</span>
                 </Chip>
@@ -816,14 +854,14 @@ function GeoBody({ value, onChange }: { value: string[]; onChange: (next: string
         </div>
       )}
       <div className="flex items-center gap-2">
-        <select
-          aria-label="Geo prefix"
-          value={addPrefix}
-          onChange={(e) => setAddPrefix(e.target.value as GeoPrefix)}
-          className={ADD_KIND_SELECT_CLASSES}
-        >
-          {GEO_PREFIXES.map((p) => <option key={p} value={p}>{p}</option>)}
-        </select>
+        <div className="w-28 shrink-0">
+          <Dropdown
+            value={addPrefix}
+            onChange={(v) => setAddPrefix(v as GeoPrefix)}
+            options={GEO_OPTIONS}
+            ariaLabel="Geo prefix"
+          />
+        </div>
         <input
           aria-label="Geo value"
           value={addValue}
@@ -874,8 +912,8 @@ function PortsBody({ value, onChange }: { value: PortSpec[]; onChange: (next: Po
   return (
     <div className="flex flex-col gap-2.5">
       {value.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <AnimatePresence initial={false}>
+        <div className="relative flex flex-wrap items-center gap-1.5">
+          <AnimatePresence initial={false} mode="popLayout">
             {value.map((p, i) => (
               <Chip
                 key={`${i}-${portChipLabel(p)}`}
@@ -890,26 +928,14 @@ function PortsBody({ value, onChange }: { value: PortSpec[]; onChange: (next: Po
       )}
       <div className="flex flex-wrap items-center gap-2">
         {/* Small inline mode switch — single | range — matches the rest of the visual language. */}
-        <div className="flex gap-0.5 rounded-full bg-black/30 p-0.5">
-          {(["single", "range"] as const).map((m) => {
-            const selected = mode === m;
-            return (
-              <button
-                key={m}
-                type="button"
-                role="button"
-                aria-pressed={selected}
-                onClick={() => setMode(m)}
-                className={
-                  "rounded-full px-2.5 py-1 text-[11.5px] font-medium capitalize transition-colors duration-150 " +
-                  (selected ? "bg-white/[0.10] text-white/95" : "text-white/55 hover:text-white/80")
-                }
-              >
-                {m}
-              </button>
-            );
-          })}
-        </div>
+        <Segmented
+          value={mode}
+          onChange={(v) => setMode(v as "single" | "range")}
+          options={[
+            { value: "single", label: "Single" },
+            { value: "range", label: "Range" }
+          ]}
+        />
         {mode === "single" ? (
           <input
             aria-label="Port number"
@@ -962,8 +988,8 @@ function ProcessesBody({ value, onChange }: { value: string[]; onChange: (next: 
   return (
     <div className="flex flex-col gap-2.5">
       {value.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <AnimatePresence initial={false}>
+        <div className="relative flex flex-wrap items-center gap-1.5">
+          <AnimatePresence initial={false} mode="popLayout">
             {value.map((name, i) => (
               <Chip
                 key={`${i}-${name}`}

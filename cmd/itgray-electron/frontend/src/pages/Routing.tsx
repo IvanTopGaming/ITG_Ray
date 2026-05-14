@@ -21,6 +21,7 @@ import { ConfirmDialog } from "@/components/controls/ConfirmDialog";
 import { cn } from "@/lib/cn";
 
 const SNAP_EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+const SMOOTH_EASE: [number, number, number, number] = [0.32, 0.72, 0, 1];
 
 const pageVariants: Variants = {
   hidden: { opacity: 0 },
@@ -39,6 +40,18 @@ const popoverVariants: Variants = {
   hidden: { opacity: 0, y: -4, scale: 0.96 },
   show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.18, ease: SNAP_EASE } },
   exit: { opacity: 0, y: -4, scale: 0.96, transition: { duration: 0.18, ease: SNAP_EASE } },
+};
+
+const groupCardVariants: Variants = {
+  initial: { opacity: 0, scale: 0.96, height: 0, overflow: "hidden" },
+  animate: { opacity: 1, scale: 1, height: "auto", overflow: "visible", transition: { duration: 0.3, ease: SMOOTH_EASE } },
+  exit: { opacity: 0, scale: 0.96, height: 0, overflow: "hidden", transition: { duration: 0.25, ease: SMOOTH_EASE } },
+};
+
+const ruleRowVariants: Variants = {
+  initial: { opacity: 0, height: 0, scale: 0.96, overflow: "hidden" },
+  animate: { opacity: 1, height: "auto", scale: 1, overflow: "visible", transition: { duration: 0.3, ease: SMOOTH_EASE } },
+  exit: { opacity: 0, height: 0, scale: 0.96, overflow: "hidden", transition: { duration: 0.25, ease: SMOOTH_EASE } },
 };
 
 export function reorderRules(groups: GroupView[], groupId: string, fromIdx: number, toIdx: number): GroupView[] {
@@ -63,7 +76,13 @@ export function reorderGroups(groups: GroupView[], activeId: string, overId: str
 }
 
 export function Routing() {
-  const { groups, defaultAction, lastError } = useRules();
+  const { groups: backendGroups, defaultAction, lastError } = useRules();
+  const [localGroups, setLocalGroups] = useState(backendGroups);
+
+  useEffect(() => {
+    setLocalGroups(backendGroups);
+  }, [backendGroups]);
+
   const [adding, setAdding] = useState(false);
 
   // PointerSensor with a 3px activation threshold: drag starts as soon
@@ -74,18 +93,19 @@ export function Routing() {
     useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
   );
 
-  const safetyGroup = groups.find((g) => g.id === "safety");
-  const userGroups = groups.filter((g) => g.id !== "safety");
+  const safetyGroup = localGroups.find((g) => g.id === "safety");
+  const userGroups = localGroups.filter((g) => g.id !== "safety");
 
   function handleRuleDragEnd(groupId: string) {
     return (e: DragEndEvent) => {
       if (!e.over || e.over.id === e.active.id) return;
-      const group = groups.find((g) => g.id === groupId);
+      const group = localGroups.find((g) => g.id === groupId);
       if (!group) return;
       const fromIdx = group.rules.findIndex((r) => r.id === e.active.id);
       const toIdx = group.rules.findIndex((r) => r.id === e.over!.id);
       if (fromIdx < 0 || toIdx < 0) return;
-      const nextGroups = reorderRules(groups, groupId, fromIdx, toIdx);
+      const nextGroups = reorderRules(localGroups, groupId, fromIdx, toIdx);
+      setLocalGroups(nextGroups);
       void rulesReplaceAll({ defaultAction, groups: nextGroups });
     };
   }
@@ -94,12 +114,12 @@ export function Routing() {
     if (!e.over || e.over.id === e.active.id) return;
     const nextUser = reorderGroups(userGroups, String(e.active.id), String(e.over.id));
     const finalGroups = safetyGroup ? [safetyGroup, ...nextUser] : nextUser;
+    setLocalGroups(finalGroups);
     void rulesReplaceAll({ defaultAction, groups: finalGroups });
   }
 
   return (
     <motion.div
-      layout
       className="flex flex-col gap-3"
       initial="hidden"
       animate="show"
@@ -132,17 +152,19 @@ export function Routing() {
       <AnimatePresence initial={false}>
         {adding && <AddGroupRow key="add-group-row" onCancel={() => setAdding(false)} />}
       </AnimatePresence>
-      {safetyGroup && <GroupCard group={safetyGroup} onRuleDragEnd={() => {}} allGroups={groups} />}
+      {safetyGroup && <GroupCard group={safetyGroup} onRuleDragEnd={() => {}} allGroups={localGroups} />}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onGroupDragEnd}>
         <SortableContext items={userGroups.map((g) => g.id)} strategy={verticalListSortingStrategy}>
-          {userGroups.map((g) => (
-            <SortableGroupCard
-              key={g.id}
-              group={g}
-              onRuleDragEnd={handleRuleDragEnd(g.id)}
-              allGroups={groups}
-            />
-          ))}
+          <AnimatePresence initial={false}>
+            {userGroups.map((g) => (
+              <SortableGroupCard
+                key={g.id}
+                group={g}
+                onRuleDragEnd={handleRuleDragEnd(g.id)}
+                allGroups={localGroups}
+              />
+            ))}
+          </AnimatePresence>
         </SortableContext>
       </DndContext>
     </motion.div>
@@ -176,42 +198,44 @@ function AddGroupRow({ onCancel }: { onCancel: () => void }) {
   const trimmed = value.trim();
   return (
     <motion.div
-      initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -6 }}
-      transition={{ duration: 0.22, ease: SNAP_EASE }}
-      className="glass-regular flex items-center gap-2 rounded-2xl p-3"
+      initial={{ opacity: 0, height: 0, marginBottom: -12 }}
+      animate={{ opacity: 1, height: "auto", marginBottom: 0 }}
+      exit={{ opacity: 0, height: 0, marginBottom: -12 }}
+      transition={{ duration: 0.28, ease: SMOOTH_EASE }}
+      style={{ overflow: "hidden" }}
     >
-      <input
-        ref={ref}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") void submit();
-          if (e.key === "Escape") cancel();
-        }}
-        placeholder="New group name — Enter to add, Esc to cancel"
-        className="flex-1 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[13px] outline-none focus:border-sky-400/40"
-      />
-      <motion.button
-        type="button"
-        onClick={() => void submit()}
-        disabled={!trimmed}
-        whileTap={{ scale: 0.96 }}
-        transition={{ duration: 0.18, ease: SNAP_EASE }}
-        className="rounded-md bg-sky-500/30 px-3 py-1 text-[12px] font-medium text-sky-100 hover:bg-sky-500/40 disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        Add
-      </motion.button>
-      <motion.button
-        type="button"
-        onClick={cancel}
-        whileTap={{ scale: 0.96 }}
-        transition={{ duration: 0.18, ease: SNAP_EASE }}
-        className="rounded-md px-2 py-1 text-[12px] text-white/55 hover:text-white/90"
-      >
-        Cancel
-      </motion.button>
+      <div className="glass-regular flex items-center gap-2 rounded-2xl p-3">
+        <input
+          ref={ref}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void submit();
+            if (e.key === "Escape") cancel();
+          }}
+          placeholder="New group name — Enter to add, Esc to cancel"
+          className="flex-1 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[13px] outline-none focus:border-sky-400/40"
+        />
+        <motion.button
+          type="button"
+          onClick={() => void submit()}
+          disabled={!trimmed}
+          whileTap={{ scale: 0.96 }}
+          transition={{ duration: 0.18, ease: SNAP_EASE }}
+          className="rounded-md bg-sky-500/30 px-3 py-1 text-[12px] font-medium text-sky-100 hover:bg-sky-500/40 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Add
+        </motion.button>
+        <motion.button
+          type="button"
+          onClick={cancel}
+          whileTap={{ scale: 0.96 }}
+          transition={{ duration: 0.18, ease: SNAP_EASE }}
+          className="rounded-md px-2 py-1 text-[12px] text-white/55 hover:text-white/90"
+        >
+          Cancel
+        </motion.button>
+      </div>
     </motion.div>
   );
 }
@@ -223,12 +247,38 @@ type DragHandleProps = {
 
 function GroupCard({ group, onRuleDragEnd, dragHandle, allGroups }: { group: GroupView; onRuleDragEnd: (e: DragEndEvent) => void; dragHandle?: DragHandleProps; allGroups: GroupView[] }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuCoords, setMenuCoords] = useState<{ left: number; top: number } | null>(null);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const menuPopRef = useRef<HTMLDivElement>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const navigate = useNavigate();
   const ruleSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
   );
+
+  useEffect(() => {
+    if (!menuOpen || !menuBtnRef.current) return;
+    const r = menuBtnRef.current.getBoundingClientRect();
+    // w-32 is 128px
+    setMenuCoords({ left: r.right - 128, top: r.bottom + 4 });
+  }, [menuOpen]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (menuBtnRef.current?.contains(t) || menuPopRef.current?.contains(t)) return;
+      setMenuOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuOpen(false); };
+    document.addEventListener("mousedown", handler);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [menuOpen]);
 
   function handleAddRule() {
     // Don't persist a stub on the server — navigate to the editor in
@@ -283,43 +333,49 @@ function GroupCard({ group, onRuleDragEnd, dragHandle, allGroups }: { group: Gro
             {!group.locked && (
               <div className="relative">
                 <button
+                  ref={menuBtnRef}
                   type="button"
                   aria-label={`${group.name} menu`}
-                  onClick={() => setMenuOpen((v) => !v)}
+                  onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
                   className="rounded-md p-1 text-white/55 hover:bg-white/[0.08] hover:text-white/90"
                 >
                   <MoreHorizontal className="h-4 w-4" />
                 </button>
-                <AnimatePresence>
-                  {menuOpen && (
-                    <motion.div
-                      role="menu"
-                      variants={popoverVariants}
-                      initial="hidden"
-                      animate="show"
-                      exit="exit"
-                      style={{ transformOrigin: "top right" }}
-                      className="absolute right-0 z-10 mt-1 w-32 rounded-md border border-white/10 bg-[#1c1f2a] py-1 text-[12.5px] shadow-lg"
-                    >
-                      <button
-                        role="menuitem"
-                        type="button"
-                        className="block w-full px-3 py-1.5 text-left hover:bg-white/[0.06]"
-                        onClick={() => { setRenaming(true); setMenuOpen(false); }}
+                {menuCoords && createPortal(
+                  <AnimatePresence>
+                    {menuOpen && (
+                      <motion.div
+                        ref={menuPopRef}
+                        role="menu"
+                        onClick={(e) => e.stopPropagation()}
+                        variants={popoverVariants}
+                        initial="hidden"
+                        animate="show"
+                        exit="exit"
+                        style={{ position: "fixed", left: menuCoords.left, top: menuCoords.top, zIndex: 1000, transformOrigin: "top right" }}
+                        className="w-32 rounded-lg border border-white/[0.18] bg-bg-1/95 p-1 shadow-[0_18px_36px_-10px_rgba(0,0,0,0.6)] backdrop-blur-xl"
                       >
-                        Rename
-                      </button>
-                      <button
-                        role="menuitem"
-                        type="button"
-                        className="block w-full px-3 py-1.5 text-left text-rose-300 hover:bg-rose-500/10"
-                        onClick={() => { setConfirmDelete(true); setMenuOpen(false); }}
-                      >
-                        Delete
-                      </button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                        <button
+                          role="menuitem"
+                          type="button"
+                          className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors duration-instant ease-snap text-white/75 hover:bg-white/[0.06] hover:text-white"
+                          onClick={() => { setRenaming(true); setMenuOpen(false); }}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          role="menuitem"
+                          type="button"
+                          className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors duration-instant ease-snap text-rose-400 hover:bg-rose-500/15 hover:text-rose-300"
+                          onClick={() => { setConfirmDelete(true); setMenuOpen(false); }}
+                        >
+                          Delete
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>,
+                  document.body
+                )}
               </div>
             )}
           </div>
@@ -330,17 +386,27 @@ function GroupCard({ group, onRuleDragEnd, dragHandle, allGroups }: { group: Gro
           </div>
         ) : group.locked ? (
           <ul className="flex flex-col gap-1">
-            {group.rules.map((r) => (
-              <li key={r.id}>
-                <RuleRow rule={r} groupLocked />
-              </li>
-            ))}
+            <AnimatePresence initial={false}>
+              {group.rules.map((r) => (
+                <motion.li
+                  key={r.id}
+                  variants={ruleRowVariants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                >
+                  <RuleRow rule={r} groupLocked />
+                </motion.li>
+              ))}
+            </AnimatePresence>
           </ul>
         ) : (
           <DndContext sensors={ruleSensors} collisionDetection={closestCenter} onDragEnd={onRuleDragEnd}>
             <SortableContext items={group.rules.map((r) => r.id)} strategy={verticalListSortingStrategy}>
               <ul className="flex flex-col gap-1">
-                {group.rules.map((r) => <SortableRuleRow key={r.id} rule={r} group={group} allGroups={allGroups} />)}
+                <AnimatePresence initial={false}>
+                  {group.rules.map((r) => <SortableRuleRow key={r.id} rule={r} group={group} allGroups={allGroups} />)}
+                </AnimatePresence>
               </ul>
             </SortableContext>
           </DndContext>
@@ -412,9 +478,16 @@ function SortableGroupCard({ group, onRuleDragEnd, allGroups }: { group: GroupVi
     opacity: isDragging ? 0.7 : 1,
   };
   return (
-    <div ref={setNodeRef} style={style}>
-      <GroupCard group={group} onRuleDragEnd={onRuleDragEnd} allGroups={allGroups} dragHandle={{ attributes: attributes as HTMLAttributes<HTMLElement>, listeners: listeners as Record<string, (event: SyntheticEvent) => void> | undefined }} />
-    </div>
+    <motion.div
+      variants={groupCardVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+    >
+      <div ref={setNodeRef} style={style}>
+        <GroupCard group={group} onRuleDragEnd={onRuleDragEnd} allGroups={allGroups} dragHandle={{ attributes: attributes as HTMLAttributes<HTMLElement>, listeners: listeners as Record<string, (event: SyntheticEvent) => void> | undefined }} />
+      </div>
+    </motion.div>
   );
 }
 
@@ -426,20 +499,27 @@ function SortableRuleRow({ rule, group, allGroups }: { rule: RuleView; group: Gr
     opacity: isDragging ? 0.7 : 1,
   };
   return (
-    <li ref={setNodeRef} style={style} className="flex items-center gap-2">
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        aria-label={`Drag ${rule.name}`}
-        className="cursor-grab rounded p-1.5 text-white/35 hover:bg-white/[0.06] hover:text-white/80 active:cursor-grabbing"
-      >
-        <GripVertical className="h-4 w-4" />
-      </button>
-      <div className="flex-1">
-        <RuleRow rule={rule} groupLocked={false} group={group} allGroups={allGroups} />
+    <motion.li
+      variants={ruleRowVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+    >
+      <div ref={setNodeRef} style={style} className="flex items-center gap-2">
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          aria-label={`Drag ${rule.name}`}
+          className="cursor-grab rounded p-1.5 text-white/35 hover:bg-white/[0.06] hover:text-white/80 active:cursor-grabbing"
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+        <div className="flex-1">
+          <RuleRow rule={rule} groupLocked={false} group={group} allGroups={allGroups} />
+        </div>
       </div>
-    </li>
+    </motion.li>
   );
 }
 
@@ -493,61 +573,78 @@ function RuleRow({
   return (
     <motion.div
       onClick={groupLocked ? undefined : () => navigate(`/routing/${rule.id}`)}
-      whileHover={groupLocked ? undefined : { y: -1 }}
-      whileTap={groupLocked ? undefined : { scale: 0.99 }}
-      transition={{ duration: 0.18, ease: SNAP_EASE }}
       className={cn(
-        "group flex items-center justify-between rounded-md px-3 py-2 text-[12.5px]",
-        groupLocked ? "bg-white/[0.02]" : "bg-white/[0.04] hover:bg-white/[0.06] cursor-pointer",
+        "group flex items-center justify-between rounded-md text-[12.5px]",
+        groupLocked ? "bg-white/[0.02] px-3 py-2" : "bg-white/[0.04] hover:bg-white/[0.06] cursor-pointer",
       )}
     >
-      <div className="flex items-center gap-3">
+      <motion.div
+        whileHover={groupLocked ? undefined : { y: -1 }}
+        whileTap={groupLocked ? undefined : { scale: 0.99 }}
+        transition={{ duration: 0.18, ease: SNAP_EASE }}
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-3",
+          groupLocked ? "" : "px-3 py-2",
+        )}
+      >
         <span className={cn("rounded px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider", actionStyle)}>
           {rule.action}
         </span>
         <span className="text-white/85">{rule.name}</span>
         <span className="text-[11px] text-white/45">{summarise(rule.conditions)}</span>
-      </div>
+      </motion.div>
       {!groupLocked && (
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-          <button
-            ref={menuBtnRef}
-            type="button"
-            aria-label={`${rule.name} menu`}
-            onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
-            className="rounded-md p-1 text-white/55 hover:bg-white/[0.08] hover:text-white/90"
-          >
-            <MoreHorizontal className="h-4 w-4" />
-          </button>
-          {menuOpen && menuCoords && createPortal(
-            <motion.div
-              ref={menuPopRef}
-              role="menu"
-              initial={{ opacity: 0, y: -4, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.16, ease: SNAP_EASE }}
-              style={{ position: "fixed", left: menuCoords.left, top: menuCoords.top, zIndex: 1000 }}
-              className="w-44 rounded-md border border-white/15 bg-[#1c1f2a] py-1 text-[12.5px] shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
+        <div
+          className="flex items-center gap-1 pr-3"
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <div className="relative">
+            <button
+              ref={menuBtnRef}
+              type="button"
+              aria-label={`${rule.name} menu`}
+              onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
+              className="rounded-md p-1 text-white/55 hover:bg-white/[0.08] hover:text-white/90"
             >
-              <button
-                role="menuitem"
-                type="button"
-                className="block w-full px-3 py-1.5 text-left hover:bg-white/[0.06]"
-                onClick={() => { setMenuOpen(false); navigate(`/routing/${rule.id}`); }}
-              >
-                Edit
-              </button>
-              <button
-                role="menuitem"
-                type="button"
-                className="block w-full px-3 py-1.5 text-left text-rose-300 hover:bg-rose-500/10"
-                onClick={() => { setMenuOpen(false); void rulesRemoveRule(rule.id); }}
-              >
-                Delete
-              </button>
-            </motion.div>,
-            document.body,
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+          {menuCoords && createPortal(
+            <AnimatePresence>
+              {menuOpen && (
+                <motion.div
+                  ref={menuPopRef}
+                  role="menu"
+                  onClick={(e) => e.stopPropagation()}
+                  initial={{ opacity: 0, y: -4, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -4, scale: 0.96 }}
+                  transition={{ duration: 0.16, ease: SNAP_EASE }}
+                  style={{ position: "fixed", left: menuCoords.left, top: menuCoords.top, zIndex: 1000 }}
+                  className="w-44 rounded-lg border border-white/[0.18] bg-bg-1/95 p-1 shadow-[0_18px_36px_-10px_rgba(0,0,0,0.6)] backdrop-blur-xl"
+                >
+                  <button
+                    role="menuitem"
+                    type="button"
+                    className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors duration-instant ease-snap text-white/75 hover:bg-white/[0.06] hover:text-white"
+                    onClick={() => { setMenuOpen(false); navigate(`/routing/${rule.id}`); }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    role="menuitem"
+                    type="button"
+                    className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors duration-instant ease-snap text-rose-400 hover:bg-rose-500/15 hover:text-rose-300"
+                    onClick={() => { setMenuOpen(false); void rulesRemoveRule(rule.id); }}
+                  >
+                    Delete
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>,
+            document.body
           )}
+          </div>
           <ChevronRight className="h-3.5 w-3.5 text-white/40 transition-transform group-hover:translate-x-0.5" />
         </div>
       )}

@@ -15,6 +15,10 @@ export type DropdownProps<T extends string = string> = {
   onChange: (v: T) => void;
   disabled?: boolean;
   options: readonly DropdownOption<T>[];
+  className?: string;
+  triggerClassName?: string;
+  menuClassName?: string;
+  ariaLabel?: string;
 };
 
 export function Dropdown<T extends string = string>({
@@ -22,6 +26,10 @@ export function Dropdown<T extends string = string>({
   onChange,
   disabled,
   options,
+  className,
+  triggerClassName,
+  menuClassName,
+  ariaLabel,
 }: DropdownProps<T>) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -46,17 +54,19 @@ export function Dropdown<T extends string = string>({
   }, [open]);
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className={cn("relative", className)}>
       <button
         type="button"
         onClick={() => !disabled && setOpen((o) => !o)}
         disabled={disabled}
+        aria-label={ariaLabel}
         className={cn(
           "flex w-full items-center justify-between rounded-lg border bg-white/[0.04] px-3 py-2 text-left text-[12px] text-white transition-colors duration-instant ease-snap",
           open
             ? "border-accent-start/50 bg-white/[0.06]"
             : "border-white/15 hover:border-white/25 hover:bg-white/[0.05]",
           disabled && "cursor-not-allowed opacity-60",
+          triggerClassName
         )}
       >
         <span className={cn(!current?.label && "text-white/35")}>
@@ -76,7 +86,10 @@ export function Dropdown<T extends string = string>({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.98 }}
             transition={{ duration: 0.15, ease: SNAP_EASE }}
-            className="absolute left-0 right-0 top-full z-30 mt-1 max-h-[220px] overflow-y-auto rounded-lg border border-white/[0.18] bg-bg-1/95 p-1 shadow-[0_18px_36px_-10px_rgba(0,0,0,0.6)] backdrop-blur-xl"
+            className={cn(
+              "absolute left-0 right-0 top-full z-30 mt-1 max-h-[220px] overflow-y-auto rounded-lg border border-white/[0.18] bg-bg-1/95 p-1 shadow-[0_18px_36px_-10px_rgba(0,0,0,0.6)] backdrop-blur-xl",
+              menuClassName
+            )}
           >
             {options.map((o) => (
               <button

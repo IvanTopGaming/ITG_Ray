@@ -1,6 +1,13 @@
 // cmd/itgray-electron/src/preload/preload.ts
 import { contextBridge, ipcRenderer } from "electron";
-import type { RpcMethod, RpcParams, RpcResult } from "../shared/protocol";
+import type {
+  RpcMethod,
+  RpcParams,
+  RpcResult,
+  RulesReplaceAllParams,
+  RulesRuleAddParams,
+  RulesRuleEditParams,
+} from "../shared/protocol";
 
 function rpc<M extends RpcMethod>(method: M, params?: RpcParams<M>): Promise<RpcResult<M>> {
   return ipcRenderer.invoke("rpc", method, params ?? null);
@@ -61,14 +68,14 @@ contextBridge.exposeInMainWorld("itg", {
   },
   rules: {
     list: () => rpc("rules.list"),
-    replaceAll: (params: { model: unknown }) => rpc("rules.replaceAll", params),
+    replaceAll: (params: RulesReplaceAllParams) => rpc("rules.replaceAll", params),
     groupAdd: (params: { name: string }) => rpc("rules.groupAdd", params),
     groupEdit: (params: { id: string; name: string; enabled: boolean }) =>
       rpc("rules.groupEdit", params),
     groupRemove: (params: { id: string }) => rpc("rules.groupRemove", params),
-    ruleAdd: (params: { groupId: string; rule: unknown }) =>
+    ruleAdd: (params: RulesRuleAddParams) =>
       rpc("rules.ruleAdd", params),
-    ruleEdit: (params: { rule: unknown }) => rpc("rules.ruleEdit", params),
+    ruleEdit: (params: RulesRuleEditParams) => rpc("rules.ruleEdit", params),
     ruleRemove: (params: { id: string }) => rpc("rules.ruleRemove", params),
     ruleToggle: (params: { id: string }) => rpc("rules.ruleToggle", params),
     ruleMove: (params: { id: string; toGroupId: string }) =>
