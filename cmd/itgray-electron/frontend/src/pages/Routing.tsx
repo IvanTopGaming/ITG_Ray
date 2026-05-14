@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, type HTMLAttributes, type SyntheticEvent }
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Lock, ChevronRight, Plus, MoreHorizontal, GripVertical } from "lucide-react";
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
@@ -48,10 +48,15 @@ const groupCardVariants: Variants = {
   exit: { opacity: 0, scale: 0.96, height: 0, overflow: "hidden", transition: { duration: 0.25, ease: SMOOTH_EASE } },
 };
 
+// Note: intentionally no `scale` here — even `scale: 1` in the steady
+// state applies `transform: scale(1)` on motion.li, creating a new
+// stacking context + compositing layer per rule. That fights with
+// dnd-kit's transform on the inner element and amplifies jerks during
+// sortable reorder. Fade + height collapse is enough for enter/exit.
 const ruleRowVariants: Variants = {
-  initial: { opacity: 0, height: 0, scale: 0.96, overflow: "hidden" },
-  animate: { opacity: 1, height: "auto", scale: 1, overflow: "visible", transition: { duration: 0.3, ease: SMOOTH_EASE } },
-  exit: { opacity: 0, height: 0, scale: 0.96, overflow: "hidden", transition: { duration: 0.25, ease: SMOOTH_EASE } },
+  initial: { opacity: 0, height: 0, overflow: "hidden" },
+  animate: { opacity: 1, height: "auto", overflow: "visible", transition: { duration: 0.3, ease: SMOOTH_EASE } },
+  exit: { opacity: 0, height: 0, overflow: "hidden", transition: { duration: 0.25, ease: SMOOTH_EASE } },
 };
 
 export function reorderRules(groups: GroupView[], groupId: string, fromIdx: number, toIdx: number): GroupView[] {
@@ -114,6 +119,7 @@ export function Routing() {
   }, [backendGroups]);
 
   const [adding, setAdding] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(null);
 
   // PointerSensor with a 3px activation threshold: drag starts as soon
   // as the pointer moves enough to indicate intent, but a stray click
@@ -126,7 +132,20 @@ export function Routing() {
   const safetyGroup = localGroups.find((g) => g.id === "safety");
   const userGroups = localGroups.filter((g) => g.id !== "safety");
 
+  // Resolve the active drag target so DragOverlay can render its ghost
+  // outside of any clipping/stacking-context container (glass-regular
+  // creates a stacking context via backdrop-filter, which clips the
+  // dragged element when it visually crosses into another card).
+  const activeRule = activeId
+    ? localGroups.flatMap((g) => g.rules).find((r) => r.id === activeId)
+    : null;
+
+  function onDragStart(e: DragStartEvent) {
+    setActiveId(String(e.active.id));
+  }
+
   function onDragEnd(e: DragEndEvent) {
+    setActiveId(null);
     if (!e.over || e.over.id === e.active.id) return;
     const activeId = String(e.active.id);
     const overId = String(e.over.id);
@@ -214,7 +233,13 @@ export function Routing() {
       <AnimatePresence initial={false}>
         {adding && <AddGroupRow key="add-group-row" onCancel={() => setAdding(false)} />}
       </AnimatePresence>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onDragCancel={() => setActiveId(null)}
+      >
         {safetyGroup && <GroupCard group={safetyGroup} allGroups={localGroups} />}
         <SortableContext items={userGroups.map((g) => g.id)} strategy={verticalListSortingStrategy}>
           <AnimatePresence initial={false}>
@@ -227,6 +252,29 @@ export function Routing() {
             ))}
           </AnimatePresence>
         </SortableContext>
+        {/* DragOverlay portals its child to document.body, so the ghost
+            escapes every group card's stacking context (glass-regular's
+            backdrop-filter creates one, which would otherwise clip the
+            element when it crosses card boundaries). */}
+        <DragOverlay dropAnimation={null} style={{ cursor: "grabbing" }}>
+          {activeRule ? (
+            <div className="rounded-md bg-bg-1/95 px-3 py-2 text-[12.5px] shadow-[0_18px_36px_-10px_rgba(0,0,0,0.7)] ring-1 ring-white/15 backdrop-blur-xl">
+              <div className="flex items-center gap-3">
+                <span
+                  className={cn(
+                    "rounded px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider",
+                    activeRule.action === "proxy" ? "bg-sky-500/20 text-sky-200"
+                    : activeRule.action === "direct" ? "bg-amber-500/20 text-amber-200"
+                    : "bg-rose-500/20 text-rose-200",
+                  )}
+                >
+                  {activeRule.action}
+                </span>
+                <span className="text-white/90">{activeRule.name}</span>
+              </div>
+            </div>
+          ) : null}
+        </DragOverlay>
       </DndContext>
     </motion.div>
   );
@@ -549,10 +597,14 @@ function SortableGroupCard({ group, allGroups }: { group: GroupView; allGroups: 
 
 function SortableRuleRow({ rule, group, allGroups }: { rule: RuleView; group: GroupView; allGroups: GroupView[] }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: rule.id });
+  // While this row is the active drag target, hide it entirely — the
+  // DragOverlay ghost is what the user sees following the cursor.
+  // Keeping opacity 0 (not display:none) preserves the slot height so
+  // the surrounding list layout doesn't collapse.
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.7 : 1,
+    transition: isDragging ? "none" : transition,
+    opacity: isDragging ? 0 : 1,
   };
   return (
     <motion.li
