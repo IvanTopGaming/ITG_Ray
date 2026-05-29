@@ -1,5 +1,5 @@
 // cmd/itgray-electron/src/main/index.ts
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, Notification } from "electron";
 import path from "node:path";
 import { BridgeSupervisor } from "./bridge";
 import { wireIPC } from "./ipc";
@@ -7,6 +7,7 @@ import { isDevMode } from "./paths";
 import { createTray } from "./tray";
 import { loadState, attachStatePersister } from "./window-state";
 import { defaultAutostart } from "./autostart";
+import { makeNotifier } from "./notifications";
 import { resolveStartMinimized, type StartupSnapshot } from "./startup";
 
 let mainWindow: BrowserWindow | null = null;
@@ -83,6 +84,30 @@ app.whenReady().then(async () => {
     },
   );
   wireIPC(supervisor, () => mainWindow, (s) => tray?.setStatus(s));
+
+  // OS notifications on connect / disconnect / sub-synced. Prefs are read
+  // fresh per event via the bridge snapshot; sound maps to !silent.
+  const notifier = makeNotifier({
+    notify: (title, body, opts) => {
+      if (!Notification.isSupported()) return;
+      new Notification({ title, body, silent: opts.silent }).show();
+    },
+    getSettings: async () => {
+      const snap = (await supervisor!.rpc().call("app.getSnapshot", undefined)) as {
+        settings?: { notifications?: Partial<import("./notifications").NotifPrefs> };
+      };
+      const n = snap.settings?.notifications;
+      return {
+        onConnected: n?.onConnected ?? false,
+        onDisconnected: n?.onDisconnected ?? false,
+        onSubSynced: n?.onSubSynced ?? false,
+        sound: n?.sound ?? true,
+      };
+    },
+  });
+  const notifierRpc = supervisor!.rpc();
+  notifierRpc.on("vpn.status", (p) => void notifier.onVpnStatus(p));
+  notifierRpc.on("sub.synced", (p) => void notifier.onSubSynced(p));
 
   // One snapshot read drives autostart reconcile AND start-minimized.
   void (async () => {
