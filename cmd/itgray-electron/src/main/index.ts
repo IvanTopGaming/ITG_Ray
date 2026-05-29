@@ -7,6 +7,7 @@ import { isDevMode } from "./paths";
 import { createTray } from "./tray";
 import { loadState, attachStatePersister } from "./window-state";
 import { defaultAutostart } from "./autostart";
+import { resolveStartMinimized, type StartupSnapshot } from "./startup";
 
 let mainWindow: BrowserWindow | null = null;
 let supervisor: BridgeSupervisor | null = null;
@@ -41,6 +42,7 @@ async function createWindow(): Promise<void> {
     height: state.height,
     title: "ITG Ray",
     frame: false,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, "..", "..", "dist-preload", "preload", "preload.js"),
       contextIsolation: true,
@@ -71,18 +73,40 @@ app.whenReady().then(async () => {
   tray = createTray(
     () => mainWindow,
     () => {
-      void createWindow();
+      // Tray "summon" is an explicit request to see the window. createWindow
+      // now builds it hidden (show:false) so the launch path can honor
+      // start-minimized; this path must show it after (re)creating.
+      void createWindow().then(() => {
+        mainWindow?.show();
+        mainWindow?.focus();
+      });
     },
   );
   wireIPC(supervisor, () => mainWindow, (s) => tray?.setStatus(s));
 
-  // Reconcile autostart with persisted user setting. Failure is
-  // non-fatal — the renderer can still toggle via Settings.
+  // One snapshot read drives autostart reconcile AND start-minimized.
   void (async () => {
+    let snap: StartupSnapshot | undefined;
     try {
-      const snap = await supervisor!.rpc().call("app.getSnapshot", undefined);
-      const desired = (snap as { settings?: { general?: { autostart?: boolean } } }).settings
-        ?.general?.autostart;
+      // Bound the read: the window is created hidden, so its visibility now
+      // hinges on this resolving. RpcClient.call has no timeout — a live but
+      // unresponsive bridge would otherwise leave the window invisible
+      // forever. On timeout snap stays undefined → window shows (fail-safe).
+      snap = (await Promise.race([
+        supervisor!.rpc().call("app.getSnapshot", undefined),
+        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 3000)),
+      ])) as StartupSnapshot | undefined;
+    } catch (err) {
+      console.warn("startup snapshot read failed:", err);
+    }
+    // Window visibility: show unless the user opted into tray-only launch.
+    if (mainWindow && !resolveStartMinimized(snap)) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+    // Autostart reconcile (non-fatal).
+    try {
+      const desired = snap?.settings?.general?.autostart;
       if (typeof desired === "boolean") {
         await defaultAutostart().reconcile(desired);
       }
