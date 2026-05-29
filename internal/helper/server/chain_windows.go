@@ -433,6 +433,12 @@ func NewStartChainHandler() Handler {
 
 		activeSess = state
 
+		// Launch the crash watcher for THIS session. It clears activeSess on
+		// an unexpected core exit so IsChainActive() flips false and chainctl's
+		// drop handler reacts. Bound to `state` by pointer identity; a later
+		// StopChain/StartChain swaps activeSess and the watcher no-ops.
+		go watchChainExit(state)
+
 		return json.Marshal(StartChainResult{
 			SessionID:  state.sessionID,
 			TunLUID:    state.tunLUID,
@@ -440,6 +446,58 @@ func NewStartChainHandler() Handler {
 			XrayPid:    state.xray.Pid(),
 		})
 	}
+}
+
+// watchChainExit watches the started cores for THIS session and, on the
+// first UNEXPECTED core exit, runs the same teardown StopChain performs so
+// activeSess flips to nil. It is launched as a goroutine at the end of the
+// OpStartChain success path and returns after the first exit + teardown
+// (or immediately if the session was already replaced/torn down), so it
+// cannot leak.
+//
+// Concurrency contract: it does NOT hold chainMu while waiting on the
+// Done() channels — only while inspecting/clearing activeSess. The identity
+// guard (pointer equality against the session it was bound to) makes the
+// teardown a strict no-op if an explicit StopChain or a newer StartChain
+// already swapped activeSess, so there is no double teardown.
+func watchChainExit(sess *chainState) {
+	// Wait for the first core to exit. Child.Done() on a nil child returns
+	// an already-closed channel, which would fire this select immediately —
+	// so only wait on the cores that were actually spawned. Both are always
+	// non-nil on the success path, but guard defensively.
+	var singboxDone, xrayDone <-chan struct{}
+	if sess.singbox != nil {
+		singboxDone = sess.singbox.Done()
+	}
+	if sess.xray != nil {
+		xrayDone = sess.xray.Done()
+	}
+
+	var which string
+	select {
+	case <-singboxDone:
+		which = "sing-box"
+	case <-xrayDone:
+		which = "xray"
+	}
+
+	chainMu.Lock()
+	defer chainMu.Unlock()
+
+	// Identity guard: only tear down if THIS session is still the active one.
+	// If activeSess is nil (already stopped) or a different *chainState (a
+	// newer StartChain ran), do nothing — the teardown already happened or
+	// belongs to someone else.
+	if activeSess != sess {
+		return
+	}
+
+	slog.Warn("core exited unexpectedly; clearing active chain session",
+		"session", sess.sessionID, "core", which)
+
+	// Same teardown StopActiveChain/OpStopChain run. stopActiveChainLocked
+	// requires chainMu held and activeSess != nil — both satisfied here.
+	_ = stopActiveChainLocked()
 }
 
 // undoPath returns the canonical undo journal location:
