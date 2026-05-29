@@ -27,6 +27,10 @@ if (!gotLock) {
   app.on("second-instance", () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
+      // The window may be hidden (start-minimized launch builds it with
+      // show:false), in which case it is not "minimized" — show() is what
+      // actually reveals it. restore() above still handles the minimized case.
+      mainWindow.show();
       mainWindow.focus();
     }
   });

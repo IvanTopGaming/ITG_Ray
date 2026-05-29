@@ -67,16 +67,22 @@ test("fires disconnect when transitioning connected -> error", async () => {
   assert.match(calls[0].title, /disconnect/i);
 });
 
-test("notifies on sub-synced when onSubSynced is true", async () => {
+test("notifies on sub-synced success with imported count in body", async () => {
   const { calls, notifier } = fixture({ onSubSynced: true });
-  await notifier.onSubSynced({ name: "MyFeed" });
+  await notifier.onSubSynced({ status: "ok", importedCount: 5 });
   assert.equal(calls.length, 1);
-  assert.match(calls[0].body, /MyFeed/);
+  assert.match(calls[0].body, /5 servers/);
 });
 
-test("sub-synced without a name uses a generic body", async () => {
+test("sub-synced success without a count uses a generic body", async () => {
   const { calls, notifier } = fixture({ onSubSynced: true });
-  await notifier.onSubSynced({});
+  await notifier.onSubSynced({ status: "ok" });
   assert.equal(calls.length, 1);
   assert.match(calls[0].body, /subscription/i);
+});
+
+test("does NOT notify on a failed sub-sync (status error)", async () => {
+  const { calls, notifier } = fixture({ onSubSynced: true });
+  await notifier.onSubSynced({ status: "error", importedCount: 0 });
+  assert.equal(calls.length, 0);
 });

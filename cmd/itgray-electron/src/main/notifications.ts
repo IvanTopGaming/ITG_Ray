@@ -58,10 +58,17 @@ export function makeNotifier(deps: NotifierDeps): Notifier {
     },
 
     async onSubSynced(payload: unknown): Promise<void> {
+      const data = payload as { status?: string; importedCount?: number } | null;
+      // The sub:synced event fires for both outcomes; status is "ok" | "error".
+      // Suppress the "updated" toast on a failed sync (avoid a false success).
+      if (data?.status === "error") return;
       const p = await prefs();
       if (!p?.onSubSynced) return;
-      const name = (payload as { name?: string } | null)?.name;
-      const body = name ? `Subscription "${name}" updated.` : "A subscription was updated.";
+      const count = data?.importedCount;
+      const body =
+        typeof count === "number" && count > 0
+          ? `Imported ${count} server${count === 1 ? "" : "s"}.`
+          : "A subscription was updated.";
       deps.notify("ITG Ray — Subscription updated", body, { silent: !p.sound });
     },
   };
