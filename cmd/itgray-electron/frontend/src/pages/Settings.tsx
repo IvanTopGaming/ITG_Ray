@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion, type Variants } from 'framer-motion';
 import { useSettings } from '@/lib/settings';
 import { cn } from '@/lib/cn';
@@ -30,17 +31,16 @@ const sectionVariants: Variants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.24, ease: [0.16, 1, 0.3, 1] } },
 };
 
-const SECTIONS = [
-  { id: 'general', label: 'General' },
-  { id: 'connection', label: 'Connection' },
-  { id: 'killswitch', label: 'Kill switch' },
-  { id: 'subscriptions', label: 'Subscriptions' },
-  { id: 'notifications', label: 'Notifications' },
-  { id: 'helper', label: 'Helper' },
-  { id: 'logs', label: 'Logs' },
-  { id: 'about', label: 'About' },
+const SECTION_IDS = [
+  'general',
+  'connection',
+  'killswitch',
+  'subscriptions',
+  'notifications',
+  'helper',
+  'logs',
+  'about',
 ];
-const SECTION_IDS = SECTIONS.map((s) => s.id);
 
 // Empty string is valid (= no override). Otherwise, comma-separated tokens
 // must each parse as IPv4 or IPv6. Visual-only — backend re-validates.
@@ -62,8 +62,19 @@ function isMtuValid(value: number): boolean {
 }
 
 export function Settings() {
+  const { t } = useTranslation();
   const [s, update] = useSettings();
   const active = useScrollSpy(SECTION_IDS);
+  const SECTIONS = [
+    { id: 'general', label: t('settings.sections.general') },
+    { id: 'connection', label: t('settings.sections.connection') },
+    { id: 'killswitch', label: t('settings.sections.killswitch') },
+    { id: 'subscriptions', label: t('settings.sections.subscriptions') },
+    { id: 'notifications', label: t('settings.sections.notifications') },
+    { id: 'helper', label: t('settings.sections.helper') },
+    { id: 'logs', label: t('settings.sections.logs') },
+    { id: 'about', label: t('settings.sections.about') },
+  ];
   const [logFolderSize, setLogFolderSize] = useState(47); // MB
   const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'uptodate'>('idle');
   const [stuck, setStuck] = useState(false);
@@ -178,72 +189,72 @@ export function Settings() {
             stuck ? 'text-[15px] mb-2' : 'text-[22px] mb-3',
           )}
         >
-          Settings
+          {t('settings.title')}
         </h1>
         <ScrollSpy sections={SECTIONS} active={active} onSelect={scrollToSection} />
       </div>
 
       {/* General */}
       <motion.div id="general" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
-        <SectionHeader title="General" />
-        <SettingRow label="Language" hint="Interface display language.">
+        <SectionHeader title={t('settings.general.title')} />
+        <SettingRow label={t('settings.general.language')} hint={t('settings.general.languageHint')}>
           <Segmented
             value={s.language}
             onChange={(v) => update({ language: v })}
             options={[
-              { value: 'en', label: 'English' },
-              { value: 'ru', label: 'Русский' },
+              { value: 'en', label: t('settings.general.languageEn') },
+              { value: 'ru', label: t('settings.general.languageRu') },
             ] as const}
           />
         </SettingRow>
-        <SettingRow label="Launch on system startup" hint="Start ITG Ray automatically when you log in.">
+        <SettingRow label={t('settings.general.autostart')} hint={t('settings.general.autostartHint')}>
           <Toggle
             value={s.autostart}
-            aria-label="Launch on system startup"
+            aria-label={t('settings.general.autostart')}
             onChange={(v) => {
               update({ autostart: v });
               void SetAutostart(v);
             }}
           />
         </SettingRow>
-        <SettingRow label="Start minimized to tray" hint="Open in background, no main window on launch.">
+        <SettingRow label={t('settings.general.startMinimized')} hint={t('settings.general.startMinimizedHint')}>
           <Toggle value={s.startMinimized} onChange={(v) => update({ startMinimized: v })} />
         </SettingRow>
       </motion.div>
 
       {/* Connection */}
       <motion.div id="connection" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
-        <SectionHeader title="Connection" />
+        <SectionHeader title={t('settings.connection.title')} />
         <SettingRow
-          label="Network mode"
-          hint="TUN intercepts all traffic at OS level. System proxy uses Windows proxy settings only."
+          label={t('settings.connection.networkMode')}
+          hint={t('settings.connection.networkModeHint')}
         >
           <Segmented
             value={s.defaultMode}
             onChange={(v) => update({ defaultMode: v })}
             options={[
-              { value: 'tun', label: 'TUN' },
-              { value: 'sysproxy', label: 'System proxy' },
+              { value: 'tun', label: t('settings.connection.modeTun') },
+              { value: 'sysproxy', label: t('settings.connection.modeSysproxy') },
             ] as const}
           />
         </SettingRow>
-        <SettingRow label="DNS" hint="Override DNS while connected. Uses remote VPN DNS by default.">
+        <SettingRow label={t('settings.connection.dns')} hint={t('settings.connection.dnsHint')}>
           <Dropdown
             value={s.dnsMode}
             onChange={(v) => update({ dnsMode: v })}
             options={[
-              { value: 'auto', label: 'Auto (remote)' },
-              { value: 'custom', label: 'Custom' },
+              { value: 'auto', label: t('settings.connection.dnsAuto') },
+              { value: 'custom', label: t('settings.connection.dnsCustomOption') },
             ] as const}
           />
         </SettingRow>
         <Reveal show={s.dnsMode === 'custom'}>
-          <SettingRow label="Custom DNS" hint="Comma-separated list of resolvers (e.g. 1.1.1.1, 8.8.8.8)." stacked>
+          <SettingRow label={t('settings.connection.customDns')} hint={t('settings.connection.customDnsHint')} stacked>
             <input
               type="text"
               value={s.dnsCustom}
               onChange={(e) => update({ dnsCustom: e.target.value })}
-              placeholder="1.1.1.1, 8.8.8.8"
+              placeholder={t('settings.connection.customDnsPlaceholder')}
               className={cn(
                 'w-full px-3 py-1.5 bg-white/[0.06] border rounded-[10px] text-[13px] text-white placeholder:text-white/[0.30] outline-none transition-colors',
                 isDnsValid(s.dnsCustom)
@@ -253,10 +264,10 @@ export function Settings() {
             />
           </SettingRow>
         </Reveal>
-        <SettingRow label="Allow LAN access" hint="Reach local network devices (printers, NAS) while VPN is on.">
+        <SettingRow label={t('settings.connection.allowLan')} hint={t('settings.connection.allowLanHint')}>
           <Toggle value={s.allowLan} onChange={(v) => update({ allowLan: v })} />
         </SettingRow>
-        <SettingRow label="SOCKS port" hint="Local SOCKS5 proxy port. Default 1080.">
+        <SettingRow label={t('settings.connection.socksPort')} hint={t('settings.connection.socksPortHint')}>
           <input
             ref={socksPortRef}
             type="text"
@@ -284,7 +295,7 @@ export function Settings() {
             )}
           />
         </SettingRow>
-        <SettingRow label="HTTP port" hint="Local HTTP proxy port. Default 8888.">
+        <SettingRow label={t('settings.connection.httpPort')} hint={t('settings.connection.httpPortHint')}>
           <input
             ref={httpPortRef}
             type="text"
@@ -313,16 +324,16 @@ export function Settings() {
           />
         </SettingRow>
         <SettingRow
-          label="IPv6 routing"
-          hint="Disable IPv6 if your provider's IPv6 is broken and routing fails."
+          label={t('settings.connection.ipv6')}
+          hint={t('settings.connection.ipv6Hint')}
         >
           <Segmented
             value={s.ipv6Mode}
             onChange={(v) => update({ ipv6Mode: v })}
             options={[
-              { value: 'prefer-v4', label: 'Prefer v4' },
-              { value: 'prefer-v6', label: 'Prefer v6' },
-              { value: 'disabled', label: 'Disable' },
+              { value: 'prefer-v4', label: t('settings.connection.ipv6PreferV4') },
+              { value: 'prefer-v6', label: t('settings.connection.ipv6PreferV6') },
+              { value: 'disabled', label: t('settings.connection.ipv6Disable') },
             ] as const}
           />
         </SettingRow>
@@ -346,7 +357,7 @@ export function Settings() {
                   <path d="M3 2L7 5L3 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </motion.span>
-              Advanced TUN parameters
+              {t('settings.connection.advancedTun')}
             </button>
             <div
               id="tun-advanced-panel"
@@ -355,16 +366,16 @@ export function Settings() {
             >
               <Reveal show={tunAdvancedOpen}>
                 <div className="mt-1 pl-3 border-l border-white/[0.08]">
-                  <SettingRow label="Interface CIDR" hint="TUN adapter IPv4 address and subnet. Default 198.18.0.1/15.">
+                  <SettingRow label={t('settings.connection.interfaceCidr')} hint={t('settings.connection.interfaceCidrHint')}>
                     <input
                       type="text"
                       value={s.tunCidr}
                       onChange={(e) => update({ tunCidr: e.target.value })}
-                      placeholder="198.18.0.1/15"
+                      placeholder={t('settings.connection.interfaceCidrPlaceholder')}
                       className="w-40 px-3 py-1.5 bg-white/[0.06] border border-white/[0.12] rounded-[10px] text-[13px] text-white placeholder:text-white/[0.30] outline-none transition-colors focus:border-white/[0.30] tabular-nums"
                     />
                   </SettingRow>
-                  <SettingRow label="MTU" hint="TUN interface MTU in bytes. Default 1500. Range 576–9000.">
+                  <SettingRow label={t('settings.connection.mtu')} hint={t('settings.connection.mtuHint')}>
                     <input
                       ref={tunMtuRef}
                       type="text"
@@ -401,10 +412,10 @@ export function Settings() {
 
       {/* Kill switch */}
       <motion.div id="killswitch" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
-        <SectionHeader title="Kill switch" />
+        <SectionHeader title={t('settings.killSwitch.title')} />
         <SettingRow
-          label="Block traffic when VPN drops"
-          hint="Cut the network if the tunnel goes down so traffic never leaks unprotected."
+          label={t('settings.killSwitch.blockOnDrop')}
+          hint={t('settings.killSwitch.blockOnDropHint')}
         >
           <Toggle
             value={s.killSwitchEnabled}
@@ -412,8 +423,8 @@ export function Settings() {
           />
         </SettingRow>
         <SettingRow
-          label="Always-on"
-          hint="Require an active VPN connection to use the network at all."
+          label={t('settings.killSwitch.alwaysOn')}
+          hint={t('settings.killSwitch.alwaysOnHint')}
           className={!s.killSwitchEnabled ? 'opacity-50' : undefined}
         >
           <Toggle
@@ -426,10 +437,10 @@ export function Settings() {
 
       {/* Subscriptions */}
       <motion.div id="subscriptions" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
-        <SectionHeader title="Subscriptions" />
+        <SectionHeader title={t('settings.subscriptions.title')} />
         <SettingRow
-          label="Default update interval"
-          hint="How often subscriptions auto-sync, in seconds. Per-sub overrides take precedence."
+          label={t('settings.subscriptions.defaultUpdateInterval')}
+          hint={t('settings.subscriptions.defaultUpdateIntervalHint')}
         >
           <input
             type="text"
@@ -445,86 +456,86 @@ export function Settings() {
 
         <div className="pt-2 pb-1">
           <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/[0.45]">
-            Subscription Identity
+            {t('settings.subscriptions.identity')}
           </span>
         </div>
 
         <SettingRow
-          label="User-Agent"
-          hint="Sent with every subscription fetch. Most provider panels inspect this to choose the response format. Empty falls back to the built-in default."
+          label={t('settings.subscriptions.userAgent')}
+          hint={t('settings.subscriptions.userAgentHint')}
           stacked
         >
           <input
             type="text"
-            aria-label="User-Agent"
+            aria-label={t('settings.subscriptions.userAgent')}
             value={s.userAgent}
-            placeholder="ITGRay/0.1"
+            placeholder={t('settings.subscriptions.userAgentPlaceholder')}
             onChange={(e) => update({ userAgent: e.target.value })}
             className="w-full rounded-[10px] border border-white/[0.10] bg-white/[0.04] px-3 py-1.5 text-[13px] text-white/[0.92] placeholder:text-white/[0.35] focus:border-accent/40 focus:bg-white/[0.06] focus:outline-none"
           />
         </SettingRow>
 
         <SettingRow
-          label="Send HWID"
-          hint="Send a stable per-device identifier on every subscription fetch. Required by Remnawave-style providers with device limits."
+          label={t('settings.subscriptions.sendHwid')}
+          hint={t('settings.subscriptions.sendHwidHint')}
         >
           <Toggle
             value={s.hwidEnabled}
             onChange={(v) => update({ hwidEnabled: v })}
-            aria-label="Send HWID"
+            aria-label={t('settings.subscriptions.sendHwid')}
           />
         </SettingRow>
         <SettingRow
-          label="Send device OS"
-          hint="Include the OS family (e.g. Windows) alongside HWID."
+          label={t('settings.subscriptions.sendDeviceOs')}
+          hint={t('settings.subscriptions.sendDeviceOsHint')}
         >
           <Toggle
             value={s.sendDeviceOS}
             onChange={(v) => update({ sendDeviceOS: v })}
-            aria-label="Send device OS"
+            aria-label={t('settings.subscriptions.sendDeviceOs')}
           />
         </SettingRow>
         <SettingRow
-          label="Send OS version"
-          hint="Include the OS build (e.g. 10.0.22631) alongside HWID."
+          label={t('settings.subscriptions.sendOsVersion')}
+          hint={t('settings.subscriptions.sendOsVersionHint')}
         >
           <Toggle
             value={s.sendOSVersion}
             onChange={(v) => update({ sendOSVersion: v })}
-            aria-label="Send OS version"
+            aria-label={t('settings.subscriptions.sendOsVersion')}
           />
         </SettingRow>
         <SettingRow
-          label="Send device model"
-          hint="Include the hardware model (e.g. MSI Stealth 16) alongside HWID."
+          label={t('settings.subscriptions.sendDeviceModel')}
+          hint={t('settings.subscriptions.sendDeviceModelHint')}
         >
           <Toggle
             value={s.sendDeviceModel}
             onChange={(v) => update({ sendDeviceModel: v })}
-            aria-label="Send device model"
+            aria-label={t('settings.subscriptions.sendDeviceModel')}
           />
         </SettingRow>
         <p className="pt-3 text-[11.5px] italic leading-snug text-white/[0.45]">
-          Metadata sub-toggles are honored only when HWID is on.
+          {t('settings.subscriptions.metadataNote')}
         </p>
       </motion.div>
 
       {/* Notifications */}
       <motion.div id="notifications" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
-        <SectionHeader title="Notifications" />
-        <SettingRow label="Notify on connect" hint="Show an OS toast when the tunnel comes up.">
+        <SectionHeader title={t('settings.notifications.title')} />
+        <SettingRow label={t('settings.notifications.onConnect')} hint={t('settings.notifications.onConnectHint')}>
           <Toggle value={s.onConnected} onChange={(v) => update({ onConnected: v })} />
         </SettingRow>
-        <SettingRow label="Notify on disconnect" hint="Show an OS toast when the tunnel drops.">
+        <SettingRow label={t('settings.notifications.onDisconnect')} hint={t('settings.notifications.onDisconnectHint')}>
           <Toggle value={s.onDisconnected} onChange={(v) => update({ onDisconnected: v })} />
         </SettingRow>
-        <SettingRow label="Notify when quota is low" hint="Warn before a subscription's traffic budget runs out.">
+        <SettingRow label={t('settings.notifications.onQuotaLow')} hint={t('settings.notifications.onQuotaLowHint')}>
           <Toggle value={s.onQuotaLow} onChange={(v) => update({ onQuotaLow: v })} />
         </SettingRow>
-        <SettingRow label="Sound" hint="Play a soft chime on state changes.">
+        <SettingRow label={t('settings.notifications.sound')} hint={t('settings.notifications.soundHint')}>
           <Toggle value={s.notifySound} onChange={(v) => update({ notifySound: v })} />
         </SettingRow>
-        <SettingRow label="Subscription updated" hint="Notify when a subscription is synced.">
+        <SettingRow label={t('settings.notifications.onSubSynced')} hint={t('settings.notifications.onSubSyncedHint')}>
           <Toggle value={s.onSubSynced} onChange={(v) => update({ onSubSynced: v })} />
         </SettingRow>
       </motion.div>
@@ -532,20 +543,20 @@ export function Settings() {
       {/* Helper */}
       <motion.div id="helper" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
         <SectionHeader
-          title="Helper service"
+          title={t('settings.helper.title')}
           right={isWindowsHelper ? <StatusPill status={helperPill} /> : undefined}
         />
         {isLoadingPlatform && null}
         {!isLoadingPlatform && !isWindowsHelper && (
           <p className="text-[13px] text-white/[0.55] leading-relaxed">
-            Helper service is only used on Windows builds. ITG Ray uses native APIs on this platform.
+            {t('settings.helper.nonWindows')}
           </p>
         )}
         {isWindowsHelper && (
           <>
             <SettingRow
-              label="Status"
-              hint="Privileged background service that manages TUN and routing."
+              label={t('settings.helper.status')}
+              hint={t('settings.helper.statusHint')}
             >
               <div className="flex gap-1.5">
                 {helperPill === 'missing' && (
@@ -554,7 +565,7 @@ export function Settings() {
                     onClick={helper.install}
                     className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] bg-accent/[0.12] border border-accent/30 text-accent hover:bg-accent/[0.18]"
                   >
-                    Install
+                    {t('settings.helper.install')}
                   </button>
                 )}
                 {helperPill === 'stopped' && (
@@ -564,41 +575,41 @@ export function Settings() {
                       onClick={helper.start}
                       className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] bg-accent/[0.12] border border-accent/30 text-accent hover:bg-accent/[0.18]"
                     >
-                      Start
+                      {t('settings.helper.start')}
                     </button>
                     <button
                       type="button"
                       onClick={() => setReinstallOpen(true)}
                       className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] border border-white/[0.10] text-white/[0.92] hover:bg-white/[0.05]"
                     >
-                      Reinstall
+                      {t('settings.helper.reinstall')}
                     </button>
                   </>
                 )}
                 {helperPill === 'running' && (
                   <>
-                    <ConfirmButton onConfirm={helper.restart} variant="ghost">Restart</ConfirmButton>
+                    <ConfirmButton onConfirm={helper.restart} variant="ghost">{t('common.restart')}</ConfirmButton>
                     <button
                       type="button"
                       onClick={() => setReinstallOpen(true)}
                       className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] border border-white/[0.10] text-white/[0.92] hover:bg-white/[0.05]"
                     >
-                      Reinstall
+                      {t('settings.helper.reinstall')}
                     </button>
                   </>
                 )}
                 {helperPill === 'pending' && (
-                  <span className="px-3.5 py-1.5 text-xs text-white/[0.55]">Working…</span>
+                  <span className="px-3.5 py-1.5 text-xs text-white/[0.55]">{t('settings.helper.working')}</span>
                 )}
                 {helperPill === 'error' && (
-                  <span className="px-3.5 py-1.5 text-xs text-white/[0.55]">Reading status…</span>
+                  <span className="px-3.5 py-1.5 text-xs text-white/[0.55]">{t('settings.helper.readingStatus')}</span>
                 )}
                 <button
                   type="button"
                   onClick={() => console.log('[mock] view helper log')}
                   className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] border border-white/[0.10] text-white/[0.92] hover:bg-white/[0.05]"
                 >
-                  View log
+                  {t('settings.helper.viewLog')}
                 </button>
               </div>
             </SettingRow>
@@ -608,7 +619,7 @@ export function Settings() {
                 <button
                   type="button"
                   onClick={helper.dismissError}
-                  aria-label="Dismiss helper error"
+                  aria-label={t('settings.helper.dismissError')}
                   className="text-danger/70 hover:text-danger"
                 >
                   ×
@@ -623,9 +634,9 @@ export function Settings() {
         <ConfirmDialog
           open={reinstallOpen}
           onClose={() => setReinstallOpen(false)}
-          title="Reinstall helper service?"
-          description="This will stop the running service, replace its registration, and start it again. The active connection will drop briefly."
-          confirmLabel="Reinstall"
+          title={t('settings.helper.reinstallTitle')}
+          description={t('settings.helper.reinstallDescription')}
+          confirmLabel={t('settings.helper.reinstall')}
           confirmVariant="primary"
           onConfirm={() => { setReinstallOpen(false); void helper.reinstall(); }}
         />
@@ -633,54 +644,54 @@ export function Settings() {
 
       {/* Logs */}
       <motion.div id="logs" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
-        <SectionHeader title="Logs" />
+        <SectionHeader title={t('settings.logs.title')} />
         <SettingRow
-          label="Log level"
-          hint="More detail helps when debugging connection issues, but fills disk faster."
+          label={t('settings.logs.logLevel')}
+          hint={t('settings.logs.logLevelHint')}
         >
           <Segmented
             value={s.logLevel}
             onChange={(v) => update({ logLevel: v })}
             options={[
-              { value: 'error', label: 'Error' },
-              { value: 'info', label: 'Info' },
-              { value: 'debug', label: 'Debug' },
-              { value: 'trace', label: 'Trace' },
+              { value: 'error', label: t('settings.logs.levelError') },
+              { value: 'info', label: t('settings.logs.levelInfo') },
+              { value: 'debug', label: t('settings.logs.levelDebug') },
+              { value: 'trace', label: t('settings.logs.levelTrace') },
             ] as const}
           />
         </SettingRow>
-        <SettingRow label="Open log folder" hint={`%LOCALAPPDATA%\\ITG Ray\\logs (${logFolderSize} MB)`}>
+        <SettingRow label={t('settings.logs.openFolder')} hint={t('settings.logs.folderHint', { mb: logFolderSize })}>
           <button
             type="button"
             onClick={() => console.log('[mock] open log folder')}
             className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] border border-white/[0.10] text-white/[0.92] hover:bg-white/[0.05]"
           >
-            Open folder
+            {t('settings.logs.openFolderButton')}
           </button>
         </SettingRow>
-        <SettingRow label="Clear old logs" hint="Delete log files older than 7 days.">
-          <ConfirmButton onConfirm={clearLogs} variant="danger">Clear</ConfirmButton>
+        <SettingRow label={t('settings.logs.clearOldLogs')} hint={t('settings.logs.clearOldLogsHint')}>
+          <ConfirmButton onConfirm={clearLogs} variant="danger">{t('common.clear')}</ConfirmButton>
         </SettingRow>
       </motion.div>
 
       {/* About */}
       <motion.div id="about" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
-        <SectionHeader title="About" />
+        <SectionHeader title={t('settings.about.title')} />
         <dl className="grid grid-cols-[110px_1fr] gap-y-2 gap-x-4 text-[13px] py-1">
-          <dt className="text-white/[0.45]">Version</dt><dd className="text-white/[0.92] tabular-nums">{versionLabel}</dd>
-          <dt className="text-white/[0.45]">Build</dt><dd className="text-white/[0.92] tabular-nums">{buildLabel}</dd>
-          <dt className="text-white/[0.45]">Backend</dt><dd className="text-white/[0.92] tabular-nums">xray-core 25.3.6</dd>
-          <dt className="text-white/[0.45]">Helper</dt><dd className="text-white/[0.92] tabular-nums">1.4.2</dd>
-          <dt className="text-white/[0.45]">License</dt><dd className="text-white/[0.92]">MIT</dd>
+          <dt className="text-white/[0.45]">{t('settings.about.version')}</dt><dd className="text-white/[0.92] tabular-nums">{versionLabel}</dd>
+          <dt className="text-white/[0.45]">{t('settings.about.build')}</dt><dd className="text-white/[0.92] tabular-nums">{buildLabel}</dd>
+          <dt className="text-white/[0.45]">{t('settings.about.backend')}</dt><dd className="text-white/[0.92] tabular-nums">xray-core 25.3.6</dd>
+          <dt className="text-white/[0.45]">{t('settings.about.helper')}</dt><dd className="text-white/[0.92] tabular-nums">1.4.2</dd>
+          <dt className="text-white/[0.45]">{t('settings.about.license')}</dt><dd className="text-white/[0.92]">MIT</dd>
         </dl>
         <SettingRow
-          label="Check for updates"
+          label={t('settings.about.checkForUpdates')}
           hint={
             updateState === 'uptodate'
-              ? "You're up to date."
+              ? t('settings.about.upToDate')
               : updateState === 'checking'
-              ? 'Checking…'
-              : 'Last checked 12 minutes ago.'
+              ? t('settings.about.checking')
+              : t('settings.about.lastChecked')
           }
         >
           <button
@@ -689,7 +700,7 @@ export function Settings() {
             disabled={updateState === 'checking'}
             className="px-3.5 py-1.5 text-xs font-semibold rounded-[10px] bg-gradient-to-b from-accent-start to-accent-mid text-white disabled:opacity-60"
           >
-            {updateState === 'checking' ? 'Checking…' : 'Check now'}
+            {updateState === 'checking' ? t('settings.about.checking') : t('settings.about.checkNow')}
           </button>
         </SettingRow>
       </motion.div>
