@@ -44,6 +44,21 @@ type SingboxInput struct {
 	// server which is detoured through the proxy outbound — no LAN leak.
 	// In ModeSysProxy this field is ignored (no TUN to attach FakeIP to).
 	FakeIP bool
+	// LogLevel sets the sing-box log block's "level". Valid sing-box
+	// values: trace|debug|info|warn|error|fatal|panic. Empty → "info".
+	LogLevel string
+}
+
+// logLevelOrDefault returns a valid sing-box log level, defaulting to
+// "info" for empty/unknown values so a stale setting can never produce an
+// invalid config the library rejects.
+func logLevelOrDefault(level string) string {
+	switch level {
+	case "trace", "debug", "info", "warn", "error", "fatal", "panic":
+		return level
+	default:
+		return "info"
+	}
 }
 
 // buildDNSBlock builds the sing-box dns block in the 1.12+ schema. In TUN
@@ -360,7 +375,7 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 	}
 
 	doc := map[string]any{
-		"log": map[string]any{"level": "info", "timestamp": true},
+		"log": map[string]any{"level": logLevelOrDefault(in.LogLevel), "timestamp": true},
 		"dns": buildDNSBlock(in, upstreams),
 		"outbounds": []map[string]any{
 			{

@@ -8,6 +8,36 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestBuildSingbox_LogLevel(t *testing.T) {
+	cases := []struct {
+		name    string
+		input   string
+		wantLvl string
+	}{
+		{"explicit debug", "debug", "debug"},
+		{"explicit trace", "trace", "trace"},
+		{"empty falls back to info", "", "info"},
+		{"unknown falls back to info", "verbose", "info"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			in := SingboxInput{
+				SocksInboundPort: 1080,
+				XraySOCKSHost:    "127.0.0.1",
+				XraySOCKSPort:    1081,
+				LogLevel:         tc.input,
+				Rules:            rules.Model{DefaultAction: rules.ActionProxy},
+			}
+			b, err := BuildSingbox(&in)
+			require.NoError(t, err)
+			var doc map[string]any
+			require.NoError(t, json.Unmarshal(b, &doc))
+			logBlock := doc["log"].(map[string]any)
+			require.Equal(t, tc.wantLvl, logBlock["level"])
+		})
+	}
+}
+
 func TestBuildSingbox_Minimal(t *testing.T) {
 	in := SingboxInput{
 		SocksInboundPort: 1080,

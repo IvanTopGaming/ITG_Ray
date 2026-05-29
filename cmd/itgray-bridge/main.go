@@ -179,7 +179,7 @@ func main() {
 		Helper:       helperClient,
 		Sysproxy:     sysproxy.New(),
 		Hub:          h,
-		BuildConfigs: buildConfigs(dataDir, ruleStore),
+		BuildConfigs: buildConfigs(dataDir, configPath, ruleStore),
 		Network:      networkLoader,
 	})
 

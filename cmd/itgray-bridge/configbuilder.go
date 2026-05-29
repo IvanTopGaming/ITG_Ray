@@ -61,8 +61,16 @@ func loadRulesFromDataDir(dataDir string, store *rules.Store) rules.Model {
 // Network values come from chainctl's per-Connect read of config.Network
 // (Tier 2b runtime wiring). chainctl.{ClampMTU,ResolveDNS,MapIPv6Strategy}
 // translate user-facing knobs into sing-box-compatible shapes.
-func buildConfigs(dataDir string, store *rules.Store) chainctl.ConfigBuilder {
+func buildConfigs(dataDir, configPath string, store *rules.Store) chainctl.ConfigBuilder {
 	return func(srv *server.Server, mode chainctl.Mode, net config.Network) (singboxJSON, xrayJSON []byte, err error) {
+		// Debug.LogLevel lives on config.Config, not the config.Network
+		// chainctl passes in. Re-load the persisted config here (cheap,
+		// once per Connect) so the user's log-level setting reaches the
+		// generated sing-box config. Fall back to "" → "info" on error.
+		logLevel := ""
+		if c, lerr := config.Load(configPath); lerr == nil {
+			logLevel = c.Debug.LogLevel
+		}
 		var sbInput configgen.SingboxInput
 		switch mode {
 		case chainctl.ModeTUN:
@@ -78,6 +86,7 @@ func buildConfigs(dataDir string, store *rules.Store) chainctl.ConfigBuilder {
 				AllowLAN:      net.AllowLAN,
 				IPv6Strategy:  chainctl.MapIPv6Strategy(net.IPv6Mode),
 				Rules:         loadRulesFromDataDir(dataDir, store),
+				LogLevel:      logLevel,
 			}
 		case chainctl.ModeSysProxy:
 			sbInput = configgen.SingboxInput{
@@ -90,6 +99,7 @@ func buildConfigs(dataDir string, store *rules.Store) chainctl.ConfigBuilder {
 				AllowLAN:         net.AllowLAN,
 				IPv6Strategy:     chainctl.MapIPv6Strategy(net.IPv6Mode),
 				Rules:            loadRulesFromDataDir(dataDir, store),
+				LogLevel:         logLevel,
 			}
 		default:
 			return nil, nil, fmt.Errorf("buildConfigs: unknown mode %q", mode)
