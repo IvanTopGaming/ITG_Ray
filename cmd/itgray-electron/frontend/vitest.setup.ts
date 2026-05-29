@@ -1,4 +1,5 @@
 import "@testing-library/jest-dom/vitest";
+import "./src/i18n";
 
 // Node 25 ships a native `localStorage` that leaks into the test global and
 // shadows jsdom's fully-functional implementation.  Explicitly re-bind it so

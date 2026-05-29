@@ -1,0 +1,16 @@
+{
+  "nav": {
+    "main": "Основное",
+    "soon": "Скоро",
+    "dashboard": "Панель",
+    "servers": "Серверы",
+    "subscriptions": "Подписки",
+    "routing": "Маршрутизация",
+    "logs": "Логи",
+    "killSwitch": "Аварийное отключение",
+    "settings": "Настройки"
+  },
+  "status": {
+    "running": "работает"
+  }
+}

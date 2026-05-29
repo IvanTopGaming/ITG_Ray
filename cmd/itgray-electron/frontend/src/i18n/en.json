@@ -1,0 +1,16 @@
+{
+  "nav": {
+    "main": "Main",
+    "soon": "Soon",
+    "dashboard": "Dashboard",
+    "servers": "Servers",
+    "subscriptions": "Subscriptions",
+    "routing": "Routing",
+    "logs": "Logs",
+    "killSwitch": "Kill-switch",
+    "settings": "Settings"
+  },
+  "status": {
+    "running": "running"
+  }
+}

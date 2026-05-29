@@ -1,8 +1,11 @@
+import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { TitleBar } from "./TitleBar";
 import {
   useReconnectNeeded,
+  useSettings,
   getConnectSnapshot,
   clearActiveServerEdited,
   dismissNetworkDiff,
@@ -12,6 +15,12 @@ import { ReconnectToast } from "./ReconnectToast";
 
 export function AppShell() {
   const reconnectNeeded = useReconnectNeeded();
+  const { i18n } = useTranslation();
+  const [settings] = useSettings();
+  useEffect(() => {
+    if (i18n.language !== settings.language)
+      void i18n.changeLanguage(settings.language);
+  }, [settings.language, i18n]);
 
   const handleReconnect = async () => {
     const snap = getConnectSnapshot();

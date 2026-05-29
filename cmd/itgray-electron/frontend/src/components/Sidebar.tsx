@@ -9,34 +9,41 @@ import {
   ShieldOff,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import clsx from "clsx";
 
 interface NavItem {
   to: string;
-  label: string;
+  labelKey: string;
   icon: typeof LayoutDashboard;
   disabled?: boolean;
 }
 
 const main: NavItem[] = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/servers", label: "Servers", icon: Server },
-  { to: "/subscriptions", label: "Subscriptions", icon: Globe },
-  { to: "/routing", label: "Routing", icon: Route },
+  { to: "/", labelKey: "nav.dashboard", icon: LayoutDashboard },
+  { to: "/servers", labelKey: "nav.servers", icon: Server },
+  { to: "/subscriptions", labelKey: "nav.subscriptions", icon: Globe },
+  { to: "/routing", labelKey: "nav.routing", icon: Route },
 ];
 
 const soon: NavItem[] = [
-  { to: "/logs", label: "Logs", icon: ScrollText, disabled: true },
-  { to: "/kill-switch", label: "Kill-switch", icon: ShieldOff, disabled: true },
+  { to: "/logs", labelKey: "nav.logs", icon: ScrollText, disabled: true },
+  {
+    to: "/kill-switch",
+    labelKey: "nav.killSwitch",
+    icon: ShieldOff,
+    disabled: true,
+  },
 ];
 
 const settingsItem: NavItem = {
   to: "/settings",
-  label: "Settings",
+  labelKey: "nav.settings",
   icon: SettingsIcon,
 };
 
 export function Sidebar() {
+  const { t } = useTranslation();
   return (
     <aside className="glass-dim flex h-full w-[200px] flex-col gap-1 px-3 py-4">
       <div className="flex items-center gap-2.5 px-2 pb-3">
@@ -44,12 +51,12 @@ export function Sidebar() {
         <span className="text-[13px] font-semibold tracking-tight">ITG Ray</span>
       </div>
 
-      <SectionLabel>Main</SectionLabel>
+      <SectionLabel>{t("nav.main")}</SectionLabel>
       {main.map((it) => (
         <Item key={it.to} {...it} />
       ))}
 
-      <SectionLabel className="mt-2 opacity-70">Soon</SectionLabel>
+      <SectionLabel className="mt-2 opacity-70">{t("nav.soon")}</SectionLabel>
       {soon.map((it) => (
         <Item key={it.to} {...it} />
       ))}
@@ -59,7 +66,7 @@ export function Sidebar() {
         <div className="mt-1 flex justify-between border-t border-white/5 px-3 pt-2.5 font-mono text-[10px] text-white/40">
           <span className="flex items-center gap-1.5">
             <span className="h-1.5 w-1.5 rounded-full bg-success shadow-[0_0_6px_rgba(0,230,118,0.7)]" />
-            running
+            {t("status.running")}
           </span>
           <span>v0.0.0</span>
         </div>
@@ -87,7 +94,9 @@ function SectionLabel({
   );
 }
 
-function Item({ to, label, icon: Icon, disabled }: NavItem) {
+function Item({ to, labelKey, icon: Icon, disabled }: NavItem) {
+  const { t } = useTranslation();
+  const label = t(labelKey);
   if (disabled) {
     return (
       <div
