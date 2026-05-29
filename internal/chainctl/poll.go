@@ -2,6 +2,7 @@ package chainctl
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/itg-team/itg-ray/internal/hub"
@@ -32,14 +33,37 @@ func (c *Controller) runPoller(ctx context.Context) {
 						"message": state.LastError,
 					},
 				})
+
+				ks, kerr := c.d.KillSwitch()
+				if kerr != nil {
+					// Fail closed (stay blocked) but never silently — a load
+					// error flipping the user's security posture must be visible.
+					slog.Error("chainctl: kill-switch load failed, failing closed",
+						slog.String("scope", "chainctl.poll"), slog.Any("err", kerr))
+				}
+				blocking := kerr != nil || ks.Enabled // fail closed on loader error
+
 				c.mu.Lock()
+				mode := c.mode
 				c.cancel = nil
 				c.current = nil
+				// Note: unlike Stop(), we deliberately do NOT clearSession here —
+				// an unsolicited drop is not a user disconnect, so the session is
+				// preserved for next-boot Reconcile.
 				c.mu.Unlock()
-				c.d.Hub.Publish(hub.Event{
-					Name:    hub.EventVPNStatus,
-					Payload: map[string]any{"status": string(hub.StatusError)},
-				})
+
+				if !blocking {
+					c.tearDown(ctx, mode) // kill-switch OFF: restore direct networking
+					c.d.Hub.Publish(hub.Event{
+						Name:    hub.EventVPNStatus,
+						Payload: map[string]any{"status": string(hub.StatusIdle)},
+					})
+				} else {
+					c.d.Hub.Publish(hub.Event{
+						Name:    hub.EventVPNStatus,
+						Payload: map[string]any{"status": string(hub.StatusError)},
+					})
+				}
 				return
 			}
 			c.mu.Lock()

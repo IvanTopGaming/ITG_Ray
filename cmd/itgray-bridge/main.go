@@ -167,6 +167,17 @@ func main() {
 		return c.Network, nil
 	}
 
+	// killSwitchLoader mirrors networkLoader: reads the persisted
+	// config.json so the poller's chain-drop handler branches on exactly
+	// what SettingsService.Update wrote.
+	killSwitchLoader := func() (config.KillSwitch, error) {
+		c, err := config.Load(configPath)
+		if err != nil {
+			return config.KillSwitch{}, err
+		}
+		return c.KillSwitch, nil
+	}
+
 	ruleStore := rules.NewStore(dataDir)
 	rulesSvc := bindings.NewRulesService(bindings.RulesDeps{
 		Store: ruleStore,
@@ -181,6 +192,7 @@ func main() {
 		Hub:          h,
 		BuildConfigs: buildConfigs(dataDir, configPath, ruleStore),
 		Network:      networkLoader,
+		KillSwitch:   killSwitchLoader,
 	})
 
 	// AppService now wired with live Chain, HelperProber, and the SOCKS

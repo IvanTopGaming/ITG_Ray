@@ -68,3 +68,10 @@ func DefaultNetworkLoader() func() (config.Network, error) {
 		return config.Defaults().Network, nil
 	}
 }
+
+// DefaultKillSwitchLoader returns the built-in kill-switch defaults
+// (Enabled:true), used when Deps.KillSwitch is nil so the failure handler
+// defaults to the protective (blocking) behavior.
+func DefaultKillSwitchLoader() func() (config.KillSwitch, error) {
+	return func() (config.KillSwitch, error) { return config.Defaults().KillSwitch, nil }
+}

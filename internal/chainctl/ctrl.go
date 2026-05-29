@@ -94,6 +94,10 @@ type Deps struct {
 	// prior or complete next state, never a torn write. In-memory test
 	// loaders should likewise avoid shared mutable state without a lock.
 	Network func() (config.Network, error)
+	// KillSwitch reads the user's persisted kill-switch config on demand.
+	// nil falls back to DefaultKillSwitchLoader (Enabled:true) so a missing
+	// loader fails CLOSED (protective).
+	KillSwitch func() (config.KillSwitch, error)
 }
 
 // networkSettingsView projects a config.Network into the camelCase shape
@@ -140,6 +144,9 @@ type Controller struct {
 func New(d *Deps) *Controller {
 	if d.Network == nil {
 		d.Network = DefaultNetworkLoader()
+	}
+	if d.KillSwitch == nil {
+		d.KillSwitch = DefaultKillSwitchLoader()
 	}
 	return &Controller{d: *d}
 }

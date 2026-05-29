@@ -281,6 +281,107 @@ func TestController_Reconcile_NoActiveHelperChain(t *testing.T) {
 	}
 }
 
+// driveToConnectedTUN adopts an already-running TUN chain via Reconcile so
+// the poller is live. Reuses the Reconcile-after-crash mechanics: the fake
+// reports a running chain, a session is on disk, Reconcile claims ownership
+// and launches runPoller. Returns once the connected vpn:status is observed.
+func driveToConnectedTUN(t *testing.T, c *Controller, fh *fakeHelper, rcv <-chan hub.Event) {
+	t.Helper()
+	fh.mu.Lock()
+	fh.running = true
+	fh.mu.Unlock()
+	require.NoError(t, saveSession(c.d.DataDir, sessionRecord{
+		ServerID: "a",
+		Mode:     string(ModeTUN),
+		At:       time.Now(),
+	}))
+	c.Reconcile(context.Background())
+	waitForVpnStatus(t, rcv, string(hub.StatusConnected), time.Second)
+}
+
+// TestController_Drop_KillSwitchOff_GoesDirect pins the kill-switch-OFF
+// runtime reaction: when the helper reports the chain dropped, the poller
+// must tear the tunnel down (restore direct networking) and transition to
+// idle rather than wedging the UI in error.
+func TestController_Drop_KillSwitchOff_GoesDirect(t *testing.T) {
+	c, fh, h, _ := setup(t)
+	c.d.KillSwitch = func() (config.KillSwitch, error) {
+		return config.KillSwitch{Enabled: false}, nil
+	}
+	rcv := h.Subscribe(64)
+	defer h.Unsubscribe(rcv)
+
+	driveToConnectedTUN(t, c, fh, rcv)
+
+	// Simulate the chain dropping out from under us.
+	fh.mu.Lock()
+	fh.running = false
+	fh.mu.Unlock()
+
+	waitForVpnStatus(t, rcv, string(hub.StatusIdle), 2*time.Second)
+
+	fh.mu.Lock()
+	calls := append([]string(nil), fh.calls...)
+	fh.mu.Unlock()
+	require.Contains(t, calls, "StopChain", "kill-switch OFF must tear the chain down")
+	require.Contains(t, calls, "RouteRestore", "TUN teardown must restore routes")
+}
+
+// TestController_Drop_KillSwitchOn_StaysBlocked pins the protective path:
+// when the kill-switch is ON and the chain drops, the poller keeps the
+// blocked posture — no teardown, status goes to error.
+func TestController_Drop_KillSwitchOn_StaysBlocked(t *testing.T) {
+	c, fh, h, _ := setup(t)
+	c.d.KillSwitch = func() (config.KillSwitch, error) {
+		return config.KillSwitch{Enabled: true}, nil
+	}
+	rcv := h.Subscribe(64)
+	defer h.Unsubscribe(rcv)
+
+	driveToConnectedTUN(t, c, fh, rcv)
+
+	fh.mu.Lock()
+	before := len(fh.calls)
+	fh.running = false
+	fh.mu.Unlock()
+
+	waitForVpnStatus(t, rcv, string(hub.StatusError), 2*time.Second)
+
+	fh.mu.Lock()
+	after := append([]string(nil), fh.calls[before:]...)
+	fh.mu.Unlock()
+	require.NotContains(t, after, "RouteRestore", "kill-switch ON must not restore routes")
+	require.NotContains(t, after, "StopChain", "kill-switch ON must not tear the chain down")
+}
+
+// TestController_Drop_KillSwitchLoadError_FailsClosed pins the security-
+// critical fail-closed path: if the kill-switch loader errors on a drop, the
+// poller must keep the blocked posture (status error, no teardown) rather
+// than fall open to direct.
+func TestController_Drop_KillSwitchLoadError_FailsClosed(t *testing.T) {
+	c, fh, h, _ := setup(t)
+	c.d.KillSwitch = func() (config.KillSwitch, error) {
+		return config.KillSwitch{}, errors.New("config load failed")
+	}
+	rcv := h.Subscribe(64)
+	defer h.Unsubscribe(rcv)
+
+	driveToConnectedTUN(t, c, fh, rcv)
+
+	fh.mu.Lock()
+	before := len(fh.calls)
+	fh.running = false
+	fh.mu.Unlock()
+
+	waitForVpnStatus(t, rcv, string(hub.StatusError), 2*time.Second)
+
+	fh.mu.Lock()
+	after := append([]string(nil), fh.calls[before:]...)
+	fh.mu.Unlock()
+	require.NotContains(t, after, "RouteRestore", "loader error must fail closed (no route restore)")
+	require.NotContains(t, after, "StopChain", "loader error must fail closed (no teardown)")
+}
+
 func TestController_Stop_IsIdempotent(t *testing.T) {
 	c, _, _, _ := setup(t)
 	// Calling Stop on a never-started controller must not panic and
