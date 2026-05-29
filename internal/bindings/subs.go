@@ -92,12 +92,20 @@ func (s *SubsService) Add(rawURL, name, userAgent string) (hub.SubView, error) {
 	if err := validateSubURL(rawURL); err != nil {
 		return hub.SubView{}, err
 	}
+	// Honor the user's configured default; fall back to the package
+	// constant when settings are unavailable or unset (0).
+	interval := defaultUpdateInterval
+	if s.d.SettingsView != nil {
+		if secs := s.d.SettingsView().Subscriptions.DefaultUpdateInterval; secs > 0 {
+			interval = time.Duration(secs) * time.Second
+		}
+	}
 	stored := subscription.Stored{
 		ID:             generateSubID(),
 		Name:           strings.TrimSpace(name),
 		URL:            rawURL,
 		UserAgent:      strings.TrimSpace(userAgent),
-		UpdateInterval: subscription.Duration(defaultUpdateInterval),
+		UpdateInterval: subscription.Duration(interval),
 	}
 	subs, err := s.d.SubStore.Load()
 	if err != nil {

@@ -305,6 +305,79 @@ func TestSubsService_Add_PersistsUserAgent(t *testing.T) {
 	require.Equal(t, "Custom/1.0", loaded[0].UserAgent)
 }
 
+func TestSubsService_Add_UsesConfiguredInterval(t *testing.T) {
+	dir := t.TempDir()
+	subStore := subscription.FileStore{Path: filepath.Join(dir, "subscriptions.json")}
+	srvPath := filepath.Join(dir, "servers.json")
+	require.NoError(t, subStore.Save([]subscription.Stored{}))
+	require.NoError(t, server.Save(srvPath, []server.Server{}))
+
+	svc := NewSubsService(SubsDeps{
+		SubStore:    subStore,
+		ServerStore: fileServerStore{path: srvPath},
+		Hub:         hub.New(),
+		SettingsView: func() hub.SettingsView {
+			return hub.SettingsView{
+				Subscriptions: hub.SubscriptionSettings{DefaultUpdateInterval: 7200},
+			}
+		},
+	})
+
+	_, err := svc.Add("https://example.com/sub", "test", "")
+	require.NoError(t, err)
+
+	all, err := subStore.Load()
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	require.Equal(t, subscription.Duration(2*time.Hour), all[0].UpdateInterval)
+}
+
+func TestSubsService_Add_FallsBackWhenSettingsZero(t *testing.T) {
+	dir := t.TempDir()
+	subStore := subscription.FileStore{Path: filepath.Join(dir, "subscriptions.json")}
+	srvPath := filepath.Join(dir, "servers.json")
+	require.NoError(t, subStore.Save([]subscription.Stored{}))
+	require.NoError(t, server.Save(srvPath, []server.Server{}))
+
+	svc := NewSubsService(SubsDeps{
+		SubStore:    subStore,
+		ServerStore: fileServerStore{path: srvPath},
+		Hub:         hub.New(),
+		SettingsView: func() hub.SettingsView {
+			return hub.SettingsView{Subscriptions: hub.SubscriptionSettings{DefaultUpdateInterval: 0}}
+		},
+	})
+
+	_, err := svc.Add("https://example.com/sub", "test", "")
+	require.NoError(t, err)
+	all, err := subStore.Load()
+	require.NoError(t, err)
+	require.Equal(t, subscription.Duration(defaultUpdateInterval), all[0].UpdateInterval)
+}
+
+func TestSubsService_Add_FallsBackWhenSettingsViewNil(t *testing.T) {
+	dir := t.TempDir()
+	subStore := subscription.FileStore{Path: filepath.Join(dir, "subscriptions.json")}
+	srvPath := filepath.Join(dir, "servers.json")
+	require.NoError(t, subStore.Save([]subscription.Stored{}))
+	require.NoError(t, server.Save(srvPath, []server.Server{}))
+
+	// SettingsView nil exercises a distinct branch from value==0: the
+	// closure is never invoked, so the constant fallback must still apply.
+	svc := NewSubsService(SubsDeps{
+		SubStore:     subStore,
+		ServerStore:  fileServerStore{path: srvPath},
+		Hub:          hub.New(),
+		SettingsView: nil,
+	})
+
+	_, err := svc.Add("https://example.com/sub", "test", "")
+	require.NoError(t, err)
+	all, err := subStore.Load()
+	require.NoError(t, err)
+	require.Equal(t, subscription.Duration(defaultUpdateInterval), all[0].UpdateInterval)
+}
+
 func TestSubsService_Edit_UpdatesUserAgent_IncludingClearToEmpty(t *testing.T) {
 	dir := t.TempDir()
 	svc, subStore := newSubsServiceForTest(t, dir)
