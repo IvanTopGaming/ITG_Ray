@@ -13,7 +13,11 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  server: { port: 34115, strictPort: true },
+  // Bind IPv4 loopback explicitly: on hosts where `localhost` resolves to
+  // ::1 first, Vite would otherwise listen only on IPv6, and Electron's
+  // loadURL("http://localhost") / the dev:electron wait-on step both hit
+  // 127.0.0.1 → ECONNREFUSED → white-screen renderer + hung startup.
+  server: { host: "127.0.0.1", port: 34115, strictPort: true },
   build: {
     outDir: "../dist-frontend",
     emptyOutDir: true,
