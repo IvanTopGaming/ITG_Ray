@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
@@ -80,6 +81,7 @@ function conditionCount(rule: RuleView, key: ConditionType): number {
 }
 
 export function RuleEditor() {
+  const { t } = useTranslation();
   const { ruleId = "" } = useParams<{ ruleId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -116,9 +118,9 @@ export function RuleEditor() {
           transition={{ duration: 0.18, ease: SNAP_EASE }}
           className="self-start text-[12.5px] text-white/70 hover:text-white/95"
         >
-          ← Routing
+          ← {t('ruleEditor.back')}
         </motion.button>
-        <p className="text-[14px] text-white/70">Rule not found.</p>
+        <p className="text-[14px] text-white/70">{t('ruleEditor.ruleNotFound')}</p>
       </motion.div>
     );
   }
@@ -137,7 +139,7 @@ export function RuleEditor() {
     if (!draft) return;
     setSaveError(null);
     if (!hasAnyCondition(draft)) {
-      setSaveError("Add at least one condition before saving.");
+      setSaveError(t('ruleEditor.errAddCondition'));
       return;
     }
     try {
@@ -225,11 +227,11 @@ export function RuleEditor() {
           transition={{ duration: 0.18, ease: SNAP_EASE }}
           className="group flex items-center gap-2 rounded-full border border-white/0 bg-white/0 px-3 py-1.5 text-[13px] font-medium text-white/60 transition-all hover:border-white/10 hover:bg-white/[0.03] hover:text-white/95"
         >
-          <ChevronLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" /> Routing
+          <ChevronLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" /> {t('ruleEditor.back')}
         </motion.button>
         <div className="flex items-center gap-3">
           {conditionsEmpty && (
-            <span className="text-[11.5px] font-medium text-amber-400/70">Add a condition to save</span>
+            <span className="text-[11.5px] font-medium text-amber-400/70">{t('ruleEditor.addConditionToSave')}</span>
           )}
           <motion.button
             onClick={handleSave}
@@ -243,7 +245,7 @@ export function RuleEditor() {
                 : "rounded-full bg-sky-500/80 px-5 py-2 text-[13px] font-semibold text-white shadow-[0_4px_20px_-4px_rgba(56,189,248,0.6)] hover:bg-sky-400"
             }
           >
-            {isCreate ? "Create rule" : "Save changes"}
+            {isCreate ? t('ruleEditor.createRule') : t('ruleEditor.saveChanges')}
           </motion.button>
         </div>
       </motion.header>
@@ -264,22 +266,22 @@ export function RuleEditor() {
         <div className="relative flex flex-col gap-4">
           <div className="flex items-center justify-between gap-4">
             <input
-              aria-label="Name"
+              aria-label={t('ruleEditor.name')}
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              placeholder="Rule name"
+              placeholder={t('ruleEditor.namePlaceholder')}
               className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[20px] font-medium text-white/95 outline-none placeholder:text-white/20 focus:ring-0"
             />
             <div className="flex shrink-0 items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-1.5 shadow-inner">
-              <span className="text-[10.5px] font-medium uppercase tracking-[0.12em] text-white/50">Enabled</span>
-              <Toggle value={draft.enabled} aria-label="Enabled" onChange={(v) => setDraft({ ...draft, enabled: v })} />
+              <span className="text-[10.5px] font-medium uppercase tracking-[0.12em] text-white/50">{t('ruleEditor.enabled')}</span>
+              <Toggle value={draft.enabled} aria-label={t('ruleEditor.enabled')} onChange={(v) => setDraft({ ...draft, enabled: v })} />
             </div>
           </div>
           {!isCreate && userGroups.length > 0 && (
             <div className="flex items-center gap-3 border-t border-white/[0.06] pt-4">
-              <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-white/40">Group</span>
+              <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-white/40">{t('ruleEditor.group')}</span>
               <select
-                aria-label="Group"
+                aria-label={t('ruleEditor.group')}
                 value={groupId}
                 onChange={(e) => setGroupId(e.target.value)}
                 className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[12px] font-medium text-white/85 outline-none transition-colors duration-200 hover:bg-black/40 focus:border-sky-400/40"
@@ -299,7 +301,7 @@ export function RuleEditor() {
         className="mt-2 flex flex-col gap-3"
       >
         <span className="pl-1 text-[11px] font-medium uppercase tracking-[0.18em] text-white/50">
-          If matches all of
+          {t('ruleEditor.ifMatchesAll')}
         </span>
         {visibleConditionList.length === 0 ? (
           <div key="if-empty" className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-white/[0.15] bg-white/[0.01] px-4 py-12 text-center hover:bg-white/[0.02]">
@@ -307,8 +309,8 @@ export function RuleEditor() {
               <span className="text-xl opacity-60">🔮</span>
             </div>
             <div className="flex flex-col gap-1">
-              <p className="text-[14px] font-medium text-white/80">No conditions specified</p>
-              <p className="text-[12.5px] text-white/40">Add rules to define what traffic should be routed.</p>
+              <p className="text-[14px] font-medium text-white/80">{t('ruleEditor.noConditions')}</p>
+              <p className="text-[12.5px] text-white/40">{t('ruleEditor.noConditionsHint')}</p>
             </div>
             <div className="mt-2">
               <AddConditionButton
@@ -344,7 +346,7 @@ export function RuleEditor() {
                     <div className="flex items-center justify-between gap-2 pl-2">
                       <h3 className="flex items-center gap-2.5 text-[14px] font-medium text-white/90">
                         <span aria-hidden className="flex h-7 w-7 items-center justify-center rounded-md bg-white/[0.06] text-[14px] shadow-inner">{c.icon}</span>
-                        <span>{c.label === "Domain matcher" ? "Domains" : c.label}</span>
+                        <span>{c.key === "domains" ? t('ruleEditor.conditions.domainsCard') : t(`ruleEditor.conditions.${c.key}`)}</span>
                         {count > 0 && (
                           <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10.5px] font-medium text-white/60">
                             {count}
@@ -354,7 +356,7 @@ export function RuleEditor() {
                       <motion.button
                         type="button"
                         onClick={() => removeConditionType(c.key)}
-                        aria-label={`Remove ${c.label} card`}
+                        aria-label={t('ruleEditor.removeCard', { label: t(`ruleEditor.conditions.${c.key}`) })}
                         whileHover={{ scale: 1.15 }}
                         whileTap={{ scale: 0.85 }}
                         transition={{ duration: 0.18, ease: SNAP_EASE }}
@@ -404,7 +406,7 @@ export function RuleEditor() {
         className="mt-4 flex flex-col gap-3"
       >
         <span className="pl-1 text-[11px] font-medium uppercase tracking-[0.18em] text-white/50">
-          Then action
+          {t('ruleEditor.thenAction')}
         </span>
         <ActionPicker
           value={draft.action}
@@ -414,9 +416,9 @@ export function RuleEditor() {
 
       <ConfirmDialog
         open={confirmDiscard}
-        title="Discard changes?"
-        description="You have unsaved changes. Leave anyway?"
-        confirmLabel="Discard"
+        title={t('ruleEditor.discardTitle')}
+        description={t('ruleEditor.discardDescription')}
+        confirmLabel={t('ruleEditor.discardConfirm')}
         confirmVariant="danger"
         onClose={() => setConfirmDiscard(false)}
         onConfirm={() => navigate("/routing")}
@@ -467,6 +469,7 @@ function actionWrapperTint(action: ActionValue): string {
 }
 
 function ActionPicker({ value, onChange }: { value: ActionValue; onChange: (v: ActionValue) => void }) {
+  const { t } = useTranslation();
   return (
     <div
       className={`flex flex-col rounded-2xl border p-2 transition-all duration-300 ${actionWrapperTint(value)}`}
@@ -495,7 +498,7 @@ function ActionPicker({ value, onChange }: { value: ActionValue; onChange: (v: A
                   transition={{ type: "spring", stiffness: 400, damping: 30 }}
                 />
               )}
-              <span className="relative z-10">{a.label}</span>
+              <span className="relative z-10">{t(`ruleEditor.actions.${a.value}`)}</span>
             </motion.button>
           );
         })}
@@ -515,6 +518,7 @@ function AddConditionButton({
   onPick: (k: ConditionType) => void;
   prominent?: boolean;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState<{ left: number; top: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -564,7 +568,7 @@ function AddConditionButton({
         }
       >
         <span className="text-lg leading-none opacity-70 group-hover:opacity-100">{open ? "×" : "+"}</span>
-        <span>Add condition</span>
+        <span>{t('ruleEditor.addCondition')}</span>
       </motion.button>
       {open && coords && createPortal(
         <motion.div
@@ -576,16 +580,16 @@ function AddConditionButton({
           style={{ position: "fixed", left: coords.left, top: coords.top, zIndex: 1000 }}
           className="flex w-56 flex-col gap-0.5 rounded-xl border border-white/[0.12] bg-[#1a1c24]/95 p-1.5 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.6)] backdrop-blur-xl"
         >
-          {availableTypes.map((t) => (
+          {availableTypes.map((ct) => (
             <button
-              key={t.key}
+              key={ct.key}
               type="button"
               role="menuitem"
-              onClick={() => { onPick(t.key); setOpen(false); }}
+              onClick={() => { onPick(ct.key); setOpen(false); }}
               className="group flex items-center gap-3 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-white/70 transition-colors duration-150 hover:bg-white/[0.06] hover:text-white/95"
             >
-              <span aria-hidden className="flex h-6 w-6 items-center justify-center rounded-md bg-white/[0.04] text-[14px] shadow-sm transition-colors group-hover:bg-white/[0.08]">{t.icon}</span>
-              <span>{t.label}</span>
+              <span aria-hidden className="flex h-6 w-6 items-center justify-center rounded-md bg-white/[0.04] text-[14px] shadow-sm transition-colors group-hover:bg-white/[0.08]">{ct.icon}</span>
+              <span>{t(`ruleEditor.conditions.${ct.key}`)}</span>
             </button>
           ))}
         </motion.div>,
@@ -606,6 +610,7 @@ function Chip({
   onRemove?: () => void;
   removeLabel?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <motion.span
       layout
@@ -622,7 +627,7 @@ function Chip({
         <button
           type="button"
           onClick={onRemove}
-          aria-label={removeLabel ?? "Remove"}
+          aria-label={removeLabel ?? t('ruleEditor.remove')}
           className="ml-0.5 rounded-full p-0.5 text-white/40 transition-colors duration-150 hover:bg-rose-500/15 hover:text-rose-300"
         >
           ✕
@@ -703,6 +708,7 @@ const DOMAIN_KINDS: DomainMatcher["kind"][] = ["exact", "suffix", "keyword", "re
 const DOMAIN_OPTIONS = DOMAIN_KINDS.map(k => ({ value: k, label: k }));
 
 function DomainsBody({ value, onChange }: { value: DomainMatcher[]; onChange: (next: DomainMatcher[]) => void }) {
+  const { t } = useTranslation();
   const [addKind, setAddKind] = useState<DomainMatcher["kind"]>("suffix");
   const [addValue, setAddValue] = useState("");
   function commit() {
@@ -721,7 +727,7 @@ function DomainsBody({ value, onChange }: { value: DomainMatcher[]; onChange: (n
               <Chip
                 key={`${i}-${m.kind}-${m.value}`}
                 onRemove={() => onChange(value.filter((_, j) => j !== i))}
-                removeLabel={`Remove domain matcher ${i + 1}`}
+                removeLabel={t('ruleEditor.domains.removeLabel', { n: i + 1 })}
               >
                 <div className="w-[88px] shrink-0">
                   <Dropdown
@@ -730,7 +736,7 @@ function DomainsBody({ value, onChange }: { value: DomainMatcher[]; onChange: (n
                     options={DOMAIN_OPTIONS}
                     triggerClassName="border-transparent bg-transparent px-1 py-0.5 text-[11px] uppercase tracking-wider text-white/45 hover:border-white/10 hover:bg-white/[0.06] hover:text-white/80"
                     menuClassName="w-32"
-                    ariaLabel={`Domain matcher kind ${i + 1}`}
+                    ariaLabel={t('ruleEditor.domains.kindLabel', { n: i + 1 })}
                   />
                 </div>
                 <span className="text-white/25">·</span>
@@ -749,11 +755,11 @@ function DomainsBody({ value, onChange }: { value: DomainMatcher[]; onChange: (n
           />
         </div>
         <input
-          aria-label="Domain matcher value"
+          aria-label={t('ruleEditor.domains.valueLabel')}
           value={addValue}
           onChange={(e) => setAddValue(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
-          placeholder="example.com — press Enter to add"
+          placeholder={t('ruleEditor.domains.valuePlaceholder')}
           className={ADD_INPUT_CLASSES}
         />
       </div>
@@ -764,6 +770,7 @@ function DomainsBody({ value, onChange }: { value: DomainMatcher[]; onChange: (n
 // ----- IP CIDRs -----
 
 function CidrsBody({ value, onChange }: { value: string[]; onChange: (next: string[]) => void }) {
+  const { t } = useTranslation();
   const [addValue, setAddValue] = useState("");
   function commit() {
     const v = addValue.trim();
@@ -780,20 +787,20 @@ function CidrsBody({ value, onChange }: { value: string[]; onChange: (next: stri
               <Chip
                 key={`${i}-${cidr}`}
                 onRemove={() => onChange(value.filter((_, j) => j !== i))}
-                removeLabel={`Remove CIDR ${i + 1}`}
+                removeLabel={t('ruleEditor.cidrs.removeLabel', { n: i + 1 })}
               >
-                <span>{cidr || <span className="text-white/40">(empty)</span>}</span>
+                <span>{cidr || <span className="text-white/40">{t('ruleEditor.empty')}</span>}</span>
               </Chip>
             ))}
           </AnimatePresence>
         </div>
       )}
       <input
-        aria-label="CIDR value"
+        aria-label={t('ruleEditor.cidrs.valueLabel')}
         value={addValue}
         onChange={(e) => setAddValue(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
-        placeholder="10.0.0.0/8 or 1.2.3.4 — press Enter to add"
+        placeholder={t('ruleEditor.cidrs.valuePlaceholder')}
         className={ADD_INPUT_CLASSES}
       />
     </div>
@@ -815,6 +822,7 @@ function splitGeo(entry: string): { prefix: GeoPrefix; rest: string } {
 }
 
 function GeoBody({ value, onChange }: { value: string[]; onChange: (next: string[]) => void }) {
+  const { t } = useTranslation();
   const [addPrefix, setAddPrefix] = useState<GeoPrefix>("geosite");
   const [addValue, setAddValue] = useState("");
   function commit() {
@@ -834,7 +842,7 @@ function GeoBody({ value, onChange }: { value: string[]; onChange: (next: string
                 <Chip
                   key={`${i}-${entry}`}
                   onRemove={() => onChange(value.filter((_, j) => j !== i))}
-                  removeLabel={`Remove geo ${i + 1}`}
+                  removeLabel={t('ruleEditor.geoBody.removeLabel', { n: i + 1 })}
                 >
                   <div className="w-[88px] shrink-0">
                     <Dropdown
@@ -859,15 +867,15 @@ function GeoBody({ value, onChange }: { value: string[]; onChange: (next: string
             value={addPrefix}
             onChange={(v) => setAddPrefix(v as GeoPrefix)}
             options={GEO_OPTIONS}
-            ariaLabel="Geo prefix"
+            ariaLabel={t('ruleEditor.geoBody.prefixLabel')}
           />
         </div>
         <input
-          aria-label="Geo value"
+          aria-label={t('ruleEditor.geoBody.valueLabel')}
           value={addValue}
           onChange={(e) => setAddValue(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
-          placeholder="cn, google, ru — press Enter to add"
+          placeholder={t('ruleEditor.geoBody.valuePlaceholder')}
           className={ADD_INPUT_CLASSES}
         />
       </div>
@@ -885,6 +893,7 @@ function portChipLabel(p: PortSpec): string {
 }
 
 function PortsBody({ value, onChange }: { value: PortSpec[]; onChange: (next: PortSpec[]) => void }) {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<"single" | "range">("single");
   const [single, setSingle] = useState("");
   const [from, setFrom] = useState("");
@@ -918,7 +927,7 @@ function PortsBody({ value, onChange }: { value: PortSpec[]; onChange: (next: Po
               <Chip
                 key={`${i}-${portChipLabel(p)}`}
                 onRemove={() => onChange(value.filter((_, j) => j !== i))}
-                removeLabel={`Remove port ${i + 1}`}
+                removeLabel={t('ruleEditor.ports.removeLabel', { n: i + 1 })}
               >
                 <span>{portChipLabel(p)}</span>
               </Chip>
@@ -932,13 +941,13 @@ function PortsBody({ value, onChange }: { value: PortSpec[]; onChange: (next: Po
           value={mode}
           onChange={(v) => setMode(v as "single" | "range")}
           options={[
-            { value: "single", label: "Single" },
-            { value: "range", label: "Range" }
+            { value: "single", label: t('ruleEditor.ports.single') },
+            { value: "range", label: t('ruleEditor.ports.range') }
           ]}
         />
         {mode === "single" ? (
           <input
-            aria-label="Port number"
+            aria-label={t('ruleEditor.ports.numberLabel')}
             type="number"
             value={single}
             onChange={(e) => setSingle(e.target.value)}
@@ -949,7 +958,7 @@ function PortsBody({ value, onChange }: { value: PortSpec[]; onChange: (next: Po
         ) : (
           <>
             <input
-              aria-label="Port from"
+              aria-label={t('ruleEditor.ports.fromLabel')}
               type="number"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
@@ -959,7 +968,7 @@ function PortsBody({ value, onChange }: { value: PortSpec[]; onChange: (next: Po
             />
             <span className="text-white/40">→</span>
             <input
-              aria-label="Port to"
+              aria-label={t('ruleEditor.ports.toLabel')}
               type="number"
               value={to}
               onChange={(e) => setTo(e.target.value)}
@@ -969,7 +978,7 @@ function PortsBody({ value, onChange }: { value: PortSpec[]; onChange: (next: Po
             />
           </>
         )}
-        <AddChipButton onClick={commit} disabled={!canAdd} label="Add port" />
+        <AddChipButton onClick={commit} disabled={!canAdd} label={t('ruleEditor.ports.addPort')} />
       </div>
     </div>
   );
@@ -978,6 +987,7 @@ function PortsBody({ value, onChange }: { value: PortSpec[]; onChange: (next: Po
 // ----- Processes -----
 
 function ProcessesBody({ value, onChange }: { value: string[]; onChange: (next: string[]) => void }) {
+  const { t } = useTranslation();
   const [addValue, setAddValue] = useState("");
   function commit() {
     const v = addValue.trim();
@@ -994,20 +1004,20 @@ function ProcessesBody({ value, onChange }: { value: string[]; onChange: (next: 
               <Chip
                 key={`${i}-${name}`}
                 onRemove={() => onChange(value.filter((_, j) => j !== i))}
-                removeLabel={`Remove process ${i + 1}`}
+                removeLabel={t('ruleEditor.processes.removeLabel', { n: i + 1 })}
               >
-                <span>{name || <span className="text-white/40">(empty)</span>}</span>
+                <span>{name || <span className="text-white/40">{t('ruleEditor.empty')}</span>}</span>
               </Chip>
             ))}
           </AnimatePresence>
         </div>
       )}
       <input
-        aria-label="Process name"
+        aria-label={t('ruleEditor.processes.nameLabel')}
         value={addValue}
         onChange={(e) => setAddValue(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
-        placeholder="chrome.exe — press Enter to add"
+        placeholder={t('ruleEditor.processes.namePlaceholder')}
         className={ADD_INPUT_CLASSES}
       />
     </div>
@@ -1019,6 +1029,7 @@ function ProcessesBody({ value, onChange }: { value: string[]; onChange: (next: 
 const PROTOCOL_VALUES = ["tcp", "udp"] as const;
 
 function ProtocolsBody({ value, onChange }: { value: string[]; onChange: (next: string[]) => void }) {
+  const { t } = useTranslation();
   function toggle(p: string) {
     if (value.includes(p)) onChange(value.filter((x) => x !== p));
     else onChange([...value, p]);
@@ -1032,7 +1043,7 @@ function ProtocolsBody({ value, onChange }: { value: string[]; onChange: (next: 
             key={p}
             type="button"
             onClick={() => toggle(p)}
-            aria-label={`Protocol ${p}`}
+            aria-label={t('ruleEditor.protocols.label', { p })}
             aria-pressed={on}
             whileTap={{ scale: 0.94 }}
             transition={{ duration: 0.16, ease: SNAP_EASE }}

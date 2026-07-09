@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
   AlertTriangle,
@@ -63,6 +64,7 @@ type ModalState =
   | { kind: "edit"; server: Server };
 
 export function Servers() {
+  const { t } = useTranslation();
   // Use dash.allServers as the rendered source (it carries resolved origin
   // labels from GetSnapshot's originByID map). serversStore.useServers()
   // is consumed only for lastError + the bootstrap side-effect.
@@ -121,8 +123,8 @@ export function Servers() {
     if (manualRows.length) {
       out.push({
         id: MANUAL_GROUP_ID,
-        label: "Manual",
-        hint: `${manualRows.length} server${manualRows.length === 1 ? "" : "s"}`,
+        label: t("servers.manual"),
+        hint: t("servers.serverCount", { count: manualRows.length }),
         origin: "manual",
         rows: sortRows(manualRows),
       });
@@ -138,13 +140,13 @@ export function Servers() {
       out.push({
         id: `sub:${subName}`,
         label: subName,
-        hint: `${rows.length} server${rows.length === 1 ? "" : "s"}`,
+        hint: t("servers.serverCount", { count: rows.length }),
         origin: "subscription",
         rows: sortRows(rows),
       });
     }
     return out;
-  }, [filtered, sort, favoritesFirst]);
+  }, [filtered, sort, favoritesFirst, t]);
 
   async function toggleFavorite(id: string) {
     try {
@@ -222,7 +224,7 @@ export function Servers() {
           variants={itemVariants}
           className="flex items-center justify-between gap-4"
         >
-          <h1 className="text-[22px] font-semibold tracking-tight">Servers</h1>
+          <h1 className="text-[22px] font-semibold tracking-tight">{t("servers.title")}</h1>
           <div className="flex items-center gap-2">
             <SearchInput value={search} onChange={setSearch} />
             <SortToggle value={sort} onChange={setSort} />
@@ -248,8 +250,8 @@ export function Servers() {
             className="glass-regular rounded-2xl p-10 text-center text-[13px] text-white/55"
           >
             {servers.length === 0
-              ? "No servers yet — add one or sync a subscription."
-              : `Nothing matches “${search}”.`}
+              ? t("servers.emptyState")
+              : t("servers.noMatches", { query: search })}
           </motion.div>
         ) : (
           <AnimatePresence>
@@ -273,7 +275,7 @@ export function Servers() {
                   </span>
                   {group.origin === "manual" && (
                     <span className="rounded bg-warn/15 px-1.5 py-px text-[8px] font-bold uppercase tracking-[0.16em] text-warn">
-                      manual
+                      {t("servers.manualBadge")}
                     </span>
                   )}
                   {group.hint && (
@@ -354,6 +356,7 @@ function ErrorBanner({
   message: string;
   onDismiss: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <motion.div
       initial={{ opacity: 0, y: -8 }}
@@ -368,7 +371,7 @@ function ErrorBanner({
       <button
         onClick={onDismiss}
         className="rounded p-1 text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white"
-        aria-label="Dismiss error"
+        aria-label={t("servers.dismissError")}
       >
         <X className="h-3.5 w-3.5" />
       </button>
@@ -383,12 +386,13 @@ function SearchInput({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="glass-regular flex items-center gap-2 rounded-lg px-3 py-1.5">
       <Search className="h-3.5 w-3.5 text-white/45" />
       <input
         type="text"
-        placeholder="Search city or code"
+        placeholder={t("servers.searchPlaceholder")}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-[200px] bg-transparent text-[12px] text-white placeholder:text-white/35 focus:outline-none"
@@ -404,6 +408,11 @@ function SortToggle({
   value: Sort;
   onChange: (s: Sort) => void;
 }) {
+  const { t } = useTranslation();
+  const sortLabel: Record<Sort, string> = {
+    latency: t("servers.sortLatency"),
+    name: t("servers.sortName"),
+  };
   return (
     <div className="glass-regular flex gap-0 rounded-lg p-1">
       {(["latency", "name"] as const).map((s) => (
@@ -422,7 +431,7 @@ function SortToggle({
               transition={{ type: "spring", stiffness: 380, damping: 32 }}
             />
           )}
-          <span className="relative z-10">{s}</span>
+          <span className="relative z-10">{sortLabel[s]}</span>
         </button>
       ))}
     </div>
@@ -436,6 +445,7 @@ function FavoritesToggle({
   value: boolean;
   onChange: (v: boolean) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <button
       onClick={() => onChange(!value)}
@@ -443,7 +453,7 @@ function FavoritesToggle({
         "glass-regular flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors duration-instant ease-snap",
         value ? "text-warn" : "text-white/55 hover:text-white",
       )}
-      title="Favourites first"
+      title={t("servers.favouritesFirst")}
     >
       <Star className={cn("h-3.5 w-3.5", value && "fill-warn stroke-warn")} />
     </button>
@@ -451,6 +461,7 @@ function FavoritesToggle({
 }
 
 function AddServerButton({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation();
   return (
     <motion.button
       onClick={onClick}
@@ -460,12 +471,13 @@ function AddServerButton({ onClick }: { onClick: () => void }) {
       className="glass-regular flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white transition-colors duration-instant ease-snap hover:!border-white/30 hover:bg-white/[0.08]"
     >
       <Plus className="h-3.5 w-3.5" />
-      Add server
+      {t("servers.addServer")}
     </motion.button>
   );
 }
 
 function ProbeAllButton({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation();
   return (
     <motion.button
       onClick={onClick}
@@ -475,7 +487,7 @@ function ProbeAllButton({ onClick }: { onClick: () => void }) {
       className="flex items-center gap-1.5 rounded-lg bg-gradient-to-br from-accent-start to-accent-mid px-3 py-1.5 text-[11px] font-semibold text-white shadow-[0_0_18px_rgba(120,200,255,0.30)] transition-shadow duration-instant ease-snap hover:shadow-[0_0_22px_rgba(120,200,255,0.45)]"
     >
       <Zap className="h-3.5 w-3.5" />
-      Probe all
+      {t("servers.probeAll")}
     </motion.button>
   );
 }
@@ -499,6 +511,7 @@ function ServerRow({
   onAction: () => void;
   onSelectActive: () => void;
 }) {
+  const { t } = useTranslation();
   const ping = server.latencyMs;
   const pingColor =
     ping === 0
@@ -513,7 +526,7 @@ function ServerRow({
 
   const isManual = server.origin === MANUAL_ORIGIN;
   const ActionIcon = isManual ? Pencil : Eye;
-  const actionTitle = isManual ? "Edit" : "View details";
+  const actionTitle = isManual ? t("common.edit") : t("servers.viewDetails");
 
   return (
     <div
@@ -578,7 +591,7 @@ function ServerRow({
             className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-success"
           >
             <span className="h-1 w-1 rounded-full bg-success shadow-[0_0_4px_rgba(0,230,118,0.8)]" />
-            Active
+            {t("servers.active")}
           </motion.span>
         )}
       </div>
@@ -589,7 +602,7 @@ function ServerRow({
           onToggleFavorite();
         }}
         className="relative z-10 rounded p-1 hover:bg-white/[0.06]"
-        title={server.favorite ? "Unfavourite" : "Favourite"}
+        title={server.favorite ? t("servers.unfavourite") : t("servers.favourite")}
       >
         <Star
           className={cn(
@@ -610,9 +623,9 @@ function ServerRow({
           "relative z-10 min-w-[64px] rounded px-2 py-0.5 text-right font-mono text-[11px] font-semibold tabular-nums transition-colors hover:bg-white/[0.06]",
           probing ? "text-white/45" : pingColor,
         )}
-        title="Re-probe latency"
+        title={t("servers.reprobe")}
       >
-        {probing ? "probing…" : ping > 0 ? `${ping} ms` : "—"}
+        {probing ? t("servers.probing") : ping > 0 ? `${ping} ms` : "—"}
       </button>
 
       <button
@@ -766,6 +779,26 @@ function ServerModal({
   const isView = modal.kind === "view";
   const editable = isAdd || isEdit;
   const server = !isAdd ? modal.server : null;
+  const { t } = useTranslation();
+
+  const TRANSPORT_OPTIONS = TRANSPORT_TYPES.map((o) => ({
+    value: o.value,
+    label: t(`servers.transport.${o.value}`),
+  }));
+  const SECURITY_OPTIONS = SECURITY_TYPES.map((o) => ({
+    value: o.value,
+    label: t(`servers.securityOption.${o.value}`),
+  }));
+  const FINGERPRINT_OPTIONS = FINGERPRINTS.map((o) => ({
+    value: o.value,
+    label: t(`servers.fingerprintOption.${o.value || "none"}`),
+  }));
+  const FLOW_OPTIONS = FLOWS.map((o) => ({
+    value: o.value,
+    label: o.value
+      ? t("servers.flowOption.vision")
+      : t("servers.flowOption.none"),
+  }));
 
   const [config, setConfig] = useState<VlessConfig>(() =>
     server ? parseVless(server.uri) : { ...EMPTY_VLESS },
@@ -783,12 +816,12 @@ function ServerModal({
     const trimmed = pasteText.trim();
     if (!trimmed) return;
     if (!trimmed.startsWith("vless://")) {
-      setPasteError("Expected a vless:// URL");
+      setPasteError(t("servers.errExpectedVless"));
       return;
     }
     const parsed = parseVless(trimmed);
     if (!parsed.host || !parsed.uuid) {
-      setPasteError("Could not parse host or UUID");
+      setPasteError(t("servers.errParse"));
       return;
     }
     setConfig(parsed);
@@ -831,10 +864,10 @@ function ServerModal({
   }
 
   const title = isAdd
-    ? "Add manual server"
+    ? t("servers.addManualServer")
     : isEdit
-      ? "Edit server"
-      : "Server details";
+      ? t("servers.editServer")
+      : t("servers.serverDetails");
 
   return (
     <motion.div
@@ -848,7 +881,7 @@ function ServerModal({
     >
       <button
         onClick={onClose}
-        aria-label="Close"
+        aria-label={t("servers.close")}
         className="absolute inset-0 cursor-default bg-bg-0/70 backdrop-blur-md"
       />
       <motion.div
@@ -873,7 +906,7 @@ function ServerModal({
                     : "bg-white/[0.08] text-white/55",
                 )}
               >
-                {server.origin === MANUAL_ORIGIN ? "manual" : "subscription"}
+                {server.origin === MANUAL_ORIGIN ? t("servers.manualBadge") : t("servers.subscription")}
               </span>
             )}
           </div>
@@ -889,7 +922,7 @@ function ServerModal({
           {isAdd && (
             <div className="flex flex-col gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] p-3">
               <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/45">
-                Quick paste
+                {t("servers.quickPaste")}
               </span>
               <div className="flex gap-2">
                 <input
@@ -898,7 +931,7 @@ function ServerModal({
                     setPasteText(e.target.value);
                     setPasteError(null);
                   }}
-                  placeholder="vless://… (paste full URL to fill fields)"
+                  placeholder={t("servers.pastePlaceholder")}
                   className="flex-1 rounded-lg border border-white/15 bg-white/[0.04] px-3 py-2 font-mono text-[11px] text-white placeholder:text-white/35 focus:border-accent-start/50 focus:bg-white/[0.06] focus:outline-none"
                 />
                 <button
@@ -906,7 +939,7 @@ function ServerModal({
                   disabled={!pasteText.trim()}
                   className="rounded-lg bg-white/[0.08] px-3 py-2 text-[11px] font-semibold text-white transition-colors hover:bg-white/[0.14] disabled:opacity-40"
                 >
-                  Parse
+                  {t("servers.parse")}
                 </button>
               </div>
               {pasteError && (
@@ -915,16 +948,16 @@ function ServerModal({
             </div>
           )}
 
-          <Section title="Basics">
-            <Field label="Name">
+          <Section title={t("servers.sectionBasics")}>
+            <Field label={t("servers.name")}>
               <TextInput
                 value={config.name}
                 onChange={(v) => update("name", v)}
                 disabled={!editable}
-                placeholder="e.g. Provider — Tokyo"
+                placeholder={t("servers.namePlaceholder")}
               />
             </Field>
-            <Field label="UUID">
+            <Field label={t("servers.uuid")}>
               <TextInput
                 value={config.uuid}
                 onChange={(v) => update("uuid", v)}
@@ -935,16 +968,16 @@ function ServerModal({
             </Field>
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2">
-                <Field label="Address">
+                <Field label={t("servers.address")}>
                   <TextInput
                     value={config.host}
                     onChange={(v) => update("host", v)}
                     disabled={!editable}
-                    placeholder="host.example.com"
+                    placeholder={t("servers.addressPlaceholder")}
                   />
                 </Field>
               </div>
-              <Field label="Port">
+              <Field label={t("servers.port")}>
                 <TextInput
                   value={config.port}
                   onChange={(v) => update("port", v.replace(/[^\d]/g, ""))}
@@ -956,22 +989,22 @@ function ServerModal({
             </div>
           </Section>
 
-          <Section title="Transport">
+          <Section title={t("servers.sectionTransport")}>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Type">
+              <Field label={t("servers.type")}>
                 <Dropdown
                   value={config.type}
                   onChange={(v) => update("type", v)}
                   disabled={!editable}
-                  options={TRANSPORT_TYPES}
+                  options={TRANSPORT_OPTIONS}
                 />
               </Field>
-              <Field label="Flow">
+              <Field label={t("servers.flow")}>
                 <Dropdown
                   value={config.flow}
                   onChange={(v) => update("flow", v)}
                   disabled={!editable}
-                  options={FLOWS}
+                  options={FLOW_OPTIONS}
                 />
               </Field>
             </div>
@@ -981,14 +1014,14 @@ function ServerModal({
                 config.type === "http") && (
                 <Reveal key="path">
                   <Field
-                    label={config.type === "grpc" ? "Service name" : "Path"}
+                    label={config.type === "grpc" ? t("servers.serviceName") : t("servers.path")}
                   >
                     <TextInput
                       value={config.path}
                       onChange={(v) => update("path", v)}
                       disabled={!editable}
                       placeholder={
-                        config.type === "grpc" ? "grpc-service" : "/path"
+                        config.type === "grpc" ? t("servers.serviceNamePlaceholder") : t("servers.pathPlaceholder")
                       }
                       mono
                     />
@@ -997,12 +1030,12 @@ function ServerModal({
               )}
               {(config.type === "ws" || config.type === "http") && (
                 <Reveal key="hostHeader">
-                  <Field label="Host header">
+                  <Field label={t("servers.hostHeader")}>
                     <TextInput
                       value={config.hostHeader}
                       onChange={(v) => update("hostHeader", v)}
                       disabled={!editable}
-                      placeholder="example.com (optional)"
+                      placeholder={t("servers.hostHeaderPlaceholder")}
                     />
                   </Field>
                 </Reveal>
@@ -1010,34 +1043,34 @@ function ServerModal({
             </AnimatePresence>
           </Section>
 
-          <Section title="Security">
+          <Section title={t("servers.sectionSecurity")}>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Security">
+              <Field label={t("servers.security")}>
                 <Dropdown
                   value={config.security}
                   onChange={(v) => update("security", v)}
                   disabled={!editable}
-                  options={SECURITY_TYPES}
+                  options={SECURITY_OPTIONS}
                 />
               </Field>
-              <Field label="Fingerprint">
+              <Field label={t("servers.fingerprint")}>
                 <Dropdown
                   value={config.fingerprint}
                   onChange={(v) => update("fingerprint", v)}
                   disabled={!editable || config.security === "none"}
-                  options={FINGERPRINTS}
+                  options={FINGERPRINT_OPTIONS}
                 />
               </Field>
             </div>
             <AnimatePresence initial={false}>
               {config.security !== "none" && (
                 <Reveal key="sni">
-                  <Field label="SNI / Server name">
+                  <Field label={t("servers.sni")}>
                     <TextInput
                       value={config.sni}
                       onChange={(v) => update("sni", v)}
                       disabled={!editable}
-                      placeholder="www.cloudflare.com"
+                      placeholder={t("servers.sniPlaceholder")}
                     />
                   </Field>
                 </Reveal>
@@ -1045,21 +1078,21 @@ function ServerModal({
               {config.security === "reality" && (
                 <Reveal key="reality-keys">
                   <div className="flex flex-col gap-3">
-                    <Field label="Public key">
+                    <Field label={t("servers.publicKey")}>
                       <TextInput
                         value={config.publicKey}
                         onChange={(v) => update("publicKey", v)}
                         disabled={!editable}
-                        placeholder="x25519 public key"
+                        placeholder={t("servers.publicKeyPlaceholder")}
                         mono
                       />
                     </Field>
-                    <Field label="Short ID">
+                    <Field label={t("servers.shortId")}>
                       <TextInput
                         value={config.shortId}
                         onChange={(v) => update("shortId", v)}
                         disabled={!editable}
-                        placeholder="0011"
+                        placeholder={t("servers.shortIdPlaceholder")}
                         mono
                       />
                     </Field>
@@ -1069,7 +1102,7 @@ function ServerModal({
             </AnimatePresence>
           </Section>
 
-          <Section title="Raw URL">
+          <Section title={t("servers.sectionRawUrl")}>
             <div className="relative">
               <textarea
                 value={computedUri}
@@ -1080,7 +1113,7 @@ function ServerModal({
               <button
                 onClick={copyUri}
                 disabled={!computedUri}
-                title="Copy URL"
+                title={t("servers.copyUrl")}
                 className="absolute right-2 top-2 rounded-md p-1.5 text-white/55 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-30"
               >
                 <Copy className="h-3.5 w-3.5" />
@@ -1089,26 +1122,26 @@ function ServerModal({
           </Section>
 
           {server && isView && (
-            <Section title="Metadata">
+            <Section title={t("servers.sectionMetadata")}>
               <div className="flex flex-col gap-2 rounded-lg border border-white/[0.08] bg-white/[0.02] p-3">
                 <Meta
-                  label="Origin"
+                  label={t("servers.origin")}
                   value={
                     server.origin === MANUAL_ORIGIN
-                      ? "Manual entry"
-                      : `Subscription · ${server.origin}`
+                      ? t("servers.manualEntry")
+                      : t("servers.subscriptionOrigin", { name: server.origin })
                   }
                 />
                 <Meta
-                  label="Latency"
+                  label={t("servers.latency")}
                   value={
                     server.latencyMs > 0 ? `${server.latencyMs} ms` : "—"
                   }
                 />
-                <Meta label="Address" value={server.address} mono />
+                <Meta label={t("servers.address")} value={server.address} mono />
                 <Meta
-                  label="Favourite"
-                  value={server.favorite ? "Yes" : "No"}
+                  label={t("servers.favouriteMeta")}
+                  value={server.favorite ? t("servers.yes") : t("servers.no")}
                 />
               </div>
             </Section>
@@ -1144,7 +1177,7 @@ function ServerModal({
               onClick={onClose}
               className="rounded-lg px-4 py-2 text-[12px] font-medium text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white"
             >
-              {isView ? "Close" : "Cancel"}
+              {isView ? t("servers.close") : t("servers.cancel")}
             </button>
             {editable && (
               <button
@@ -1152,7 +1185,7 @@ function ServerModal({
                 disabled={!valid || submitting}
                 className="rounded-lg bg-gradient-to-br from-accent-start to-accent-mid px-4 py-2 text-[12px] font-semibold text-white shadow-[0_0_18px_rgba(120,200,255,0.30)] transition-all hover:shadow-[0_0_22px_rgba(120,200,255,0.45)] disabled:opacity-40 disabled:shadow-none"
               >
-                {submitting ? (isAdd ? "Adding…" : "Saving…") : isAdd ? "Add" : "Save"}
+                {submitting ? (isAdd ? t("servers.adding") : t("servers.saving")) : isAdd ? t("servers.add") : t("servers.save")}
               </button>
             )}
           </div>
