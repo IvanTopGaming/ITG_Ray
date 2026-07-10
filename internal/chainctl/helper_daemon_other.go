@@ -26,18 +26,22 @@ const daemonSocketPath = "/run/itgray-helper.sock"
 // HelperAdapter (which dials a winio named pipe instead).
 //
 // IMPORTANT: like the Windows helper, the Linux daemon bundles
-// route-snapshot, peer-route, TUN creation, sing-box auto_route and
-// sing-box/xray spawn inside its OpStartChain handler. The granular ops
-// (TunCreate, RouteSnapshot, RouteAdd, DnsSet, …) therefore do NOT run
-// separately from this client — chainctl's bringUp calls them, but here
-// they are no-ops so the sequence type-checks while StartChain owns all
-// the privileged work.
+// route-snapshot, TUN creation, sing-box auto_route and sing-box/xray spawn
+// inside its OpStartChain handler. The granular ops (TunCreate,
+// RouteSnapshot, RouteAdd, DnsSet, …) therefore do NOT run separately from
+// this client — chainctl's bringUp calls them, but here they are no-ops so
+// the sequence type-checks while StartChain owns all the privileged work.
 //
-// Server endpoint: OpStartChain requires ServerHost/ServerPort in its args
-// (the daemon resolves the host and adds a /32 peer-route via the current
-// default gateway BEFORE sing-box spawns). We extract those from the
-// xray-core config handed to StartChain — its VLESS vnext outbound carries
-// the real server address/port — which keeps this a stable, server-agnostic
+// Server-loop avoidance: there is no client-side peer-route. The proxy
+// server's address is excluded from the TUN via route_exclude_address in the
+// sing-box config, set bridge-side (see configbuilder.go). The daemon's
+// chain_linux path never installs a /32 route for it.
+//
+// Server endpoint: OpStartChain carries ServerHost/ServerPort in its args,
+// extracted from the xray-core config handed to StartChain — its VLESS vnext
+// outbound carries the real server address/port. On the Linux daemon today
+// these fields are validation-only (chain_linux checks them but does not use
+// them for routing). Carrying them keeps this a stable, server-agnostic
 // singleton: each Connect supplies its own xray config.
 //
 // Connection: the socket is dialed lazily on the first StartChain and
@@ -223,7 +227,9 @@ func (a *daemonHelperClient) TunDestroy(_ context.Context) error { return nil }
 // RouteSnapshot is a no-op (handled inside OpStartChain).
 func (a *daemonHelperClient) RouteSnapshot(_ context.Context) error { return nil }
 
-// RouteAdd is a no-op (the peer-route is added inside OpStartChain).
+// RouteAdd is a no-op. On Linux there is no client-side peer-route; the proxy
+// server is excluded from the TUN via route_exclude_address in the sing-box
+// config (set bridge-side, see configbuilder.go).
 func (a *daemonHelperClient) RouteAdd(_ context.Context, _ string) error { return nil }
 
 // RouteRestore is a no-op (handled inside OpStopChain).

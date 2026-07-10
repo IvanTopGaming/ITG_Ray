@@ -25,6 +25,13 @@ func Listen(ctx context.Context, path string, d *Dispatcher, allowedUID uint32) 
 		_ = ln.Close()
 		return fmt.Errorf("chmod %q: %w", path, err)
 	}
+	// The daemon runs as root but the socket must be reachable by the
+	// unprivileged client (allowedUID); chown it so the connect() succeeds
+	// before SO_PEERCRED is even consulted. gid is left unchanged (-1).
+	if err := os.Chown(path, int(allowedUID), -1); err != nil {
+		_ = ln.Close()
+		return fmt.Errorf("chown %q: %w", path, err)
+	}
 	defer ln.Close() //nolint:errcheck // best-effort cleanup
 
 	go func() {

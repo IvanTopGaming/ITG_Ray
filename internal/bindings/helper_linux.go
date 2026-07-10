@@ -65,15 +65,19 @@ func (h *HelperService) InstallLinux() error {
 	return runElevated(name, args)
 }
 
-// UninstallLinux elevates the bundled helper's `uninstall` subcommand via
-// pkexec. No staging/cores are needed — uninstall only removes units, the
-// install dir, and the socket.
+// installedHelperPath is the root-owned copy the install flow lays down in
+// installDir (cmd/itgray-helper/service_linux.go). Uninstall must pkexec this
+// copy, not the bundled one: root-via-pkexec cannot traverse the read-only
+// AppImage FUSE mount (no allow_root), so pointing at resources/helper/ fails.
+const installedHelperPath = "/usr/local/lib/itgray/itgray-helper"
+
+// UninstallLinux elevates the installed helper's `uninstall` subcommand via
+// pkexec. It targets the root-owned installed copy (installedHelperPath) rather
+// than the bundled binary, which lives on the read-only AppImage FUSE mount
+// that root cannot traverse. No staging/cores are needed — uninstall only
+// removes units, the install dir, and the socket.
 func (h *HelperService) UninstallLinux() error {
-	helperSrc, _, err := resolveBundledHelperAndCores()
-	if err != nil {
-		return err
-	}
-	return runElevated("pkexec", []string{helperSrc, "uninstall"})
+	return runElevated("pkexec", []string{installedHelperPath, "uninstall"})
 }
 
 // resolveBundledHelperAndCores locates the bundled itgray-helper and the
