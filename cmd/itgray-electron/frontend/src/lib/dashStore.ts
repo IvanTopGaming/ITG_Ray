@@ -23,6 +23,7 @@ export type DashState = {
   history: SpeedPoint[];
   totals: { down: number; up: number };
   connectedAt: number | null;
+  endpoint: { socksPort: number; httpPort: number } | null;
   lastError: { kind: string; message: string; at: number } | null;
   bootstrapped: boolean;
   probeState: Map<string, "probing" | "ok" | "error">;
@@ -72,6 +73,7 @@ const initialState = (): DashState => ({
   history: [],
   totals: { down: 0, up: 0 },
   connectedAt: null,
+  endpoint: null,
   lastError: loadPersistedError(),
   bootstrapped: false,
   probeState: new Map(),
@@ -158,6 +160,16 @@ async function doBootstrap(): Promise<void> {
   }
 }
 
+export function extractEndpoint(
+  payload: any,
+): { socksPort: number; httpPort: number } | null {
+  const n = payload?.network;
+  if (!n || typeof n.socksPort !== "number" || typeof n.httpPort !== "number") {
+    return null;
+  }
+  return { socksPort: n.socksPort, httpPort: n.httpPort };
+}
+
 function onVpnStatus(payload: any) {
   if (!payload || typeof payload.status !== "string") return;
   const nextStatus = payload.status as ChainStatus;
@@ -181,6 +193,7 @@ function onVpnStatus(payload: any) {
       } as ServerView;
     }
     if (typeof payload.mode === "string") next.mode = payload.mode as Mode;
+    next.endpoint = extractEndpoint(payload);
     if (state.status !== "connected") {
       // Backend supplies connectedAt for Reconcile-adopted sessions
       // (the chain was already running before we booted; without this
@@ -197,6 +210,7 @@ function onVpnStatus(payload: any) {
     next.speed = { downBps: 0, upBps: 0, at: 0 };
     next.totals = { down: 0, up: 0 };
     next.connectedAt = null;
+    next.endpoint = null;
     resolveIdleAck();
   }
 

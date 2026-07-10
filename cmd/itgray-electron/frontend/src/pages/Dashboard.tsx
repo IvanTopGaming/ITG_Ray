@@ -228,6 +228,8 @@ export function Dashboard() {
         <ConnectionInfo
           status={eff}
           server={dash.currentServer}
+          mode={dash.mode}
+          endpoint={dash.endpoint}
           publicIp={ip}
           dnsMode={settings.dnsMode}
           dnsCustom={settings.dnsCustom}
@@ -706,6 +708,8 @@ function MetricChart({
 function ConnectionInfo({
   status,
   server,
+  mode,
+  endpoint,
   publicIp,
   dnsMode,
   dnsCustom,
@@ -713,6 +717,8 @@ function ConnectionInfo({
 }: {
   status: OrbStatus;
   server: ServerView | null;
+  mode: Mode;
+  endpoint: { socksPort: number; httpPort: number } | null;
   publicIp: { value: string | null; loading: boolean; error: string | null };
   dnsMode: string;
   dnsCustom: string;
@@ -765,6 +771,17 @@ function ConnectionInfo({
     { label: t("dashboard.conn.publicIp"), value: ipNode },
     { label: t("dashboard.conn.dns"), value: dns },
   ];
+
+  if (live && mode === "sysproxy" && endpoint) {
+    rows.push({
+      label: "SOCKS5",
+      value: `127.0.0.1:${endpoint.socksPort}`,
+    });
+    rows.push({
+      label: "HTTP",
+      value: `127.0.0.1:${endpoint.httpPort}`,
+    });
+  }
 
   return (
     <div className="glass-regular flex h-full flex-col gap-3 rounded-2xl p-6">
