@@ -19,6 +19,8 @@ import {
 import { Toggle } from "@/components/controls/Toggle";
 import { ConfirmDialog } from "@/components/controls/ConfirmDialog";
 import { cn } from "@/lib/cn";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 const SNAP_EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 const SMOOTH_EASE: [number, number, number, number] = [0.32, 0.72, 0, 1];
@@ -100,6 +102,7 @@ export function moveRuleAcrossGroups(
 }
 
 export function Routing() {
+  const { t } = useTranslation();
   const { groups: backendGroups, defaultAction, lastError } = useRules();
   const [localGroups, setLocalGroups] = useState(backendGroups);
 
@@ -251,8 +254,8 @@ export function Routing() {
     >
       <motion.header variants={sectionVariants} className="flex items-baseline justify-between pb-2">
         <div>
-          <h1 className="text-[20px] font-semibold tracking-tight">Routing rules</h1>
-          <p className="mt-1 text-[12px] text-white/55">Per-domain, per-IP, per-process routing. Top of the list matches first.</p>
+          <h1 className="text-[20px] font-semibold tracking-tight">{t("routing.title")}</h1>
+          <p className="mt-1 text-[12px] text-white/55">{t("routing.description")}</p>
         </div>
         <motion.button
           type="button"
@@ -261,7 +264,7 @@ export function Routing() {
           transition={{ duration: 0.18, ease: SNAP_EASE }}
           className="flex items-center gap-1.5 rounded-md bg-white/[0.08] px-3 py-1.5 text-[12px] font-medium text-white/85 hover:bg-white/[0.12]"
         >
-          <Plus className="h-3.5 w-3.5" /> Add group
+          <Plus className="h-3.5 w-3.5" /> {t("routing.addGroup")}
         </motion.button>
       </motion.header>
       {lastError && (
@@ -324,7 +327,7 @@ export function Routing() {
                   {activeRule.action}
                 </span>
                 <span className="text-white/85">{activeRule.name}</span>
-                <span className="text-[11px] text-white/45">{summarise(activeRule.conditions)}</span>
+                <span className="text-[11px] text-white/45">{summarise(activeRule.conditions, t)}</span>
               </div>
             </div>
           ) : null}
@@ -335,6 +338,7 @@ export function Routing() {
 }
 
 function AddGroupRow({ onCancel }: { onCancel: () => void }) {
+  const { t } = useTranslation();
   const [value, setValue] = useState("");
   const ref = useRef<HTMLInputElement>(null);
   const submittedRef = useRef(false);
@@ -376,7 +380,7 @@ function AddGroupRow({ onCancel }: { onCancel: () => void }) {
             if (e.key === "Enter") void submit();
             if (e.key === "Escape") cancel();
           }}
-          placeholder="New group name — Enter to add, Esc to cancel"
+          placeholder={t("routing.newGroupPlaceholder")}
           className="flex-1 rounded-md border border-white/10 bg-transparent px-2 py-1 text-[13px] outline-none focus:border-sky-400/40"
         />
         <motion.button
@@ -387,7 +391,7 @@ function AddGroupRow({ onCancel }: { onCancel: () => void }) {
           transition={{ duration: 0.18, ease: SNAP_EASE }}
           className="rounded-md bg-sky-500/30 px-3 py-1 text-[12px] font-medium text-sky-100 hover:bg-sky-500/40 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Add
+          {t("common.add")}
         </motion.button>
         <motion.button
           type="button"
@@ -396,7 +400,7 @@ function AddGroupRow({ onCancel }: { onCancel: () => void }) {
           transition={{ duration: 0.18, ease: SNAP_EASE }}
           className="rounded-md px-2 py-1 text-[12px] text-white/55 hover:text-white/90"
         >
-          Cancel
+          {t("common.cancel")}
         </motion.button>
       </div>
     </motion.div>
@@ -409,6 +413,7 @@ type DragHandleProps = {
 };
 
 function GroupCard({ group, dragHandle, allGroups }: { group: GroupView; dragHandle?: DragHandleProps; allGroups: GroupView[] }) {
+  const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuCoords, setMenuCoords] = useState<{ left: number; top: number } | null>(null);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
@@ -460,13 +465,13 @@ function GroupCard({ group, dragHandle, allGroups }: { group: GroupView; dragHan
                 type="button"
                 {...dragHandle.attributes}
                 {...dragHandle.listeners}
-                aria-label={`Drag ${group.name}`}
+                aria-label={t("routing.dragGroup", { name: group.name })}
                 className="-ml-1 cursor-grab rounded p-1.5 text-white/35 hover:bg-white/[0.06] hover:text-white/80 active:cursor-grabbing"
               >
                 <GripVertical className="h-4 w-4" />
               </button>
             )}
-            {group.locked && <Lock aria-label="locked" className="h-3.5 w-3.5 text-white/55" />}
+            {group.locked && <Lock aria-label={t("routing.locked")} className="h-3.5 w-3.5 text-white/55" />}
             {renaming
               ? <InlineRename
                   initial={group.name}
@@ -480,13 +485,13 @@ function GroupCard({ group, dragHandle, allGroups }: { group: GroupView; dragHan
                 />
               : <span className="text-[14px] font-medium text-white/90">{group.name}</span>
             }
-            <span className="text-[11px] text-white/45">· {group.rules.length} rule{group.rules.length === 1 ? "" : "s"}</span>
+            <span className="text-[11px] text-white/45">· {t("routing.ruleCount", { count: group.rules.length })}</span>
           </div>
           <div className="flex items-center gap-2">
             {!group.locked && (
               <Toggle
                 value={group.enabled}
-                aria-label={`Toggle ${group.name}`}
+                aria-label={t("routing.toggleGroup", { name: group.name })}
                 onChange={(next) => { void rulesEditGroup(group.id, group.name, next); }}
               />
             )}
@@ -495,7 +500,7 @@ function GroupCard({ group, dragHandle, allGroups }: { group: GroupView; dragHan
                 <button
                   ref={menuBtnRef}
                   type="button"
-                  aria-label={`${group.name} menu`}
+                  aria-label={t("routing.groupMenu", { name: group.name })}
                   onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
                   className="rounded-md p-1 text-white/55 hover:bg-white/[0.08] hover:text-white/90"
                 >
@@ -521,7 +526,7 @@ function GroupCard({ group, dragHandle, allGroups }: { group: GroupView; dragHan
                           className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors duration-instant ease-snap text-white/75 hover:bg-white/[0.06] hover:text-white"
                           onClick={() => { setRenaming(true); setMenuOpen(false); }}
                         >
-                          Rename
+                          {t("routing.rename")}
                         </button>
                         <button
                           role="menuitem"
@@ -529,7 +534,7 @@ function GroupCard({ group, dragHandle, allGroups }: { group: GroupView; dragHan
                           className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors duration-instant ease-snap text-rose-400 hover:bg-rose-500/15 hover:text-rose-300"
                           onClick={() => { setConfirmDelete(true); setMenuOpen(false); }}
                         >
-                          Delete
+                          {t("common.delete")}
                         </button>
                       </motion.div>
                     )}
@@ -542,7 +547,7 @@ function GroupCard({ group, dragHandle, allGroups }: { group: GroupView; dragHan
         </header>
         {group.rules.length === 0 ? (
           <div className="rounded-md border border-white/[0.06] bg-white/[0.02] px-3 py-3 text-[11.5px] text-white/45">
-            No rules in this group.
+            {t("routing.noRules")}
           </div>
         ) : group.locked ? (
           <ul className="flex flex-col gap-1">
@@ -568,15 +573,15 @@ function GroupCard({ group, dragHandle, allGroups }: { group: GroupView; dragHan
             transition={{ duration: 0.18, ease: SNAP_EASE }}
             className="self-start rounded-md bg-white/[0.04] px-3 py-1.5 text-[11.5px] text-white/65 hover:bg-white/[0.08] hover:text-white/90"
           >
-            + Add rule
+            {t("routing.addRule")}
           </motion.button>
         )}
       </motion.section>
       <ConfirmDialog
         open={confirmDelete}
-        title="Delete group?"
-        description={`"${group.name}" and all its ${group.rules.length} rule${group.rules.length === 1 ? "" : "s"} will be removed.`}
-        confirmLabel="Delete"
+        title={t("routing.deleteGroupTitle")}
+        description={t("routing.deleteGroupDescription", { name: group.name, count: group.rules.length })}
+        confirmLabel={t("common.delete")}
         confirmVariant="danger"
         onClose={() => setConfirmDelete(false)}
         onConfirm={() => { void rulesRemoveGroup(group.id); }}
@@ -640,6 +645,7 @@ function SortableGroupCard({ group, allGroups }: { group: GroupView; allGroups: 
 }
 
 function SortableRuleRow({ rule, group, allGroups }: { rule: RuleView; group: GroupView; allGroups: GroupView[] }) {
+  const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: rule.id });
   // While this row is the active drag target, hide it entirely — the
   // DragOverlay ghost is what the user sees following the cursor.
@@ -661,7 +667,7 @@ function SortableRuleRow({ rule, group, allGroups }: { rule: RuleView; group: Gr
         type="button"
         {...attributes}
         {...listeners}
-        aria-label={`Drag ${rule.name}`}
+        aria-label={t("routing.dragRule", { name: rule.name })}
         className="cursor-grab rounded p-1.5 text-white/35 hover:bg-white/[0.06] hover:text-white/80 active:cursor-grabbing"
       >
         <GripVertical className="h-4 w-4" />
@@ -684,6 +690,7 @@ function RuleRow({
   group?: GroupView;
   allGroups?: GroupView[];
 }) {
+  const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuCoords, setMenuCoords] = useState<{ left: number; top: number } | null>(null);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
@@ -741,7 +748,7 @@ function RuleRow({
           {rule.action}
         </span>
         <span className="text-white/85">{rule.name}</span>
-        <span className="text-[11px] text-white/45">{summarise(rule.conditions)}</span>
+        <span className="text-[11px] text-white/45">{summarise(rule.conditions, t)}</span>
       </motion.div>
       {!groupLocked && (
         <div
@@ -753,7 +760,7 @@ function RuleRow({
             <button
               ref={menuBtnRef}
               type="button"
-              aria-label={`${rule.name} menu`}
+              aria-label={t("routing.ruleMenu", { name: rule.name })}
               onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
               className="rounded-md p-1 text-white/55 hover:bg-white/[0.08] hover:text-white/90"
             >
@@ -779,7 +786,7 @@ function RuleRow({
                     className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors duration-instant ease-snap text-white/75 hover:bg-white/[0.06] hover:text-white"
                     onClick={() => { setMenuOpen(false); navigate(`/routing/${rule.id}`); }}
                   >
-                    Edit
+                    {t("common.edit")}
                   </button>
                   <button
                     role="menuitem"
@@ -787,7 +794,7 @@ function RuleRow({
                     className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors duration-instant ease-snap text-rose-400 hover:bg-rose-500/15 hover:text-rose-300"
                     onClick={() => { setMenuOpen(false); void rulesRemoveRule(rule.id); }}
                   >
-                    Delete
+                    {t("common.delete")}
                   </button>
                 </motion.div>
               )}
@@ -802,13 +809,13 @@ function RuleRow({
   );
 }
 
-function summarise(c: { domains?: unknown[]; ip_cidrs?: unknown[]; geo?: unknown[]; ports?: unknown[]; processes?: unknown[]; protocols?: unknown[] }): string {
+function summarise(c: { domains?: unknown[]; ip_cidrs?: unknown[]; geo?: unknown[]; ports?: unknown[]; processes?: unknown[]; protocols?: unknown[] }, t: TFunction): string {
   const parts: string[] = [];
-  if (c.domains?.length) parts.push(`${c.domains.length} domain${c.domains.length === 1 ? "" : "s"}`);
-  if (c.ip_cidrs?.length) parts.push(`${c.ip_cidrs.length} IP CIDR${c.ip_cidrs.length === 1 ? "" : "s"}`);
-  if (c.geo?.length) parts.push(`${c.geo.length} geo`);
-  if (c.ports?.length) parts.push(`${c.ports.length} port${c.ports.length === 1 ? "" : "s"}`);
-  if (c.processes?.length) parts.push(`${c.processes.length} process${c.processes.length === 1 ? "" : "es"}`);
-  if (c.protocols?.length) parts.push(`${c.protocols.length} protocol${c.protocols.length === 1 ? "" : "s"}`);
-  return parts.join(" · ") || "no conditions";
+  if (c.domains?.length) parts.push(t("routing.cond.domains", { count: c.domains.length }));
+  if (c.ip_cidrs?.length) parts.push(t("routing.cond.ipCidrs", { count: c.ip_cidrs.length }));
+  if (c.geo?.length) parts.push(t("routing.cond.geo", { count: c.geo.length }));
+  if (c.ports?.length) parts.push(t("routing.cond.ports", { count: c.ports.length }));
+  if (c.processes?.length) parts.push(t("routing.cond.processes", { count: c.processes.length }));
+  if (c.protocols?.length) parts.push(t("routing.cond.protocols", { count: c.protocols.length }));
+  return parts.join(" · ") || t("routing.cond.none");
 }

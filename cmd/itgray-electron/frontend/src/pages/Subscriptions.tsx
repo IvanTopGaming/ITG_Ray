@@ -9,9 +9,11 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
 import { type Sub } from "@/lib/subsAdapter";
 import { useSubs, humanizeError } from "@/lib/subsStore";
+import type { TFunction } from "i18next";
 
 type SyncStatus = "ok" | "error" | "syncing" | "never";
 
@@ -38,6 +40,7 @@ type ModalState =
   | { kind: "edit"; sub: Sub };
 
 export function Subscriptions() {
+  const { t } = useTranslation();
   const { state, actions } = useSubs();
   const [modal, setModal] = useState<ModalState>({ kind: "closed" });
   const subs = state.load.kind === "ready" ? state.load.subs : [];
@@ -55,7 +58,7 @@ export function Subscriptions() {
           className="flex items-center justify-between gap-4"
         >
           <h1 className="text-[22px] font-semibold tracking-tight">
-            Subscriptions
+            {t("subscriptions.title")}
           </h1>
           <div className="flex items-center gap-2">
             <SyncAllButton
@@ -85,7 +88,7 @@ export function Subscriptions() {
           >
             <div>
               <div className="text-[14px] font-medium text-white">
-                Failed to load subscriptions
+                {t("subscriptions.failedToLoad")}
               </div>
               <div className="text-[12px] text-white/60">{state.load.message}</div>
             </div>
@@ -94,7 +97,7 @@ export function Subscriptions() {
               onClick={() => void actions.refresh()}
               className="glass-regular rounded-full px-4 py-1.5 text-[12px] text-white hover:bg-white/10"
             >
-              Retry
+              {t("subscriptions.retry")}
             </button>
           </motion.div>
         ) : state.load.subs.length === 0 ? (
@@ -102,7 +105,7 @@ export function Subscriptions() {
             variants={itemVariants}
             className="glass-regular rounded-2xl p-10 text-center text-[13px] text-white/55"
           >
-            No subscriptions yet. Click <span className="text-white">+ Add subscription</span> to import a VLESS feed.
+            {t("subscriptions.emptyBefore")}<span className="text-white">{t("subscriptions.emptyAddLink")}</span>{t("subscriptions.emptyAfter")}
           </motion.div>
         ) : (
           <AnimatePresence mode="popLayout">
@@ -153,6 +156,7 @@ function SubCard({
   onSync: () => void;
   onEdit: () => void;
 }) {
+  const { t } = useTranslation();
   const isError = sub.status === "error";
   const isSyncing = sub.status === "syncing";
 
@@ -169,7 +173,7 @@ function SubCard({
           <StatusBadge status={sub.status} />
           {sub.serverCount > 0 && (
             <span className="font-mono text-[10px] tabular-nums text-white/45">
-              {sub.serverCount} servers
+              {t("subscriptions.serverCount", { count: sub.serverCount })}
             </span>
           )}
         </div>
@@ -181,7 +185,7 @@ function SubCard({
           <button
             onClick={() => void navigator.clipboard.writeText(sub.url)}
             className="shrink-0 rounded p-1 text-white/35 transition-colors hover:bg-white/[0.06] hover:text-white"
-            title="Copy URL"
+            title={t("subscriptions.copyUrl")}
           >
             <Copy className="h-3 w-3" />
           </button>
@@ -198,8 +202,8 @@ function SubCard({
 
         <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.14em] text-white/40">
           {sub.lastSyncAt
-            ? `Synced ${formatRelative(sub.lastSyncAt)}`
-            : "Never synced"}
+            ? t("subscriptions.syncedRelative", { time: formatRelative(sub.lastSyncAt, t) })
+            : t("subscriptions.neverSynced")}
         </div>
       </div>
 
@@ -215,9 +219,9 @@ function SubCard({
         )}
         <button
           onClick={onEdit}
-          aria-label="Edit"
+          aria-label={t("common.edit")}
           className="rounded-lg border border-white/15 bg-white/[0.04] p-2 text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white"
-          title="Edit"
+          title={t("common.edit")}
         >
           <Pencil className="h-3.5 w-3.5" />
         </button>
@@ -227,6 +231,7 @@ function SubCard({
 }
 
 function SubStats({ sub }: { sub: Sub }) {
+  const { t } = useTranslation();
   const hasTraffic = sub.total != null;
   const hasExpiry = sub.expire != null;
   if (!hasTraffic && !hasExpiry) return null;
@@ -243,7 +248,7 @@ function SubStats({ sub }: { sub: Sub }) {
         <div className="flex flex-col gap-1.5">
           <div className="flex items-baseline justify-between gap-3 text-[11px]">
             <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-white/45">
-              Traffic
+              {t("subscriptions.traffic")}
             </span>
             <div className="flex items-baseline gap-2">
               <span className="font-mono tabular-nums text-white/85">
@@ -277,10 +282,10 @@ function SubStats({ sub }: { sub: Sub }) {
       {hasExpiry && (
         <div className="flex items-baseline justify-between gap-3 text-[11px]">
           <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-white/45">
-            Expires
+            {t("subscriptions.expires")}
           </span>
           {(() => {
-            const e = formatExpiry(sub.expire!);
+            const e = formatExpiry(sub.expire!, t);
             return (
               <div className="flex items-baseline gap-2">
                 <span
@@ -307,32 +312,34 @@ function formatBytes(b: number): string {
   return `${(b / 1024 ** 3).toFixed(1)} GB`;
 }
 
-function formatExpiry(epochMs: number): { text: string; cls: string } {
+function formatExpiry(epochMs: number, t: TFunction): { text: string; cls: string } {
   const diff = epochMs - Date.now();
-  if (diff <= 0) return { text: "Expired", cls: "text-danger" };
+  if (diff <= 0) return { text: t("subscriptions.expired"), cls: "text-danger" };
   const days = Math.ceil(diff / DAY);
-  if (days <= 2) return { text: `in ${days}d`, cls: "text-danger" };
-  if (days <= 7) return { text: `in ${days}d`, cls: "text-warn" };
-  if (days <= 30) return { text: `in ${days}d`, cls: "text-white/85" };
-  return { text: `in ${days}d`, cls: "text-white/65" };
+  const text = t("subscriptions.expiresInDays", { days });
+  if (days <= 2) return { text, cls: "text-danger" };
+  if (days <= 7) return { text, cls: "text-warn" };
+  if (days <= 30) return { text, cls: "text-white/85" };
+  return { text, cls: "text-white/65" };
 }
 
 function StatusBadge({ status }: { status: SyncStatus }) {
+  const { t } = useTranslation();
   const cfg = {
     ok: {
-      label: "OK",
+      label: t("subscriptions.status.ok"),
       cls: "bg-success/15 text-success border-success/30",
     },
     error: {
-      label: "ERROR",
+      label: t("subscriptions.status.error"),
       cls: "bg-danger/15 text-[#ff9a9a] border-danger/30",
     },
     syncing: {
-      label: "SYNCING",
+      label: t("subscriptions.status.syncing"),
       cls: "bg-warn/15 text-warn border-warn/30",
     },
     never: {
-      label: "PENDING",
+      label: t("subscriptions.status.never"),
       cls: "bg-white/[0.08] text-white/55 border-white/15",
     },
   }[status];
@@ -357,11 +364,12 @@ function SyncButton({
   disabled?: boolean;
   syncing?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      aria-label="Sync"
+      aria-label={t("subscriptions.sync")}
       className={cn(
         "flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.04] px-3 py-2 text-[12px] font-medium text-white transition-colors duration-instant ease-snap",
         disabled
@@ -372,7 +380,7 @@ function SyncButton({
       <RefreshCw
         className={cn("h-3.5 w-3.5", syncing && "animate-spin")}
       />
-      {syncing ? "Syncing…" : "Sync"}
+      {syncing ? t("subscriptions.syncing") : t("subscriptions.sync")}
     </button>
   );
 }
@@ -384,11 +392,12 @@ function RetryButton({
   onClick: () => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      aria-label="Retry sync"
+      aria-label={t("subscriptions.retrySync")}
       className={cn(
         "flex items-center gap-1.5 rounded-lg border border-danger/40 bg-danger/[0.10] px-3 py-2 text-[12px] font-semibold text-[#ff9a9a] transition-colors duration-instant ease-snap",
         disabled
@@ -397,7 +406,7 @@ function RetryButton({
       )}
     >
       <RefreshCw className="h-3.5 w-3.5" />
-      Retry
+      {t("subscriptions.retry")}
     </button>
   );
 }
@@ -409,11 +418,12 @@ function SyncAllButton({
   onClick: () => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      aria-label="Sync all"
+      aria-label={t("subscriptions.syncAll")}
       className={cn(
         "flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.04] px-3 py-1.5 text-[11px] font-medium text-white transition-colors duration-instant ease-snap",
         disabled
@@ -422,12 +432,13 @@ function SyncAllButton({
       )}
     >
       <RefreshCw className="h-3.5 w-3.5" />
-      Sync all
+      {t("subscriptions.syncAll")}
     </button>
   );
 }
 
 function AddButton({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation();
   return (
     <motion.button
       onClick={onClick}
@@ -437,7 +448,7 @@ function AddButton({ onClick }: { onClick: () => void }) {
       className="flex items-center gap-1.5 rounded-lg bg-gradient-to-br from-accent-start to-accent-mid px-3 py-1.5 text-[11px] font-semibold text-white shadow-[0_0_18px_rgba(120,200,255,0.30)] transition-shadow duration-instant ease-snap hover:shadow-[0_0_22px_rgba(120,200,255,0.45)]"
     >
       <Plus className="h-3.5 w-3.5" />
-      Add subscription
+      {t("subscriptions.addSubscription")}
     </motion.button>
   );
 }
@@ -455,6 +466,7 @@ function SubModal({
   onEditSave: (id: string, name: string, url: string, userAgent: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const isAdd = modal.kind === "add";
   const sub = !isAdd ? modal.sub : null;
   const [name, setName] = useState(sub?.name ?? "");
@@ -465,9 +477,9 @@ function SubModal({
   const [busy, setBusy] = useState(false);
 
   function validateUrl(value: string): string | null {
-    if (!value.trim()) return "Required";
+    if (!value.trim()) return t("subscriptions.required");
     if (!/^https?:\/\//i.test(value.trim())) {
-      return "Must start with http:// or https://";
+      return t("subscriptions.mustStartWith");
     }
     return null;
   }
@@ -506,7 +518,7 @@ function SubModal({
     }
   }
 
-  const title = isAdd ? "Add subscription" : "Edit subscription";
+  const title = isAdd ? t("subscriptions.addTitle") : t("subscriptions.editTitle");
 
   return (
     <motion.div
@@ -518,7 +530,7 @@ function SubModal({
     >
       <button
         onClick={onClose}
-        aria-label="Close"
+        aria-label={t("common.close")}
         className="absolute inset-0 cursor-default bg-bg-0/70 backdrop-blur-md"
       />
       <motion.div
@@ -540,16 +552,16 @@ function SubModal({
         </div>
 
         <div className="flex flex-col gap-4 px-6 py-5">
-          <Field label="Name">
+          <Field label={t("subscriptions.name")}>
             <input
               type="text"
               value={name}
               onChange={(e) => { setName(e.target.value); setSubmitError(null); }}
-              placeholder="e.g. Main provider"
+              placeholder={t("subscriptions.namePlaceholder")}
               className="w-full rounded-lg border border-white/15 bg-white/[0.04] px-3 py-2 text-[13px] text-white placeholder:text-white/35 focus:border-accent-start/50 focus:bg-white/[0.06] focus:outline-none"
             />
           </Field>
-          <Field label="Subscription URL" error={urlError}>
+          <Field label={t("subscriptions.urlLabel")} error={urlError}>
             <input
               type="text"
               value={url}
@@ -558,7 +570,7 @@ function SubModal({
                 setUrlError(null);
                 setSubmitError(null);
               }}
-              placeholder="https://provider.example/sub/your-token"
+              placeholder={t("subscriptions.urlPlaceholder")}
               className={cn(
                 "w-full rounded-lg border bg-white/[0.04] px-3 py-2 font-mono text-[11px] text-white placeholder:text-white/35 focus:bg-white/[0.06] focus:outline-none",
                 urlError
@@ -567,18 +579,17 @@ function SubModal({
               )}
             />
           </Field>
-          <Field label="User-Agent (optional)">
+          <Field label={t("subscriptions.userAgentLabel")}>
             <input
               type="text"
               value={userAgent}
               onChange={(e) => { setUserAgent(e.target.value); setSubmitError(null); }}
-              placeholder="Leave blank to use Settings default"
+              placeholder={t("subscriptions.userAgentPlaceholder")}
               className="w-full rounded-lg border border-white/15 bg-white/[0.04] px-3 py-2 font-mono text-[11px] text-white placeholder:text-white/35 focus:border-accent-start/50 focus:bg-white/[0.06] focus:outline-none"
             />
           </Field>
           <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3 text-[11px] text-white/55">
-            On save, the subscription is fetched, parsed (base64 / plaintext /
-            sing-box JSON), and merged into your server list.
+            {t("subscriptions.saveNote")}
           </div>
         </div>
 
@@ -608,7 +619,7 @@ function SubModal({
               className="flex items-center gap-1.5 rounded-lg border border-danger/40 bg-danger/[0.10] px-3 py-2 text-[12px] font-medium text-danger transition-colors hover:bg-danger/[0.20] disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              Delete
+              {t("common.delete")}
             </button>
           ) : (
             <span />
@@ -618,14 +629,14 @@ function SubModal({
               onClick={onClose}
               className="rounded-lg px-4 py-2 text-[12px] font-medium text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               onClick={submit}
               disabled={!valid || busy}
               className="rounded-lg bg-gradient-to-br from-accent-start to-accent-mid px-4 py-2 text-[12px] font-semibold text-white shadow-[0_0_18px_rgba(120,200,255,0.30)] transition-all hover:shadow-[0_0_22px_rgba(120,200,255,0.45)] disabled:opacity-40 disabled:shadow-none"
             >
-              {isAdd ? "Add" : "Save"}
+              {isAdd ? t("common.add") : t("common.save")}
             </button>
           </div>
         </div>
@@ -654,13 +665,13 @@ function Field({
   );
 }
 
-function formatRelative(epoch: number): string {
+function formatRelative(epoch: number, t: TFunction): string {
   const diff = Date.now() - epoch;
-  if (diff < 10_000) return "just now";
+  if (diff < 10_000) return t("subscriptions.justNow");
   const min = Math.floor(diff / 60_000);
-  if (min < 60) return `${min} min ago`;
+  if (min < 60) return t("subscriptions.minAgo", { n: min });
   const h = Math.floor(diff / 3_600_000);
-  if (h < 24) return `${h} h ago`;
+  if (h < 24) return t("subscriptions.hoursAgo", { n: h });
   const d = Math.floor(diff / 86_400_000);
-  return `${d} d ago`;
+  return t("subscriptions.daysAgo", { n: d });
 }
