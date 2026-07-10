@@ -121,13 +121,13 @@ func (a *AppService) GetSnapshot() (hub.Snapshot, error) {
 	}
 
 	st := hub.StatusIdle
-	mode := chainctl.Mode("tun")
+	mode := defaultIdleMode()
 	var current *hub.ServerView
 	if a.d.Chain != nil {
 		var srv *server.Server
 		st, srv, mode = a.d.Chain.Status()
 		if mode == "" {
-			mode = chainctl.ModeTUN
+			mode = defaultIdleMode()
 		}
 		if srv != nil {
 			views := toServerViews([]server.Server{*srv}, subOriginByID(subs))
