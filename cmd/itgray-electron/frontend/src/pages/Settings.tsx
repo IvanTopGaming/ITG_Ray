@@ -488,9 +488,11 @@ export function Settings() {
         <SettingRow
           label={t('settings.subscriptions.sendDeviceOs')}
           hint={t('settings.subscriptions.sendDeviceOsHint')}
+          className={!s.hwidEnabled ? 'opacity-50' : undefined}
         >
           <Toggle
             value={s.sendDeviceOS}
+            disabled={!s.hwidEnabled}
             onChange={(v) => update({ sendDeviceOS: v })}
             aria-label={t('settings.subscriptions.sendDeviceOs')}
           />
@@ -498,9 +500,11 @@ export function Settings() {
         <SettingRow
           label={t('settings.subscriptions.sendOsVersion')}
           hint={t('settings.subscriptions.sendOsVersionHint')}
+          className={!s.hwidEnabled ? 'opacity-50' : undefined}
         >
           <Toggle
             value={s.sendOSVersion}
+            disabled={!s.hwidEnabled}
             onChange={(v) => update({ sendOSVersion: v })}
             aria-label={t('settings.subscriptions.sendOsVersion')}
           />
@@ -508,9 +512,11 @@ export function Settings() {
         <SettingRow
           label={t('settings.subscriptions.sendDeviceModel')}
           hint={t('settings.subscriptions.sendDeviceModelHint')}
+          className={!s.hwidEnabled ? 'opacity-50' : undefined}
         >
           <Toggle
             value={s.sendDeviceModel}
+            disabled={!s.hwidEnabled}
             onChange={(v) => update({ sendDeviceModel: v })}
             aria-label={t('settings.subscriptions.sendDeviceModel')}
           />
