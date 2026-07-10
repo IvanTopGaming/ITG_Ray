@@ -13,7 +13,6 @@ import (
 func renderServiceUnit(uid int) string {
 	return fmt.Sprintf(`[Unit]
 Description=ITG Ray privileged TUN helper
-Requires=itgray-helper.socket
 After=network.target
 
 [Service]
@@ -26,22 +25,12 @@ WantedBy=multi-user.target
 `, uid)
 }
 
-func renderSocketUnit() string {
-	return `[Unit]
-Description=ITG Ray helper socket
-
-[Socket]
-ListenStream=/run/itgray-helper.sock
-SocketMode=0660
-
-[Install]
-WantedBy=sockets.target
-`
-}
-
 // install (run as root via pkexec) copies this binary + the sibling
-// sing-box/xray cores into installDir, writes the systemd units with the
-// caller's uid, and enables the socket.
+// sing-box/xray cores into installDir, writes the systemd service unit with
+// the caller's uid, and enables the service directly. The daemon self-binds
+// /run/itgray-helper.sock (mode 0660) on startup, so socket-activation is
+// unnecessary — running the service directly avoids the systemd-passed-fd
+// vs self-bind mismatch that dropped the first activated connection.
 func install(uid int) error {
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("install must run as root")
@@ -70,21 +59,20 @@ func install(uid int) error {
 	if err := os.WriteFile(filepath.Join(unitDir, "itgray-helper.service"), []byte(renderServiceUnit(uid)), 0o644); err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(unitDir, "itgray-helper.socket"), []byte(renderSocketUnit()), 0o644); err != nil {
-		return err
-	}
 	if err := run("systemctl", "daemon-reload"); err != nil {
 		return err
 	}
-	return run("systemctl", "enable", "--now", "itgray-helper.socket")
+	return run("systemctl", "enable", "--now", "itgray-helper.service")
 }
 
 func uninstall() error {
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("uninstall must run as root")
 	}
+	_ = run("systemctl", "disable", "--now", "itgray-helper.service")
+	// Best-effort cleanup of a socket unit left by an older install that
+	// used socket-activation.
 	_ = run("systemctl", "disable", "--now", "itgray-helper.socket")
-	_ = run("systemctl", "stop", "itgray-helper.service")
 	_ = os.Remove(filepath.Join(unitDir, "itgray-helper.service"))
 	_ = os.Remove(filepath.Join(unitDir, "itgray-helper.socket"))
 	_ = os.RemoveAll(installDir)

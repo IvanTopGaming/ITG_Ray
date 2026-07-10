@@ -151,13 +151,26 @@ func (m *modeRoutingHelperClient) StopChain(ctx context.Context) error {
 	return m.active.StopChain(ctx)
 }
 
-// ServiceStatus delegates to the active backend. Nil-safe before StartChain
-// so Reconcile's boot-time probe reports a clean idle state.
+// ServiceStatus delegates to the active backend once one is latched. Before
+// any StartChain (fresh boot, active==nil) it probes the daemon — the only
+// backend whose TUN chain survives a bridge restart — so Reconcile can adopt
+// a chain that outlived the GUI (Phase B acceptance criterion 5). If the
+// daemon reports a running chain we latch it as active so subsequent
+// StopChain/status reach it (adoption). A daemon that isn't installed or
+// reachable (dial error) is reported as idle, NOT an error: a SysProxy-only
+// machine must never see a Reconcile error from the boot probe.
 func (m *modeRoutingHelperClient) ServiceStatus(ctx context.Context) (ChainState, error) {
-	if m.active == nil {
+	if m.active != nil {
+		return m.active.ServiceStatus(ctx)
+	}
+	st, err := m.daemon.ServiceStatus(ctx)
+	if err != nil {
 		return ChainState{}, nil
 	}
-	return m.active.ServiceStatus(ctx)
+	if st.Running {
+		m.active = m.daemon
+	}
+	return st, nil
 }
 
 // RouteSnapshot / TunCreate are no-ops: bringUp calls them before StartChain

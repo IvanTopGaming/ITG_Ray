@@ -158,6 +158,7 @@ export function Settings() {
 
   const helperPill: HelperState = helper.state;
   const isWindowsHelper = helper.isWindows === true;
+  const isLinuxHelper = helper.isLinux === true;
   const isLoadingPlatform = helper.isWindows === null;
 
   const clearLogs = () => setLogFolderSize(0);
@@ -550,13 +551,58 @@ export function Settings() {
       <motion.div id="helper" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
         <SectionHeader
           title={t('settings.helper.title')}
-          right={isWindowsHelper ? <StatusPill status={helperPill} /> : undefined}
+          right={(isWindowsHelper || isLinuxHelper) ? <StatusPill status={helperPill} /> : undefined}
         />
         {isLoadingPlatform && null}
-        {!isLoadingPlatform && !isWindowsHelper && (
+        {!isLoadingPlatform && !isWindowsHelper && !isLinuxHelper && (
           <p className="text-[13px] text-white/[0.55] leading-relaxed">
             {t('settings.helper.nonWindows')}
           </p>
+        )}
+        {isLinuxHelper && (
+          <>
+            <SettingRow
+              label={t('settings.helper.status')}
+              hint={t('settings.helper.linuxHint')}
+            >
+              <div className="flex gap-1.5">
+                {helperPill !== 'running' && helperPill !== 'pending' && (
+                  <button
+                    type="button"
+                    onClick={helper.installLinux}
+                    className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] bg-accent/[0.12] border border-accent/30 text-accent hover:bg-accent/[0.18]"
+                  >
+                    {t('settings.helper.install')}
+                  </button>
+                )}
+                {helperPill === 'running' && (
+                  <button
+                    type="button"
+                    onClick={helper.uninstallLinux}
+                    className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] border border-white/[0.10] text-white/[0.92] hover:bg-white/[0.05]"
+                  >
+                    {t('settings.helper.uninstall')}
+                  </button>
+                )}
+                {helperPill === 'pending' && (
+                  <span className="px-3.5 py-1.5 text-xs text-white/[0.55]">{t('settings.helper.working')}</span>
+                )}
+              </div>
+            </SettingRow>
+            <Reveal show={!!helper.opError}>
+              <div className="mt-2 flex items-start gap-2 rounded-[10px] border border-danger/30 bg-danger/[0.08] px-3 py-2 text-[12px] text-danger">
+                <span className="flex-1 leading-relaxed">⚠ {helper.opError}</span>
+                <button
+                  type="button"
+                  onClick={helper.dismissError}
+                  aria-label={t('settings.helper.dismissError')}
+                  className="text-danger/70 hover:text-danger"
+                >
+                  ×
+                </button>
+              </div>
+            </Reveal>
+          </>
         )}
         {isWindowsHelper && (
           <>

@@ -136,6 +136,8 @@ type HelperService interface {
 	Stop(p Empty) (Empty, error)
 	Restart(p Empty) (Empty, error)
 	Reinstall(p Empty) (Empty, error)
+	InstallLinux(p Empty) (Empty, error)
+	UninstallLinux(p Empty) (Empty, error)
 }
 
 type HelperStatusResult struct {

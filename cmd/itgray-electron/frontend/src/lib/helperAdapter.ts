@@ -6,6 +6,8 @@ import {
   Stop as HelperStop,
   Restart as HelperRestart,
   Reinstall as HelperReinstall,
+  InstallLinux as HelperInstallLinux,
+  UninstallLinux as HelperUninstallLinux,
 } from '@/lib/itg/HelperService';
 import { Environment } from '@/lib/itg/runtime';
 
@@ -62,12 +64,15 @@ export type UseHelperState = {
   state: HelperState;
   opError: string | null;
   isWindows: boolean | null;
+  isLinux: boolean | null;
 
   install: () => Promise<void>;
   start: () => Promise<void>;
   stop: () => Promise<void>;
   restart: () => Promise<void>;
   reinstall: () => Promise<void>;
+  installLinux: () => Promise<void>;
+  uninstallLinux: () => Promise<void>;
   dismissError: () => void;
 };
 
@@ -80,6 +85,7 @@ export function useHelperState(): UseHelperState {
   const [state, setState]     = useState<HelperState>('pending');
   const [opError, setOpError] = useState<string | null>(null);
   const [isWindows, setIsWin] = useState<boolean | null>(null);
+  const [isLinux, setIsLin]   = useState<boolean | null>(null);
 
   // stateRef mirrors `state` so the polling tick can read the latest
   // value without re-creating the interval on each setState.
@@ -97,8 +103,12 @@ export function useHelperState(): UseHelperState {
       const info = await (Environment as unknown as () => Promise<{ platform: string }>)();
       if (cancelled) return;
       const isWin = info.platform === 'windows';
+      const isLin = info.platform === 'linux';
       setIsWin(isWin);
-      if (!isWin) return;
+      setIsLin(isLin);
+      // Both Windows (SCM) and Linux (daemon socket probe) expose a live
+      // helper status; other platforms have no helper service to poll.
+      if (!isWin && !isLin) return;
       try {
         const raw = await HelperStatus();
         if (!cancelled) setState(mapHelperStatus(raw));
@@ -112,9 +122,10 @@ export function useHelperState(): UseHelperState {
     return () => { cancelled = true; };
   }, []);
 
-  // Polling loop — only registers once isWindows resolves true.
+  // Polling loop — registers once the platform resolves to one with a
+  // helper service (Windows or Linux).
   useEffect(() => {
-    if (isWindows !== true) return;
+    if (isWindows !== true && isLinux !== true) return;
 
     let cancelled = false;
     let inFlight = false;
@@ -140,7 +151,7 @@ export function useHelperState(): UseHelperState {
 
     const id = window.setInterval(() => { void tick(); }, POLL_MS);
     return () => { cancelled = true; window.clearInterval(id); };
-  }, [isWindows]);
+  }, [isWindows, isLinux]);
 
   // Action wrappers: set pending, run IPC, capture op error, refetch
   // Status regardless of result. The post-action Status overrides the
@@ -168,11 +179,14 @@ export function useHelperState(): UseHelperState {
     state,
     opError,
     isWindows,
-    install:   () => runOp(() => HelperInstall("")),
-    start:     () => runOp(() => HelperStart()),
-    stop:      () => runOp(() => HelperStop()),
-    restart:   () => runOp(() => HelperRestart()),
-    reinstall: () => runOp(() => HelperReinstall()),
-    dismissError: () => setOpError(null),
+    isLinux,
+    install:        () => runOp(() => HelperInstall("")),
+    start:          () => runOp(() => HelperStart()),
+    stop:           () => runOp(() => HelperStop()),
+    restart:        () => runOp(() => HelperRestart()),
+    reinstall:      () => runOp(() => HelperReinstall()),
+    installLinux:   () => runOp(() => HelperInstallLinux()),
+    uninstallLinux: () => runOp(() => HelperUninstallLinux()),
+    dismissError:   () => setOpError(null),
   };
 }

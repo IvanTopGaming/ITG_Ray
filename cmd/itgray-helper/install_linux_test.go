@@ -15,14 +15,9 @@ func TestRenderServiceUnit_EmbedsUID(t *testing.T) {
 	if !strings.Contains(unit, "/usr/local/lib/itgray/itgray-helper") {
 		t.Fatalf("service unit missing ExecStart path:\n%s", unit)
 	}
-}
-
-func TestRenderSocketUnit_Mode(t *testing.T) {
-	unit := renderSocketUnit()
-	if !strings.Contains(unit, "/run/itgray-helper.sock") {
-		t.Fatalf("socket unit missing ListenStream:\n%s", unit)
-	}
-	if !strings.Contains(unit, "SocketMode=0660") {
-		t.Fatalf("socket unit missing SocketMode:\n%s", unit)
+	// Socket-activation was dropped: the daemon self-binds its socket, so
+	// the service must not depend on a .socket unit.
+	if strings.Contains(unit, "itgray-helper.socket") {
+		t.Fatalf("service unit must not reference the dropped socket unit:\n%s", unit)
 	}
 }

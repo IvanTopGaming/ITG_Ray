@@ -317,11 +317,13 @@ export interface RpcMethods {
   "app.getSnapshot": { params: Empty; result: Snapshot };
   "app.ping": { params: Empty; result: PingResult };
   "helper.install": { params: Empty; result: Empty };
+  "helper.installLinux": { params: Empty; result: Empty };
   "helper.reinstall": { params: Empty; result: Empty };
   "helper.restart": { params: Empty; result: Empty };
   "helper.start": { params: Empty; result: Empty };
   "helper.status": { params: Empty; result: HelperStatusResult };
   "helper.stop": { params: Empty; result: Empty };
+  "helper.uninstallLinux": { params: Empty; result: Empty };
   "onboarding.complete": { params: Empty; result: Empty };
   "onboarding.getState": { params: Empty; result: OnboardingStateResult };
   "onboarding.skip": { params: Empty; result: Empty };

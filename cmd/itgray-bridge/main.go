@@ -245,6 +245,8 @@ func main() {
 	d.Register("helper.stop", helper.Stop)
 	d.Register("helper.restart", helper.Restart)
 	d.Register("helper.reinstall", helper.Reinstall)
+	d.Register("helper.installLinux", helper.InstallLinux)
+	d.Register("helper.uninstallLinux", helper.UninstallLinux)
 
 	servers := handlers.ServersHandlers{Svc: serversSvc}
 	d.Register("servers.list", servers.List)

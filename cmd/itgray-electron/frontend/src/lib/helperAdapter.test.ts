@@ -2,21 +2,25 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 
 // Wails-binding mocks must be set up BEFORE importing the SUT module.
-const statusMock    = vi.fn();
-const installMock   = vi.fn();
-const startMock     = vi.fn();
-const stopMock      = vi.fn();
-const restartMock   = vi.fn();
-const reinstallMock = vi.fn();
-const envMock       = vi.fn();
+const statusMock         = vi.fn();
+const installMock        = vi.fn();
+const startMock          = vi.fn();
+const stopMock           = vi.fn();
+const restartMock        = vi.fn();
+const reinstallMock      = vi.fn();
+const installLinuxMock   = vi.fn();
+const uninstallLinuxMock = vi.fn();
+const envMock            = vi.fn();
 
 vi.mock('@/lib/itg/HelperService', () => ({
-  Status:    (...args: unknown[]) => statusMock(...args),
-  Install:   (...args: unknown[]) => installMock(...args),
-  Start:     (...args: unknown[]) => startMock(...args),
-  Stop:      (...args: unknown[]) => stopMock(...args),
-  Restart:   (...args: unknown[]) => restartMock(...args),
-  Reinstall: (...args: unknown[]) => reinstallMock(...args),
+  Status:         (...args: unknown[]) => statusMock(...args),
+  Install:        (...args: unknown[]) => installMock(...args),
+  Start:          (...args: unknown[]) => startMock(...args),
+  Stop:           (...args: unknown[]) => stopMock(...args),
+  Restart:        (...args: unknown[]) => restartMock(...args),
+  Reinstall:      (...args: unknown[]) => reinstallMock(...args),
+  InstallLinux:   (...args: unknown[]) => installLinuxMock(...args),
+  UninstallLinux: (...args: unknown[]) => uninstallLinuxMock(...args),
 }));
 vi.mock('@/lib/itg/runtime', () => ({
   Environment: (...args: unknown[]) => envMock(...args),
@@ -93,6 +97,8 @@ describe('useHelperState (hook)', () => {
     stopMock.mockReset();
     restartMock.mockReset();
     reinstallMock.mockReset();
+    installLinuxMock.mockReset();
+    uninstallLinuxMock.mockReset();
     envMock.mockReset();
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
   });
@@ -100,8 +106,8 @@ describe('useHelperState (hook)', () => {
     vi.useRealTimers();
   });
 
-  it('non-Windows: sets state, never calls Status()', async () => {
-    envMock.mockResolvedValue({ platform: 'linux' });
+  it('unsupported platform (darwin): sets state, never calls Status()', async () => {
+    envMock.mockResolvedValue({ platform: 'darwin' });
     const { result } = renderHook(() => useHelperState());
 
     expect(result.current.state).toBe('pending');
@@ -109,7 +115,51 @@ describe('useHelperState (hook)', () => {
 
     await act(async () => { await Promise.resolve(); });
     expect(result.current.isWindows).toBe(false);
+    expect(result.current.isLinux).toBe(false);
     expect(statusMock).not.toHaveBeenCalled();
+  });
+
+  it('Linux mount: detects isLinux, fetches Status once', async () => {
+    envMock.mockResolvedValue({ platform: 'linux' });
+    statusMock.mockResolvedValue('running');
+
+    const { result } = renderHook(() => useHelperState());
+
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(result.current.isLinux).toBe(true);
+    expect(result.current.isWindows).toBe(false);
+    expect(statusMock).toHaveBeenCalledTimes(1);
+    expect(result.current.state).toBe('running');
+  });
+
+  it('Linux installLinux action: invokes the InstallLinux RPC and refetches Status', async () => {
+    envMock.mockResolvedValue({ platform: 'linux' });
+    statusMock.mockResolvedValueOnce('missing');
+    installLinuxMock.mockResolvedValue(undefined);
+    statusMock.mockResolvedValueOnce('running');
+
+    const { result } = renderHook(() => useHelperState());
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(result.current.state).toBe('missing');
+
+    await act(async () => { await result.current.installLinux(); });
+    expect(installLinuxMock).toHaveBeenCalledTimes(1);
+    expect(result.current.state).toBe('running');
+    expect(result.current.opError).toBe(null);
+  });
+
+  it('Linux uninstallLinux action: invokes the UninstallLinux RPC', async () => {
+    envMock.mockResolvedValue({ platform: 'linux' });
+    statusMock.mockResolvedValueOnce('running');
+    uninstallLinuxMock.mockResolvedValue(undefined);
+    statusMock.mockResolvedValueOnce('missing');
+
+    const { result } = renderHook(() => useHelperState());
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    await act(async () => { await result.current.uninstallLinux(); });
+    expect(uninstallLinuxMock).toHaveBeenCalledTimes(1);
+    expect(result.current.state).toBe('missing');
   });
 
   it('Windows mount: calls Status() once and sets state from result', async () => {

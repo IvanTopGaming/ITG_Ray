@@ -38,8 +38,10 @@ type svcOps interface {
 // helper binary by its own canonical sibling-path lookup.
 type realSvcOps struct{}
 
-// Status delegates to svcmgr.Status — no elevation needed.
-func (realSvcOps) Status(n string) (svcmgr.State, error) { return svcmgr.Status(n) }
+// Status delegates to the platform status probe — no elevation needed.
+// On Windows this is svcmgr.Status (SCM query); on Linux it dials the
+// helper daemon's unix socket (reachable ⇒ running, else ⇒ missing).
+func (realSvcOps) Status(n string) (svcmgr.State, error) { return realHelperStatus(n) }
 
 // Install registers the service via the elevated CLI (UAC prompt).
 func (realSvcOps) Install(_, _, _ string) error {

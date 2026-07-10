@@ -21,3 +21,5 @@ export function Start(): Promise<unknown> { return svc().start?.() ?? Promise.re
 export function Stop(): Promise<unknown> { return svc().stop?.() ?? Promise.resolve(null); }
 export function Restart(): Promise<unknown> { return svc().restart?.() ?? Promise.resolve(null); }
 export function Reinstall(): Promise<unknown> { return svc().reinstall?.() ?? Promise.resolve(null); }
+export function InstallLinux(): Promise<unknown> { return svc().installLinux?.() ?? Promise.resolve(null); }
+export function UninstallLinux(): Promise<unknown> { return svc().uninstallLinux?.() ?? Promise.resolve(null); }

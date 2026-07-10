@@ -40,6 +40,37 @@ func (f *fakeHelper) Reinstall() error {
 	f.calls = append(f.calls, "reinstall")
 	return f.failOn["reinstall"]
 }
+func (f *fakeHelper) InstallLinux() error {
+	f.calls = append(f.calls, "installLinux")
+	return f.failOn["installLinux"]
+}
+func (f *fakeHelper) UninstallLinux() error {
+	f.calls = append(f.calls, "uninstallLinux")
+	return f.failOn["uninstallLinux"]
+}
+
+func TestHelperLinuxMethods(t *testing.T) {
+	fake := &fakeHelper{}
+	h := HelperHandlers{Svc: fake}
+	if _, err := h.InstallLinux(context.Background(), nil); err != nil {
+		t.Fatalf("InstallLinux: %v", err)
+	}
+	if _, err := h.UninstallLinux(context.Background(), nil); err != nil {
+		t.Fatalf("UninstallLinux: %v", err)
+	}
+	want := []string{"installLinux", "uninstallLinux"}
+	if len(fake.calls) != len(want) || fake.calls[0] != want[0] || fake.calls[1] != want[1] {
+		t.Fatalf("calls=%v want=%v", fake.calls, want)
+	}
+}
+
+func TestHelperLinuxErrorsPropagate(t *testing.T) {
+	fake := &fakeHelper{failOn: map[string]error{"installLinux": errors.New("pkexec declined")}}
+	h := HelperHandlers{Svc: fake}
+	if _, err := h.InstallLinux(context.Background(), nil); err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+}
 
 func TestHelperStatusReturnsTypedShape(t *testing.T) {
 	h := HelperHandlers{Svc: &fakeHelper{state: "running"}}
@@ -117,6 +148,8 @@ func TestHelperHandlersNilSvc(t *testing.T) {
 		func() (any, error) { return h.Stop(context.Background(), nil) },
 		func() (any, error) { return h.Restart(context.Background(), nil) },
 		func() (any, error) { return h.Reinstall(context.Background(), nil) },
+		func() (any, error) { return h.InstallLinux(context.Background(), nil) },
+		func() (any, error) { return h.UninstallLinux(context.Background(), nil) },
 	} {
 		if _, err := fn(); err != nil {
 			t.Fatalf("nil-Svc lifecycle method should be no-op, got: %v", err)

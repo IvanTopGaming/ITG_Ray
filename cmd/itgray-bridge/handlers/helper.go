@@ -15,6 +15,8 @@ type Helper interface {
 	Stop() error
 	Restart() error
 	Reinstall() error
+	InstallLinux() error
+	UninstallLinux() error
 }
 
 // HelperHandlers groups methods under the "helper." namespace.
@@ -83,4 +85,22 @@ func (h HelperHandlers) Reinstall(_ context.Context, _ json.RawMessage) (any, er
 		return struct{}{}, nil
 	}
 	return struct{}{}, h.Svc.Reinstall()
+}
+
+// InstallLinux installs the privileged systemd helper on Linux via pkexec
+// (one polkit prompt). No-op-safe when Svc is unset.
+func (h HelperHandlers) InstallLinux(_ context.Context, _ json.RawMessage) (any, error) {
+	if h.Svc == nil {
+		return struct{}{}, nil
+	}
+	return struct{}{}, h.Svc.InstallLinux()
+}
+
+// UninstallLinux removes the privileged systemd helper on Linux via pkexec
+// (one polkit prompt). No-op-safe when Svc is unset.
+func (h HelperHandlers) UninstallLinux(_ context.Context, _ json.RawMessage) (any, error) {
+	if h.Svc == nil {
+		return struct{}{}, nil
+	}
+	return struct{}{}, h.Svc.UninstallLinux()
 }
