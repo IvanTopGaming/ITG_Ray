@@ -30,6 +30,20 @@ func TestStore_LoadCorruptFile_ReturnsDefault(t *testing.T) {
 	require.Equal(t, ActionProxy, m.DefaultAction, "corrupt file degrades to default rather than failing Load")
 }
 
+func TestStore_LoadEmptyDefaultAction_SelfHealsToProxy(t *testing.T) {
+	dir := t.TempDir()
+	// A model with an empty default_action (the camelCase-key write bug) —
+	// valid JSON, parseable, but BuildSingbox would reject it. Load must
+	// normalize it to proxy so chain bring-up can't be bricked.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "rules.json"),
+		[]byte(`{"groups":[],"default_action":""}`), 0o600))
+	s := NewStore(dir)
+	m, err := s.Load()
+	require.NoError(t, err)
+	require.Equal(t, ActionProxy, m.DefaultAction)
+	require.NoError(t, m.Validate(), "self-healed model must pass validation")
+}
+
 func TestStore_SaveRoundTrips(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir)

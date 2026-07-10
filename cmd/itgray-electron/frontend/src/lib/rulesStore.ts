@@ -219,7 +219,14 @@ export function rulesReplaceAll(model: {
   groups: GroupView[];
 }): Promise<void> {
   return applyMutation(async () => {
-    await RulesService.ReplaceAll({ model });
+    // The Go rules.Model tags the field `default_action` (snake_case).
+    // Sending the camelCase `defaultAction` key unmarshals to "" on the
+    // backend, corrupting the model so the next chain bring-up fails with
+    // `model.default_action "" invalid`. Map it explicitly. (groups/rules/
+    // conditions already use the snake_case keys Go expects.)
+    await RulesService.ReplaceAll({
+      model: { default_action: model.defaultAction, groups: model.groups },
+    });
   });
 }
 

@@ -45,6 +45,13 @@ func (s *Store) Load() (Model, error) {
 	if err := json.Unmarshal(b, &m); err != nil {
 		return DefaultModel(), nil
 	}
+	// Self-heal a corrupted/empty default action. An empty default_action
+	// makes BuildSingbox reject the whole config ("model.default_action \"\"
+	// invalid"), bricking chain bring-up. Default to proxy — the DefaultModel
+	// value — so a bad file can never block connecting.
+	if m.DefaultAction == "" {
+		m.DefaultAction = ActionProxy
+	}
 	return m, nil
 }
 
