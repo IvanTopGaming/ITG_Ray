@@ -44,6 +44,13 @@ type SingboxInput struct {
 	// server which is detoured through the proxy outbound — no LAN leak.
 	// In ModeSysProxy this field is ignored (no TUN to attach FakeIP to).
 	FakeIP bool
+	// RouteExcludeAddress, when non-empty and Mode==ModeTun, is emitted as
+	// the TUN inbound's "route_exclude_address". Used on Linux to exclude
+	// the resolved VLESS server IP from the tunnel so xray's control
+	// connection does not loop through TUN. Empty on Windows (the Windows
+	// helper adds an explicit /32 peer-route instead), so output there is
+	// unchanged.
+	RouteExcludeAddress []string
 	// LogLevel sets the sing-box log block's "level". Valid sing-box
 	// values: trace|debug|info|warn|error|fatal|panic. Empty → "info".
 	LogLevel string
@@ -361,6 +368,9 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 		}
 		if in.MTU > 0 {
 			inbound["mtu"] = in.MTU
+		}
+		if len(in.RouteExcludeAddress) > 0 {
+			inbound["route_exclude_address"] = in.RouteExcludeAddress
 		}
 	default:
 		// Note: legacy inbound `sniff` / `sniff_override_destination` fields
