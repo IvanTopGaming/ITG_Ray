@@ -59,8 +59,7 @@ type runMemStore struct{ m map[string]*server.Server }
 func (s runMemStore) Get(id string) (*server.Server, error) { return s.m[id], nil }
 
 // runFakeSysproxy is a no-op sysproxy.Manager so bringUp's sysproxy.Set
-// call succeeds on non-Windows hosts (the platform stub returns
-// ErrUnsupported, which would fail the test with no real proxy hit).
+// call succeeds in tests without touching real OS proxy settings.
 type runFakeSysproxy struct{}
 
 func (runFakeSysproxy) Set(sysproxy.Settings) error { return nil }

@@ -2,11 +2,6 @@
 // non-Windows platforms every call is a no-op.
 package sysproxy
 
-import "errors"
-
-// ErrUnsupported is returned by non-Windows builds.
-var ErrUnsupported = errors.New("sysproxy: not supported on this platform")
-
 // Settings holds the per-protocol proxy addresses to register at the OS
 // level. Empty values mean "do not register this protocol". Both empty
 // is the same as Clear() — Set(Settings{}) is a no-op write.
