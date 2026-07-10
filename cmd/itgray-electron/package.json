@@ -94,6 +94,7 @@
       "target": [{ "target": "AppImage", "arch": ["x64"] }],
       "category": "Network",
       "extraResources": [
+        { "from": "../../dist/itgray-helper", "to": "helper/itgray-helper" },
         { "from": "../../dist/itgray-cli", "to": "cli/itgray-cli" },
         { "from": "../../dist/sing-box", "to": "cores/sing-box" },
         { "from": "../../dist/xray", "to": "cores/xray" }

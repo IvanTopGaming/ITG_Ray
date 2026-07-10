@@ -8,7 +8,8 @@ mkdir -p "$OUT"
 VERSION="${VERSION:-$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || echo dev)}"
 LDFLAGS="-s -w -X main.Version=$VERSION"
 
-# itgray-helper is Windows-only (svcmgr / TUN / NRPT). Skipped on Linux.
+echo ">> building itgray-helper (version=$VERSION)"
+GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o "$OUT/itgray-helper" "$ROOT/cmd/itgray-helper"
 
 echo ">> building itgray-cli (version=$VERSION)"
 GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o "$OUT/itgray-cli" "$ROOT/cmd/itgray-cli"
