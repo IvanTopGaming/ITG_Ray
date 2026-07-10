@@ -72,6 +72,7 @@
       }
     ],
     "win": {
+      "icon": "resources/icon.ico",
       "target": [{ "target": "nsis", "arch": ["x64"] }],
       "extraResources": [
         { "from": "../../dist/itgray-helper.exe", "to": "helper/itgray-helper.exe" },

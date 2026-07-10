@@ -16,6 +16,11 @@ let tray: ReturnType<typeof createTray> | null = null;
 let quitting = false;
 
 app.setName("ITG Ray");
+// Windows: attribute OS notifications to the installed app (the NSIS
+// shortcut's AppUserModelID = electron-builder appId). Without this,
+// toasts show the default "electron.app.Electron" identifier instead of
+// "ITG Ray". No-op on other platforms.
+app.setAppUserModelId("com.itgray.app");
 app.setPath("userData", path.join(app.getPath("appData"), "ITG Ray"));
 
 const gotLock = app.requestSingleInstanceLock();
