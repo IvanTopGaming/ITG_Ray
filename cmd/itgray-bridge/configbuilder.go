@@ -71,22 +71,27 @@ func buildConfigs(dataDir, configPath string, store *rules.Store) chainctl.Confi
 		if c, lerr := config.Load(configPath); lerr == nil {
 			logLevel = c.Debug.LogLevel
 		}
+		serverIP, err := resolveServerIPv4(srv.Vless.Address)
+		if err != nil {
+			return nil, nil, fmt.Errorf("resolve server host %q: %w", srv.Vless.Address, err)
+		}
 		var sbInput configgen.SingboxInput
 		switch mode {
 		case chainctl.ModeTUN:
 			sbInput = configgen.SingboxInput{
-				Mode:          configgen.ModeTun,
-				FakeIP:        true,
-				TunName:       defaultTunName,
-				TunIPv4:       net.TUN.IPv4CIDR,
-				MTU:           chainctl.ClampMTU(net.TUN.MTU),
-				XraySOCKSHost: "127.0.0.1",
-				XraySOCKSPort: defaultXrayPort,
-				DNSUpstreams:  chainctl.ResolveDNS(net.DNS),
-				AllowLAN:      net.AllowLAN,
-				IPv6Strategy:  chainctl.MapIPv6Strategy(net.IPv6Mode),
-				Rules:         loadRulesFromDataDir(dataDir, store),
-				LogLevel:      logLevel,
+				Mode:                configgen.ModeTun,
+				FakeIP:              true,
+				TunName:             defaultTunName,
+				TunIPv4:             net.TUN.IPv4CIDR,
+				MTU:                 chainctl.ClampMTU(net.TUN.MTU),
+				XraySOCKSHost:       "127.0.0.1",
+				XraySOCKSPort:       defaultXrayPort,
+				DNSUpstreams:        chainctl.ResolveDNS(net.DNS),
+				AllowLAN:            net.AllowLAN,
+				IPv6Strategy:        chainctl.MapIPv6Strategy(net.IPv6Mode),
+				Rules:               loadRulesFromDataDir(dataDir, store),
+				LogLevel:            logLevel,
+				RouteExcludeAddress: serverExcludeForTUN(serverIP),
 			}
 		case chainctl.ModeSysProxy:
 			sbInput = configgen.SingboxInput{
@@ -108,10 +113,6 @@ func buildConfigs(dataDir, configPath string, store *rules.Store) chainctl.Confi
 		sb, err := configgen.BuildSingbox(&sbInput)
 		if err != nil {
 			return nil, nil, fmt.Errorf("BuildSingbox: %w", err)
-		}
-		serverIP, err := resolveServerIPv4(srv.Vless.Address)
-		if err != nil {
-			return nil, nil, fmt.Errorf("resolve server host %q: %w", srv.Vless.Address, err)
 		}
 		xr, err := configgen.BuildXray(&configgen.XrayInput{
 			Server:    srv.Vless,
