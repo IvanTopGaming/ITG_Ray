@@ -219,6 +219,7 @@ func main() {
 		ServerStore:  serverStore,
 		Hub:          h,
 		ActiveServer: chainCtrl,
+		SubStore:     subStore,
 	})
 
 	d := dispatcher.New()

@@ -131,6 +131,34 @@ func TestSubsService_Remove(t *testing.T) {
 	require.Equal(t, "s2", all[0].ID)
 }
 
+// TestSubsService_Remove_CascadesServers verifies removing a subscription
+// also drops the servers it imported, so they don't linger as undeletable
+// orphans. Servers belonging to other subs (or manual) are untouched.
+func TestSubsService_Remove_CascadesServers(t *testing.T) {
+	dir := t.TempDir()
+	svc, store := newSubsServiceForTest(t, dir)
+	require.NoError(t, store.Save([]subscription.Stored{
+		{ID: "s1", URL: "https://e/sub"},
+		{ID: "s2", URL: "https://e/sub2"},
+	}))
+	srvPath := filepath.Join(dir, "servers.json")
+	require.NoError(t, server.Save(srvPath, []server.Server{
+		{ID: "a", Origin: server.OriginSubscription, SourceID: "s1", Name: "A", Vless: vless.Config{Address: "h", Port: 443, UUID: "00000000-0000-0000-0000-000000000000"}},
+		{ID: "b", Origin: server.OriginSubscription, SourceID: "s2", Name: "B", Vless: vless.Config{Address: "h", Port: 443, UUID: "00000000-0000-0000-0000-000000000000"}},
+		{ID: "m", Origin: server.OriginManual, Name: "M", Vless: vless.Config{Address: "h", Port: 443, UUID: "00000000-0000-0000-0000-000000000000"}},
+	}))
+
+	require.NoError(t, svc.Remove("s1"))
+
+	loaded, err := server.Load(srvPath)
+	require.NoError(t, err)
+	ids := []string{}
+	for _, s := range loaded {
+		ids = append(ids, s.ID)
+	}
+	require.ElementsMatch(t, []string{"b", "m"}, ids, "only s1's server should be removed")
+}
+
 // failingSaveServerStore returns from Load but always errors on Save — used
 // to exercise the SyncOne disk-failure-after-successful-fetch branch.
 type failingSaveServerStore struct{}

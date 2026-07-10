@@ -9,6 +9,7 @@ import (
 
 	"github.com/itg-team/itg-ray/internal/hub"
 	"github.com/itg-team/itg-ray/internal/server"
+	"github.com/itg-team/itg-ray/internal/subscription"
 	"github.com/itg-team/itg-ray/internal/vless"
 
 	"github.com/stretchr/testify/require"
@@ -308,15 +309,52 @@ func TestServersService_Remove_RejectsSubOrigin(t *testing.T) {
 		Vless:    vless.Config{Address: "h", Port: 443, UUID: "00000000-0000-0000-0000-000000000000"},
 	}})
 
+	// Parent subscription "src" still exists → server is managed (read-only).
+	subStore := subscription.FileStore{Path: filepath.Join(dir, "subscriptions.json")}
+	require.NoError(t, subStore.Save([]subscription.Stored{{ID: "src", URL: "https://e/sub"}}))
+
 	svc := NewServersService(ServersDeps{
 		ServerStore:  fileServerStore{path: path},
 		Hub:          hub.New(),
 		ActiveServer: fakeActiveProbe{},
+		SubStore:     subStore,
 	})
 
 	err := svc.Remove("sub1")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "only manual servers can be deleted")
+}
+
+// TestServersService_Remove_AllowsOrphanedSubServer covers the reported bug:
+// a subscription server whose parent subscription was deleted is shown as
+// "manual" in the UI but was undeletable because its stored Origin is still
+// "subscription". It must be deletable once the parent is gone.
+func TestServersService_Remove_AllowsOrphanedSubServer(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "servers.json")
+	store := fileServerStore{path: path}
+	seedServers(t, path, []server.Server{{
+		ID:       "orphan1",
+		Origin:   server.OriginSubscription,
+		SourceID: "deleted-sub",
+		Name:     "DE_master",
+		Vless:    vless.Config{Address: "h", Port: 443, UUID: "00000000-0000-0000-0000-000000000000"},
+	}})
+
+	// SubStore has NO subscription matching "deleted-sub" → server is orphaned.
+	subStore := subscription.FileStore{Path: filepath.Join(dir, "subscriptions.json")}
+	require.NoError(t, subStore.Save([]subscription.Stored{{ID: "other-sub", URL: "https://e/sub"}}))
+
+	svc := NewServersService(ServersDeps{
+		ServerStore:  store,
+		Hub:          hub.New(),
+		ActiveServer: fakeActiveProbe{},
+		SubStore:     subStore,
+	})
+
+	require.NoError(t, svc.Remove("orphan1"))
+	loaded, _ := store.Load()
+	require.Len(t, loaded, 0)
 }
 
 func TestServersService_Remove_BlocksActive(t *testing.T) {

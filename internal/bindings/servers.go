@@ -41,6 +41,11 @@ type ServersDeps struct {
 	ServerStore  ServerStore
 	Hub          *hub.Hub
 	ActiveServer ActiveServerProbe // used by Remove; may be nil in tests that don't exercise Remove
+	// SubStore lets Remove tell a managed subscription server (parent sub
+	// still exists → read-only) from an orphan (parent sub deleted → shown
+	// as "manual", must be deletable). nil → orphans can't be detected, so
+	// all subscription servers stay read-only (pre-orphan-fix behavior).
+	SubStore SubStore
 }
 
 // ServersService implements the Servers.* Wails bindings.
@@ -270,7 +275,11 @@ func (s *ServersService) Remove(id string) error {
 	if idx == -1 {
 		return ErrServerNotFound
 	}
-	if list[idx].Origin != server.OriginManual {
+	// Manual servers are always deletable. A subscription server is
+	// normally read-only (managed by sync) — but once its parent
+	// subscription is gone it becomes an orphan (the UI resolves its origin
+	// to "manual"), and an orphan that can't be deleted is a dead end.
+	if list[idx].Origin != server.OriginManual && !s.isOrphanSubServer(list[idx]) {
 		return errors.New("only manual servers can be deleted")
 	}
 	if s.d.ActiveServer != nil && s.d.ActiveServer.ActiveServerID() == id {
@@ -284,6 +293,26 @@ func (s *ServersService) Remove(id string) error {
 
 	s.d.Hub.Publish(hub.Event{Name: hub.EventServersChanged})
 	return nil
+}
+
+// isOrphanSubServer reports whether a subscription-origin server's parent
+// subscription no longer exists. Fails CLOSED — a nil SubStore or a load
+// error returns false (treat as still-managed) so a transient read failure
+// can never let a genuinely-managed server be deleted.
+func (s *ServersService) isOrphanSubServer(srv server.Server) bool {
+	if srv.Origin != server.OriginSubscription || s.d.SubStore == nil {
+		return false
+	}
+	subs, err := s.d.SubStore.Load()
+	if err != nil {
+		return false
+	}
+	for i := range subs {
+		if subs[i].ID == srv.SourceID {
+			return false // parent still exists → managed, not an orphan
+		}
+	}
+	return true
 }
 
 // Edit updates name and/or VLESS config for an existing server. Refuses

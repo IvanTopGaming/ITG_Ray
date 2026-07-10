@@ -141,6 +141,27 @@ func (s *SubsService) Remove(id string) error {
 	if err := s.d.SubStore.Save(out); err != nil {
 		return fmt.Errorf("sub.Save: %w", err)
 	}
+
+	// Cascade: drop the servers this subscription imported so they don't
+	// linger as orphans (mislabeled "manual", undeletable). Mirrors Edit's
+	// URL-change cleanup. Best-effort — a server-store failure here leaves
+	// the (now-orphaned) servers but the sub is already gone; not fatal.
+	if servers, lerr := s.d.ServerStore.Load(); lerr == nil {
+		kept := servers[:0]
+		removed := false
+		for _, srv := range servers {
+			if srv.SourceID == id {
+				removed = true
+				continue
+			}
+			kept = append(kept, srv)
+		}
+		if removed {
+			if serr := s.d.ServerStore.Save(kept); serr == nil {
+				s.d.Hub.Publish(hub.Event{Name: hub.EventServersChanged})
+			}
+		}
+	}
 	return nil
 }
 
