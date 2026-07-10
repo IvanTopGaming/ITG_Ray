@@ -102,7 +102,10 @@
     "edit": "Изменить",
     "parse": "Разобрать",
     "reconnect": "Переподключить",
-    "dismiss": "Скрыть"
+    "dismiss": "Скрыть",
+    "confirm": "Подтвердить",
+    "clickToConfirm": "Нажмите для подтверждения",
+    "toggleConnection": "Переключить подключение"
   },
   "servers": {
     "title": "Серверы",

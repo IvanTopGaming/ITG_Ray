@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { Zap } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -82,6 +83,7 @@ export const GlowOrb = React.memo(function GlowOrb({
   ariaLabel,
   className,
 }: GlowOrbProps) {
+  const { t } = useTranslation();
   const s = STYLES[status];
   const interactive = Boolean(onClick) && !disabled;
   const iconSize = Math.round(size * 0.34);
@@ -154,7 +156,7 @@ export const GlowOrb = React.memo(function GlowOrb({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      aria-label={ariaLabel ?? "Toggle connection"}
+      aria-label={ariaLabel ?? t("common.toggleConnection")}
       style={sharedStyle}
       className={cn(
         sharedClasses,

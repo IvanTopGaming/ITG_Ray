@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/cn';
 
@@ -21,10 +22,11 @@ export function ConfirmDialog({
   onConfirm,
   title,
   description,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   confirmVariant = 'primary',
 }: ConfirmDialogProps) {
+  const { t } = useTranslation();
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
@@ -65,7 +67,7 @@ export function ConfirmDialog({
                 onClick={onClose}
                 className="px-3.5 py-1.5 text-xs rounded-[10px] border border-white/[0.10] text-white/[0.80] hover:bg-white/[0.05]"
               >
-                {cancelLabel}
+                {cancelLabel ?? t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -80,7 +82,7 @@ export function ConfirmDialog({
                     : 'bg-danger/[0.15] border-danger/40 text-danger',
                 )}
               >
-                {confirmLabel}
+                {confirmLabel ?? t('common.confirm')}
               </button>
             </div>
           </motion.div>

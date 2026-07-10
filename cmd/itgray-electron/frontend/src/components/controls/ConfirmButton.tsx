@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/cn';
 
@@ -25,11 +26,12 @@ const ARMED_CLASSES = 'bg-danger/10 border-danger/40 text-danger';
 export function ConfirmButton({
   onConfirm,
   children,
-  confirmLabel = 'Click to confirm',
+  confirmLabel,
   variant = 'ghost',
   timeoutMs = 3000,
   className,
 }: ConfirmButtonProps) {
+  const { t } = useTranslation();
   const [armed, setArmed] = useState(false);
 
   useEffect(() => {
@@ -64,7 +66,7 @@ export function ConfirmButton({
         transition={{ duration: 0.12 }}
         className="inline-block"
       >
-        {armed ? confirmLabel : children}
+        {armed ? (confirmLabel ?? t('common.clickToConfirm')) : children}
       </motion.span>
     </button>
   );
