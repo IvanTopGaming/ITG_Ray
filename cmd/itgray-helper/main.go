@@ -19,6 +19,10 @@ const (
 	PipeName = `\\.\pipe\ITGRay.Helper.v1`
 )
 
+// extraCommands holds platform-specific subcommands registered via init() in
+// build-tagged files (e.g. install/uninstall on Linux). Empty on Windows.
+var extraCommands []*cobra.Command
+
 func main() {
 	root := &cobra.Command{
 		Use:     "itgray-helper",
@@ -29,6 +33,7 @@ func main() {
 			return runService()
 		},
 	}
+	root.AddCommand(extraCommands...)
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
