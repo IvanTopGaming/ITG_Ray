@@ -11,7 +11,85 @@
     "settings": "Настройки"
   },
   "status": {
-    "running": "работает"
+    "running": "работает",
+    "stopped": "остановлено",
+    "missing": "отсутствует",
+    "pending": "ожидание",
+    "error": "ошибка"
+  },
+  "statusPill": {
+    "running": "Работает",
+    "stopped": "Остановлено",
+    "error": "Ошибка",
+    "pending": "Ожидание",
+    "missing": "Не установлено"
+  },
+  "titlebar": {
+    "minimize": "Свернуть",
+    "maximize": "Развернуть",
+    "restore": "Восстановить"
+  },
+  "appShell": {
+    "reconnectMessage": "Настройки изменены — переподключитесь, чтобы применить."
+  },
+  "dashboard": {
+    "title": "Панель",
+    "errorFallback": "ошибка",
+    "orb": {
+      "connect": "Подключить",
+      "disconnect": "Отключить",
+      "retry": "Попробовать снова",
+      "connecting": "Подключение",
+      "disconnecting": "Отключение"
+    },
+    "statusLine": {
+      "idle": "Отключено",
+      "connecting": "Подключение…",
+      "connected": "Подключено",
+      "disconnecting": "Отключение…",
+      "error": "Ошибка"
+    },
+    "connectionFailed": "Не удалось подключиться",
+    "noActiveConnection": "Нет активного подключения",
+    "clickToRetry": "Нажмите на сферу, чтобы повторить.",
+    "clickToConnect": "Нажмите на сферу, чтобы подключиться.",
+    "stats": {
+      "down": "↓ Приём",
+      "up": "↑ Отдача",
+      "uptime": "Время",
+      "transferred": "Передано"
+    },
+    "mode": {
+      "sysproxy": "SysProxy",
+      "tun": "TUN"
+    },
+    "quickSwitch": "Быстрый выбор",
+    "seeAll": "Все",
+    "active": "Активен",
+    "selected": "Выбран",
+    "tap": "Выбрать",
+    "noServers": "Нет серверов",
+    "noServersHint": "Добавьте подписку или выберите сервер, чтобы начать.",
+    "addSubscription": "Добавить подписку",
+    "browse": "Обзор",
+    "metric": {
+      "down": "↓ Загрузка",
+      "up": "↑ Отдача"
+    },
+    "peak": "пик {{n}}",
+    "collecting": "Сбор данных…",
+    "graphHintDown": "График загрузки появится после подключения.",
+    "graphHintUp": "График отдачи появится после подключения.",
+    "conn": {
+      "protocol": "Протокол",
+      "transport": "Транспорт",
+      "publicIp": "Публичный IP",
+      "dns": "DNS",
+      "connection": "Подключение",
+      "helper": "Служба"
+    },
+    "resolving": "Определение…",
+    "auto": "Auto"
   },
   "common": {
     "cancel": "Отмена",
@@ -22,7 +100,9 @@
     "restart": "Перезапустить",
     "close": "Закрыть",
     "edit": "Изменить",
-    "parse": "Разобрать"
+    "parse": "Разобрать",
+    "reconnect": "Переподключить",
+    "dismiss": "Скрыть"
   },
   "servers": {
     "title": "Серверы",

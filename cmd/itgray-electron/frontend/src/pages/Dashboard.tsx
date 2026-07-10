@@ -8,6 +8,7 @@ import {
 } from "recharts";
 import { ArrowRight, Star } from "lucide-react";
 import { motion, type Variants } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { GlowOrb, type OrbStatus } from "@/components/GlowOrb";
 import { CountryFlag } from "@/components/controls/CountryFlag";
@@ -50,6 +51,7 @@ const itemVariants: Variants = {
 };
 
 export function Dashboard() {
+  const { t } = useTranslation();
   const dash = useDash();
   const ip = useIp();
   const [settings] = useSettings();
@@ -137,7 +139,9 @@ export function Dashboard() {
         className="flex items-center justify-between"
         variants={itemVariants}
       >
-        <h1 className="text-[22px] font-semibold tracking-tight">Dashboard</h1>
+        <h1 className="text-[22px] font-semibold tracking-tight">
+          {t("dashboard.title")}
+        </h1>
         <ModeToggle
           value={dash.mode}
           onChange={handleModeChange}
@@ -149,7 +153,7 @@ export function Dashboard() {
         <div className="mb-5 flex items-start gap-3 rounded-xl border border-[#ff9a9a]/30 bg-[#ff9a9a]/[0.06] px-4 py-3">
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-[#ff9a9a]">
-              {dash.lastError?.kind ?? "error"}
+              {dash.lastError?.kind ?? t("dashboard.errorFallback")}
             </span>
             <span className="break-words font-mono text-[12px] text-white/85">
               {dash.lastError?.message ?? ""}
@@ -159,7 +163,7 @@ export function Dashboard() {
             onClick={clearLastError}
             className="shrink-0 rounded-md px-2 py-1 text-[11px] font-medium text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white"
           >
-            Dismiss
+            {t("common.dismiss")}
           </button>
         </div>
       </Reveal>
@@ -175,7 +179,7 @@ export function Dashboard() {
               size={104}
               onClick={handleOrbClick}
               disabled={orbDisabled}
-              ariaLabel={ariaLabelFor(eff)}
+              ariaLabel={ariaLabelFor(eff, t)}
             />
           </div>
 
@@ -234,28 +238,32 @@ export function Dashboard() {
   );
 }
 
-function ariaLabelFor(status: OrbStatus): string {
+function ariaLabelFor(
+  status: OrbStatus,
+  t: (key: string) => string,
+): string {
   switch (status) {
     case "idle":
-      return "Connect";
+      return t("dashboard.orb.connect");
     case "connected":
-      return "Disconnect";
+      return t("dashboard.orb.disconnect");
     case "error":
-      return "Try connecting again";
+      return t("dashboard.orb.retry");
     case "connecting":
-      return "Connecting";
+      return t("dashboard.orb.connecting");
     case "disconnecting":
-      return "Disconnecting";
+      return t("dashboard.orb.disconnecting");
   }
 }
 
 function StatusLine({ status }: { status: OrbStatus }) {
+  const { t } = useTranslation();
   const label = {
-    idle: "DISCONNECTED",
-    connecting: "CONNECTING…",
-    connected: "CONNECTED",
-    disconnecting: "DISCONNECTING…",
-    error: "ERROR",
+    idle: t("dashboard.statusLine.idle"),
+    connecting: t("dashboard.statusLine.connecting"),
+    connected: t("dashboard.statusLine.connected"),
+    disconnecting: t("dashboard.statusLine.disconnecting"),
+    error: t("dashboard.statusLine.error"),
   }[status];
   const color = {
     idle: "text-white/55",
@@ -288,16 +296,19 @@ function ActiveRoute({
   mode: Mode;
   server: ServerView | null;
 }) {
+  const { t } = useTranslation();
   if (status === "idle" || status === "error" || !server) {
     return (
       <div className="flex h-[48px] flex-col">
         <div className="h-[28px] text-[24px] font-bold leading-[28px] tracking-tight">
-          {status === "error" ? "Connection failed" : "No active connection"}
+          {status === "error"
+            ? t("dashboard.connectionFailed")
+            : t("dashboard.noActiveConnection")}
         </div>
         <div className="mt-1 h-[16px] font-mono text-[12px] leading-[16px] tabular-nums text-white/55">
           {status === "error"
-            ? "Click the orb to retry."
-            : "Click the orb to connect."}
+            ? t("dashboard.clickToRetry")
+            : t("dashboard.clickToConnect")}
         </div>
       </div>
     );
@@ -332,23 +343,24 @@ function Stats({
   totals: { down: number; up: number };
   sessionSeconds: number;
 }) {
+  const { t } = useTranslation();
   const live = status === "connected";
   return (
     <div className="flex h-[140px] w-[152px] shrink-0 flex-col justify-between">
       <Stat
-        label="↓ Down"
+        label={t("dashboard.stats.down")}
         value={live ? `${(speed.downBps / 125_000).toFixed(1)} Mbps` : "—"}
       />
       <Stat
-        label="↑ Up"
+        label={t("dashboard.stats.up")}
         value={live ? `${(speed.upBps / 125_000).toFixed(1)} Mbps` : "—"}
       />
       <Stat
-        label="Uptime"
+        label={t("dashboard.stats.uptime")}
         value={live ? formatDuration(sessionSeconds) : "—"}
       />
       <Stat
-        label="Transferred"
+        label={t("dashboard.stats.transferred")}
         value={live ? formatBytes(totals.down + totals.up) : "—"}
       />
     </div>
@@ -377,6 +389,7 @@ function ModeToggle({
   onChange: (m: Mode) => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className={cn(
@@ -401,7 +414,7 @@ function ModeToggle({
             />
           )}
           <span className="relative z-10">
-            {m === "sysproxy" ? "SysProxy" : "TUN"}
+            {m === "sysproxy" ? t("dashboard.mode.sysproxy") : t("dashboard.mode.tun")}
           </span>
         </button>
       ))}
@@ -420,6 +433,7 @@ function QuickSwitch({
   status: OrbStatus;
   onPick: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const cols =
     servers.length === 0
       ? null
@@ -433,13 +447,13 @@ function QuickSwitch({
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between px-1">
         <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/45">
-          Quick switch
+          {t("dashboard.quickSwitch")}
         </span>
         <Link
           to="/servers"
           className="group flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-white/75 transition-colors duration-instant ease-snap hover:bg-white/[0.06] hover:text-white"
         >
-          See all
+          {t("dashboard.seeAll")}
           <ArrowRight className="h-3 w-3 transition-transform duration-instant ease-snap group-hover:translate-x-0.5" />
         </Link>
       </div>
@@ -523,15 +537,15 @@ function QuickSwitch({
                       className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-success"
                     >
                       <span className="h-1 w-1 rounded-full bg-success shadow-[0_0_4px_rgba(0,230,118,0.8)]" />
-                      Active
+                      {t("dashboard.active")}
                     </motion.span>
                   ) : selected ? (
                     <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/65">
-                      Selected
+                      {t("dashboard.selected")}
                     </span>
                   ) : (
                     <span className="text-[9px] uppercase tracking-[0.14em] text-white/35">
-                      Tap
+                      {t("dashboard.tap")}
                     </span>
                   )}
                 </div>
@@ -545,19 +559,20 @@ function QuickSwitch({
 }
 
 function QuickSwitchEmpty() {
+  const { t } = useTranslation();
   return (
     <div
       role="status"
       aria-live="polite"
-      aria-label="No servers added"
+      aria-label={t("dashboard.noServers")}
       className="glass-regular flex items-center justify-between gap-4 rounded-xl px-5 py-4"
     >
       <div className="flex flex-col gap-1">
         <span className="text-[13px] font-semibold text-white/85">
-          No servers added
+          {t("dashboard.noServers")}
         </span>
         <span className="text-[11px] text-white/55">
-          Add a subscription or browse servers to start connecting.
+          {t("dashboard.noServersHint")}
         </span>
       </div>
       <div className="flex items-center gap-2">
@@ -565,13 +580,13 @@ function QuickSwitchEmpty() {
           to="/subscriptions"
           className="rounded-md bg-white/[0.08] px-3 py-1.5 text-[11px] font-medium text-white/85 hover:bg-white/[0.12]"
         >
-          Add subscription
+          {t("dashboard.addSubscription")}
         </Link>
         <Link
           to="/servers"
           className="rounded-md px-3 py-1.5 text-[11px] font-medium text-white/65 hover:bg-white/[0.06] hover:text-white"
         >
-          Browse
+          {t("dashboard.browse")}
         </Link>
       </div>
     </div>
@@ -589,6 +604,7 @@ function MetricChart({
   history: SpeedPoint[];
   metric: "down" | "up";
 }) {
+  const { t } = useTranslation();
   const live = status === "connected";
   const currentMbps = live
     ? (metric === "down" ? speed.downBps : speed.upBps) / 125_000
@@ -597,7 +613,8 @@ function MetricChart({
   const peakMbps = history.length
     ? Math.max(0, ...history.map((p) => p[histKey] / 125_000))
     : 0;
-  const label = metric === "down" ? "↓ Download" : "↑ Upload";
+  const label =
+    metric === "down" ? t("dashboard.metric.down") : t("dashboard.metric.up");
   const color = metric === "down" ? "#00e892" : "#7ed4ff";
   const gradId = `grad-${metric}`;
 
@@ -616,7 +633,7 @@ function MetricChart({
         <div className="flex items-baseline gap-3">
           {live && peakMbps > 0 && (
             <span className="font-mono text-[10px] tabular-nums text-white/35">
-              peak {peakMbps.toFixed(0)}
+              {t("dashboard.peak", { n: peakMbps.toFixed(0) })}
             </span>
           )}
           <motion.span
@@ -675,8 +692,10 @@ function MetricChart({
         ) : (
           <div className="flex h-full items-center justify-center text-[12px] text-white/35">
             {live
-              ? "Collecting samples…"
-              : `${metric === "down" ? "Download" : "Upload"} graph appears when connected.`}
+              ? t("dashboard.collecting")
+              : metric === "down"
+                ? t("dashboard.graphHintDown")
+                : t("dashboard.graphHintUp")}
           </div>
         )}
       </div>
@@ -699,6 +718,7 @@ function ConnectionInfo({
   dnsCustom: string;
   helperState: "running" | "stopped" | "missing";
 }) {
+  const { t } = useTranslation();
   const live = status === "connected";
   const dash = "—";
 
@@ -708,7 +728,7 @@ function ConnectionInfo({
   const transport = server?.transport ?? dash;
 
   const dns =
-    dnsMode === "custom" && dnsCustom.trim() ? dnsCustom : "Auto";
+    dnsMode === "custom" && dnsCustom.trim() ? dnsCustom : t("dashboard.auto");
 
   const helperColor = {
     running: "bg-success",
@@ -719,7 +739,7 @@ function ConnectionInfo({
   const ipNode: React.ReactNode = !live
     ? dash
     : publicIp.loading
-      ? <span className="opacity-55">Resolving…</span>
+      ? <span className="opacity-55">{t("dashboard.resolving")}</span>
       : publicIp.error
         ? dash
         : publicIp.value
@@ -740,16 +760,16 @@ function ConnectionInfo({
           : dash;
 
   const rows: Array<{ label: string; value: React.ReactNode }> = [
-    { label: "Protocol", value: live ? protocol : dash },
-    { label: "Transport", value: live ? transport : dash },
-    { label: "Public IP", value: ipNode },
-    { label: "DNS", value: dns },
+    { label: t("dashboard.conn.protocol"), value: live ? protocol : dash },
+    { label: t("dashboard.conn.transport"), value: live ? transport : dash },
+    { label: t("dashboard.conn.publicIp"), value: ipNode },
+    { label: t("dashboard.conn.dns"), value: dns },
   ];
 
   return (
     <div className="glass-regular flex h-full flex-col gap-3 rounded-2xl p-6">
       <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/45">
-        Connection
+        {t("dashboard.conn.connection")}
       </div>
       <div className="flex flex-col gap-2.5">
         {rows.map((row) => (
@@ -768,7 +788,7 @@ function ConnectionInfo({
         <div className="my-1 h-px bg-white/8" />
         <div className="flex items-center justify-between gap-3">
           <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-white/40">
-            Helper
+            {t("dashboard.conn.helper")}
           </span>
           <span className="flex items-center gap-1.5 font-mono text-[11px] text-white/85">
             <span
@@ -777,7 +797,7 @@ function ConnectionInfo({
                 helperColor,
               )}
             />
-            {helperState}
+            {t(`status.${helperState}`)}
           </span>
         </div>
       </div>

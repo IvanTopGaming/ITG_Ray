@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 
 export type ReconnectToastProps = {
   visible: boolean;
@@ -13,6 +14,7 @@ export function ReconnectToast({
   onReconnect,
   onDismiss,
 }: ReconnectToastProps) {
+  const { t } = useTranslation();
   return (
     <AnimatePresence>
       {visible && (
@@ -31,12 +33,12 @@ export function ReconnectToast({
               onClick={() => void onReconnect()}
               className="rounded-full bg-amber-100/25 px-2.5 py-1 text-[11.5px] font-semibold text-amber-50 transition-colors hover:bg-amber-100/40"
             >
-              Reconnect
+              {t("common.reconnect")}
             </button>
           )}
           <button
             onClick={onDismiss}
-            aria-label="Dismiss"
+            aria-label={t("common.dismiss")}
             className="rounded-full px-2 py-0.5 text-[16px] leading-none text-amber-50/80 transition-colors hover:bg-amber-100/20 hover:text-amber-50"
           >
             ×

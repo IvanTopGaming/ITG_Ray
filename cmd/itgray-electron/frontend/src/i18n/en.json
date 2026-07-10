@@ -11,7 +11,85 @@
     "settings": "Settings"
   },
   "status": {
-    "running": "running"
+    "running": "running",
+    "stopped": "stopped",
+    "missing": "missing",
+    "pending": "pending",
+    "error": "error"
+  },
+  "statusPill": {
+    "running": "Running",
+    "stopped": "Stopped",
+    "error": "Error",
+    "pending": "Pending",
+    "missing": "Not installed"
+  },
+  "titlebar": {
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore"
+  },
+  "appShell": {
+    "reconnectMessage": "Settings changed — reconnect to apply."
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "errorFallback": "error",
+    "orb": {
+      "connect": "Connect",
+      "disconnect": "Disconnect",
+      "retry": "Try connecting again",
+      "connecting": "Connecting",
+      "disconnecting": "Disconnecting"
+    },
+    "statusLine": {
+      "idle": "DISCONNECTED",
+      "connecting": "CONNECTING…",
+      "connected": "CONNECTED",
+      "disconnecting": "DISCONNECTING…",
+      "error": "ERROR"
+    },
+    "connectionFailed": "Connection failed",
+    "noActiveConnection": "No active connection",
+    "clickToRetry": "Click the orb to retry.",
+    "clickToConnect": "Click the orb to connect.",
+    "stats": {
+      "down": "↓ Down",
+      "up": "↑ Up",
+      "uptime": "Uptime",
+      "transferred": "Transferred"
+    },
+    "mode": {
+      "sysproxy": "SysProxy",
+      "tun": "TUN"
+    },
+    "quickSwitch": "Quick switch",
+    "seeAll": "See all",
+    "active": "Active",
+    "selected": "Selected",
+    "tap": "Tap",
+    "noServers": "No servers added",
+    "noServersHint": "Add a subscription or browse servers to start connecting.",
+    "addSubscription": "Add subscription",
+    "browse": "Browse",
+    "metric": {
+      "down": "↓ Download",
+      "up": "↑ Upload"
+    },
+    "peak": "peak {{n}}",
+    "collecting": "Collecting samples…",
+    "graphHintDown": "Download graph appears when connected.",
+    "graphHintUp": "Upload graph appears when connected.",
+    "conn": {
+      "protocol": "Protocol",
+      "transport": "Transport",
+      "publicIp": "Public IP",
+      "dns": "DNS",
+      "connection": "Connection",
+      "helper": "Helper"
+    },
+    "resolving": "Resolving…",
+    "auto": "Auto"
   },
   "common": {
     "cancel": "Cancel",
@@ -22,7 +100,9 @@
     "restart": "Restart",
     "close": "Close",
     "edit": "Edit",
-    "parse": "Parse"
+    "parse": "Parse",
+    "reconnect": "Reconnect",
+    "dismiss": "Dismiss"
   },
   "servers": {
     "title": "Servers",

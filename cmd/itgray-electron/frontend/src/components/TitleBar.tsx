@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   WindowMinimise,
   WindowToggleMaximise,
@@ -11,6 +12,7 @@ import {
 // minimize / maximize-restore / close buttons. Replaces the native
 // title bar removed by `Frameless: true` in cmd/itgray-gui/main.go.
 export function TitleBar() {
+  const { t } = useTranslation();
   const [maximized, setMaximized] = useState(false);
 
   // Keep the maximize/restore icon synced with actual window state.
@@ -55,7 +57,7 @@ export function TitleBar() {
         <button
           type="button"
           onClick={() => void WindowMinimise()}
-          aria-label="Minimize"
+          aria-label={t("titlebar.minimize")}
           className="flex h-full w-12 items-center justify-center text-white/55 transition-colors hover:bg-white/5 hover:text-white/90"
         >
           <svg width="10" height="1" viewBox="0 0 10 1" fill="currentColor">
@@ -68,7 +70,7 @@ export function TitleBar() {
             await WindowToggleMaximise();
             setMaximized((m) => !m);
           }}
-          aria-label={maximized ? "Restore" : "Maximize"}
+          aria-label={maximized ? t("titlebar.restore") : t("titlebar.maximize")}
           className="flex h-full w-12 items-center justify-center text-white/55 transition-colors hover:bg-white/5 hover:text-white/90"
         >
           {maximized ? (
@@ -99,7 +101,7 @@ export function TitleBar() {
         <button
           type="button"
           onClick={() => void WindowClose()}
-          aria-label="Close"
+          aria-label={t("common.close")}
           className="flex h-full w-12 items-center justify-center text-white/55 transition-colors hover:bg-danger hover:text-white"
         >
           <svg

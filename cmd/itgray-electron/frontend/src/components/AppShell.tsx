@@ -15,7 +15,7 @@ import { ReconnectToast } from "./ReconnectToast";
 
 export function AppShell() {
   const reconnectNeeded = useReconnectNeeded();
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [settings] = useSettings();
   useEffect(() => {
     if (i18n.language !== settings.language)
@@ -69,7 +69,7 @@ export function AppShell() {
 
       <ReconnectToast
         visible={reconnectNeeded}
-        message="Settings changed — reconnect to apply."
+        message={t("appShell.reconnectMessage")}
         onReconnect={handleReconnect}
         onDismiss={handleDismiss}
       />
