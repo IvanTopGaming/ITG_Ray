@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && !linux
 
 package bindings
 
@@ -8,7 +8,7 @@ import (
 	"github.com/itg-team/itg-ray/internal/chainctl"
 )
 
-func TestDefaultIdleModeIsSysProxyOnNonWindows(t *testing.T) {
+func TestDefaultIdleModeIsSysProxyOnDarwin(t *testing.T) {
 	if got := defaultIdleMode(); got != chainctl.ModeSysProxy {
 		t.Fatalf("defaultIdleMode() = %q, want %q", got, chainctl.ModeSysProxy)
 	}
