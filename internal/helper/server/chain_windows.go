@@ -58,31 +58,6 @@ func asStopper(c *supervisor.Child) coreStopper {
 	return c
 }
 
-// StartChainArgs is the JSON payload of OpStartChain.
-type StartChainArgs struct {
-	SingboxConfig json.RawMessage `json:"singbox_config"`
-	XrayConfig    json.RawMessage `json:"xray_config"`
-	ServerHost    string          `json:"server_host"`
-	ServerPort    int             `json:"server_port"`
-	TunName       string          `json:"tun_name"`
-	Mode          string          `json:"mode,omitempty"` // "" or "tun" => TUN; "sysproxy" => SysProxy
-	DnsAlias      string          `json:"dns_alias,omitempty"`
-	DnsServers    []string        `json:"dns_servers,omitempty"`
-}
-
-// StartChainResult is what OpStartChain returns on success.
-type StartChainResult struct {
-	SessionID  string `json:"session_id"`
-	TunLUID    uint64 `json:"tun_luid"`
-	SingboxPid int    `json:"singbox_pid"`
-	XrayPid    int    `json:"xray_pid"`
-}
-
-// StopChainArgs is the JSON payload of OpStopChain.
-type StopChainArgs struct {
-	SessionID string `json:"session_id"` // optional; used to defend against stale callers
-}
-
 // chainState tracks the active session inside the helper process.
 type chainState struct {
 	sessionID string
