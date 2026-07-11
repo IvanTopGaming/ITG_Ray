@@ -340,6 +340,12 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 	}
 	if in.Mode == ModeTun {
 		applyTunModeKillswitch(route, lanBypassPrepended)
+		// Bind outbound connections to the auto-detected default interface so
+		// direct-routed traffic egresses the physical NIC instead of looping
+		// back into the TUN (auto_route captures all destinations, including
+		// sing-box's own direct outbound). Without this, any "direct" rule
+		// (2ip.io, LAN bypass, etc.) times out. Cross-platform.
+		route["auto_detect_interface"] = true
 	}
 
 	upstreams := in.DNSUpstreams
