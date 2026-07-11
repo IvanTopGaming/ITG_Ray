@@ -101,25 +101,27 @@ func TestApplyNetwork_PortRangeGuard(t *testing.T) {
 	require.Equal(t, 8889, c.Network.SysProxy.HTTPPort, "in-range accepted")
 }
 
-// TestUpdateSection_GeoBaseURL_RoundTrips guards the geoBaseURL wiring:
-// a patch through the "network" section must persist and be reported back
-// by toView. Mirrors the allowLan/ipv6Mode round-trip shape.
-func TestUpdateSection_GeoBaseURL_RoundTrips(t *testing.T) {
+// TestUpdateSection_GeoSource_RoundTrips guards the geoPreset/geoCustomURL
+// wiring: a patch through the "network" section must persist and be reported
+// back by toView. Mirrors the allowLan/ipv6Mode round-trip shape.
+func TestUpdateSection_GeoSource_RoundTrips(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.json")
 	store := NewConfigStore(cfgPath, "test", "test")
 
 	view, err := store.UpdateSection("network", map[string]any{
-		"geoBaseURL": "https://mirror.example",
+		"geoPreset":    "custom",
+		"geoCustomURL": "https://mirror.example",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "https://mirror.example", view.Network.GeoBaseURL)
+	require.Equal(t, "custom", view.Network.GeoSource.Preset)
+	require.Equal(t, "https://mirror.example", view.Network.GeoSource.CustomURL)
 
-	// Survives a fresh reload from disk.
 	store2 := NewConfigStore(cfgPath, "test", "test")
 	v, err := store2.View()
 	require.NoError(t, err)
-	require.Equal(t, "https://mirror.example", v.Network.GeoBaseURL)
+	require.Equal(t, "custom", v.Network.GeoSource.Preset)
+	require.Equal(t, "https://mirror.example", v.Network.GeoSource.CustomURL)
 }
 
 // TestApplyKillSwitch verifies the per-key type-asserted handler writes
