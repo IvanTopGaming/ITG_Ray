@@ -111,7 +111,3 @@ func (m *Manager) fetch(ctx context.Context, src Source, tags []string, force bo
 		return m.fetchRunetfreedom(ctx, tags, force)
 	}
 }
-
-func (m *Manager) fetchRunetfreedom(ctx context.Context, tags []string, force bool) (map[string]string, error) {
-	return nil, fmt.Errorf("geo: runetfreedom provider not implemented")
-}

@@ -1,0 +1,82 @@
+package geo
+
+import (
+	"archive/zip"
+	"bytes"
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strings"
+	"testing"
+)
+
+func buildFixtureZip(t *testing.T) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	entries := map[string]string{
+		"rule-set-geosite/geosite-category-ru.srs": "GEOSITE-RU",
+		"rule-set-geoip/geoip-ru.srs":              "GEOIP-RU",
+	}
+	for name, body := range entries {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func TestResolve_Runetfreedom_ExtractsReferencedTags(t *testing.T) {
+	zipBytes := buildFixtureZip(t)
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		_, _ = w.Write(zipBytes)
+	}))
+	defer srv.Close()
+
+	m := NewManager(t.TempDir(), nil)
+	m.zipURLOverride = srv.URL
+
+	got, err := m.Resolve(context.Background(), Source{Preset: PresetRunetfreedom},
+		[]string{"geosite-category-ru", "geoip-ru"})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if b, _ := os.ReadFile(got["geosite-category-ru"]); string(b) != "GEOSITE-RU" {
+		t.Fatalf("geosite bytes = %q", b)
+	}
+	if b, _ := os.ReadFile(got["geoip-ru"]); string(b) != "GEOIP-RU" {
+		t.Fatalf("geoip bytes = %q", b)
+	}
+
+	if _, err := m.Resolve(context.Background(), Source{Preset: PresetRunetfreedom},
+		[]string{"geosite-category-ru", "geoip-ru"}); err != nil {
+		t.Fatalf("second Resolve: %v", err)
+	}
+	if hits != 1 {
+		t.Fatalf("expected 1 zip download (cache reuse), got %d", hits)
+	}
+}
+
+func TestResolve_Runetfreedom_AbsentTagErrors(t *testing.T) {
+	zipBytes := buildFixtureZip(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(zipBytes)
+	}))
+	defer srv.Close()
+	m := NewManager(t.TempDir(), nil)
+	m.zipURLOverride = srv.URL
+	_, err := m.Resolve(context.Background(), Source{Preset: PresetRunetfreedom}, []string{"geosite-ghost"})
+	if err == nil || !strings.Contains(err.Error(), "geosite-ghost") {
+		t.Fatalf("want error naming absent tag, got %v", err)
+	}
+}
