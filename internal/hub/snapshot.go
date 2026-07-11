@@ -85,9 +85,15 @@ type NetworkSettings struct {
 	SocksPort   int         `json:"socksPort"`   // sysproxy mode local port
 	HttpPort    int         `json:"httpPort"`    // sysproxy mode local HTTP port
 	AllowLAN    bool        `json:"allowLan"`    // expose proxy to LAN
-	IPv6Mode    string      `json:"ipv6Mode"`    // "prefer-v4" | "prefer-v6" | "disabled"
-	GeoBaseURL  string      `json:"geoBaseURL"`  // rule-set source base URL
-	DNS         DNSSettings `json:"dns"`
+	IPv6Mode    string            `json:"ipv6Mode"`  // "prefer-v4" | "prefer-v6" | "disabled"
+	GeoSource   GeoSourceSettings `json:"geoSource"` // rule-set repository selection
+	DNS         DNSSettings       `json:"dns"`
+}
+
+// GeoSourceSettings surfaces the geo rule-set repository selection.
+type GeoSourceSettings struct {
+	Preset    string `json:"preset"`
+	CustomURL string `json:"customURL"`
 }
 
 // DNSSettings holds resolver overrides surfaced via SettingsView.

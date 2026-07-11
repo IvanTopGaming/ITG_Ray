@@ -37,6 +37,11 @@ export interface GeneralSettings {
   startMinimized: boolean;
 }
 
+export interface GeoSourceSettings {
+  preset: string;
+  customURL: string;
+}
+
 export interface Group {
   id: string;
   name: string;
@@ -76,7 +81,7 @@ export interface NetworkSettings {
   httpPort: number;
   allowLan: boolean;
   ipv6Mode: string;
-  geoBaseURL: string;
+  geoSource: GeoSourceSettings;
   dns: DNSSettings;
 }
 
@@ -317,6 +322,7 @@ export interface RpcMethods {
   "app.getPublicIP": { params: Empty; result: string };
   "app.getSnapshot": { params: Empty; result: Snapshot };
   "app.ping": { params: Empty; result: PingResult };
+  "geo.refresh": { params: Empty; result: Empty };
   "helper.install": { params: Empty; result: Empty };
   "helper.installLinux": { params: Empty; result: Empty };
   "helper.reinstall": { params: Empty; result: Empty };
@@ -365,6 +371,7 @@ export type RpcResult<M extends RpcMethod> = RpcMethods[M]["result"];
 export type EventTopic =
   | "bridge.state"
   | "chain.error"
+  | "geo.progress"
   | "helper.state"
   | "probe.result"
   | "rules.changed"

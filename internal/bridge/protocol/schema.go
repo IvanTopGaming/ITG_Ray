@@ -219,6 +219,11 @@ type RulesRuleMoveParams struct {
 	ToGroupID string `json:"toGroupId"`
 }
 
+// GeoService — methods under "geo." namespace.
+type GeoService interface {
+	Refresh(p Empty) (Empty, error)
+}
+
 // EventTopics enumerates the bridge → main notification topics. The
 // codegen tool emits these as a TS string-union type.
 type EventTopic string
@@ -232,5 +237,6 @@ const (
 	TopicProbeResult    EventTopic = "probe.result"
 	TopicServersChanged EventTopic = "servers.changed"
 	TopicRulesChanged   EventTopic = "rules.changed"
+	TopicGeoProgress    EventTopic = "geo.progress"
 	TopicBridgeState    EventTopic = "bridge.state"
 )

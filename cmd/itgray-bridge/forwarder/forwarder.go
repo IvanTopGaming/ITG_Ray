@@ -25,7 +25,7 @@ type Forwarder struct {
 	Bus Emitter
 }
 
-// hubToProtocol maps the 8 Wails-style hub event names (with ":")
+// hubToProtocol maps the 9 Wails-style hub event names (with ":")
 // to the dotted protocol topic names declared in
 // internal/bridge/protocol/schema.go EventTopic constants.
 var hubToProtocol = map[string]string{
@@ -37,6 +37,7 @@ var hubToProtocol = map[string]string{
 	hub.EventProbeResult:    "probe.result",
 	hub.EventServersChanged: "servers.changed",
 	hub.EventRulesChanged:   "rules.changed",
+	hub.EventGeoProgress:    "geo.progress",
 }
 
 // Run subscribes to the hub and forwards events until ctx is cancelled

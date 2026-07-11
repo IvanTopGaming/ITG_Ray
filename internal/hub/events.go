@@ -33,3 +33,7 @@ const EventServersChanged = "servers:changed"
 // successful mutation. Renderer re-fetches via rules.list rather than
 // diffing payloads.
 const EventRulesChanged = "rules:changed"
+
+// EventGeoProgress is published during geo rule-set refresh to surface
+// download progress to the frontend.
+const EventGeoProgress = "geo:progress"
