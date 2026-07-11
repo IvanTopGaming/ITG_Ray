@@ -3,14 +3,12 @@ package configgen
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"strings"
 
 	"github.com/itg-team/itg-ray/internal/rules"
 )
-
-// DefaultGeoBaseURL is the rule-set source used when GeoBaseURL is empty.
-const DefaultGeoBaseURL = "https://raw.githubusercontent.com/SagerNet"
 
 // Mode selects the sing-box inbound shape.
 type Mode string
@@ -58,10 +56,11 @@ type SingboxInput struct {
 	// LogLevel sets the sing-box log block's "level". Valid sing-box
 	// values: trace|debug|info|warn|error|fatal|panic. Empty → "info".
 	LogLevel string
-	// GeoBaseURL is the base for remote rule-set (.srs) downloads. Empty →
-	// DefaultGeoBaseURL. geosite-<x> → <base>/sing-geosite/rule-set/geosite-<x>.srs;
-	// geoip-<cc> → <base>/sing-geoip/rule-set/geoip-<cc>.srs.
-	GeoBaseURL string
+	// GeoRuleSets maps each referenced geo rule_set tag (e.g. "geosite-ru")
+	// to the absolute path of a pre-downloaded .srs file. The bridge fills
+	// this in before BuildSingbox so sing-box loads rule-sets locally with
+	// no network at startup. Empty → no geo rules referenced.
+	GeoRuleSets map[string]string
 }
 
 // logLevelOrDefault returns a valid sing-box log level, defaulting to
@@ -135,12 +134,27 @@ func defaultDomainResolverFor(in *SingboxInput) string {
 	return "default"
 }
 
-func geoRuleSetURL(tag, base string) string {
-	base = strings.TrimRight(base, "/")
-	if strings.HasPrefix(tag, "geoip-") {
-		return base + "/sing-geoip/rule-set/" + tag + ".srs"
+// GeoTags compiles the model and returns the deduped geo rule_set tags
+// (those prefixed geosite-/geoip-) referenced by its enabled rules, so the
+// bridge knows which .srs files to pre-download. Returns nil on compile or
+// unmarshal error.
+func GeoTags(m rules.Model) []string {
+	raw, err := rules.Compile(m)
+	if err != nil {
+		return nil
 	}
-	return base + "/sing-geosite/rule-set/" + tag + ".srs"
+	var route map[string]any
+	if err := json.Unmarshal(raw, &route); err != nil {
+		return nil
+	}
+	all := collectRuleSetTags(route)
+	tags := make([]string, 0, len(all))
+	for _, t := range all {
+		if strings.HasPrefix(t, "geosite-") || strings.HasPrefix(t, "geoip-") {
+			tags = append(tags, t)
+		}
+	}
+	return tags
 }
 
 // collectRuleSetTags returns the deduped set of rule_set tags referenced by
@@ -464,25 +478,20 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 		"route": route,
 	}
 	if tags := collectRuleSetTags(route); len(tags) > 0 {
-		base := in.GeoBaseURL
-		if base == "" {
-			base = DefaultGeoBaseURL
-		}
 		decls := make([]map[string]any, 0, len(tags))
 		for _, tag := range tags {
+			path, ok := in.GeoRuleSets[tag]
+			if !ok {
+				return nil, fmt.Errorf("BuildSingbox: no local .srs path for rule_set tag %q", tag)
+			}
 			decls = append(decls, map[string]any{
-				"tag":             tag,
-				"type":            "remote",
-				"format":          "binary",
-				"url":             geoRuleSetURL(tag, base),
-				"download_detour": "proxy",
-				"update_interval": "168h",
+				"tag":    tag,
+				"type":   "local",
+				"format": "binary",
+				"path":   path,
 			})
 		}
 		route["rule_set"] = decls
-		doc["experimental"] = map[string]any{
-			"cache_file": map[string]any{"enabled": true},
-		}
 	}
 	var inbounds []map[string]any
 	switch in.Mode {
