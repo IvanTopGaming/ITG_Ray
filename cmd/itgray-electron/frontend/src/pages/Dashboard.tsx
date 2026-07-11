@@ -273,7 +273,7 @@ function StatusLine({
   const { t } = useTranslation();
   const label =
     geoPct != null
-      ? `Загрузка геобаз… ${geoPct}%`
+      ? t("dashboard.statusLine.geoLoading", { pct: geoPct })
       : {
           idle: t("dashboard.statusLine.idle"),
           connecting: t("dashboard.statusLine.connecting"),

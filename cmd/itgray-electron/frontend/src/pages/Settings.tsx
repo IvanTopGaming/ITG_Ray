@@ -356,36 +356,39 @@ export function Settings() {
           />
         </SettingRow>
         <SettingRow
-          label="Источник geo-правил"
-          hint="Репозиторий баз geo-правил (geosite/geoip). Runetfreedom — под РФ-обход, SagerNet — универсальный."
+          label={t('settings.connection.geoSource')}
+          hint={t('settings.connection.geoSourceHint')}
         >
           <Dropdown
             value={s.geoPreset}
             onChange={(v) => update({ geoPreset: v as GeoPreset })}
             options={[
-              { value: 'runetfreedom', label: 'Runetfreedom (RU)' },
-              { value: 'sagernet', label: 'SagerNet' },
-              { value: 'custom', label: 'Свой URL' },
-            ] as const}
+              { value: 'runetfreedom', label: t('settings.connection.geoSourceRunetfreedom') },
+              { value: 'sagernet', label: t('settings.connection.geoSourceSagerNet') },
+              { value: 'custom', label: t('settings.connection.geoSourceCustom') },
+            ]}
           />
         </SettingRow>
         <Reveal show={s.geoPreset === 'custom'}>
           <SettingRow
-            label="Базовый URL источника"
-            hint="Адрес репозитория с .srs-файлами (схема как у SagerNet)."
+            label={t('settings.connection.geoCustomUrl')}
+            hint={t('settings.connection.geoCustomUrlHint')}
             stacked
           >
             <input
               type="text"
-              aria-label="Базовый URL источника geo-правил"
+              aria-label={t('settings.connection.geoCustomUrl')}
               value={s.geoCustomURL}
               onChange={(e) => update({ geoCustomURL: e.target.value })}
-              placeholder="https://raw.githubusercontent.com/SagerNet"
+              placeholder={t('settings.connection.geoCustomUrlPlaceholder')}
               className="w-full rounded-[10px] border border-white/[0.10] bg-white/[0.04] px-3 py-1.5 text-[13px] text-white/[0.92] placeholder:text-white/[0.35] focus:border-accent/40 focus:bg-white/[0.06] focus:outline-none"
             />
           </SettingRow>
         </Reveal>
-        <SettingRow label="Базы geo-правил" hint="Скачать/обновить .srs для текущего источника">
+        <SettingRow
+          label={t('settings.connection.geoDatabases')}
+          hint={t('settings.connection.geoDatabasesHint')}
+        >
           <button
             type="button"
             onClick={updateGeoDatabases}
@@ -393,8 +396,10 @@ export function Settings() {
             className="px-3.5 py-1.5 text-xs font-semibold rounded-[10px] bg-gradient-to-b from-accent-start to-accent-mid text-white disabled:opacity-60"
           >
             {geoRefreshing
-              ? (geo.total > 0 ? `Загрузка… ${geoPercent}%` : 'Загрузка…')
-              : 'Обновить базы'}
+              ? (geo.total > 0
+                  ? t('settings.connection.geoUpdatingPct', { pct: geoPercent })
+                  : t('settings.connection.geoUpdating'))
+              : t('settings.connection.geoUpdate')}
           </button>
         </SettingRow>
         <Reveal show={s.defaultMode === 'tun'}>

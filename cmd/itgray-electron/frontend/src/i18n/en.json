@@ -47,7 +47,8 @@
       "connecting": "CONNECTING…",
       "connected": "CONNECTED",
       "disconnecting": "DISCONNECTING…",
-      "error": "ERROR"
+      "error": "ERROR",
+      "geoLoading": "LOADING GEO DATABASES… {{pct}}%"
     },
     "connectionFailed": "Connection failed",
     "noActiveConnection": "No active connection",
@@ -330,7 +331,20 @@
       "interfaceCidrHint": "TUN adapter IPv4 address and subnet. Default 198.18.0.1/15.",
       "interfaceCidrPlaceholder": "198.18.0.1/15",
       "mtu": "MTU",
-      "mtuHint": "TUN interface MTU in bytes. Default 1500. Range 576–9000."
+      "mtuHint": "TUN interface MTU in bytes. Default 1500. Range 576–9000.",
+      "geoSource": "Geo rule-set source",
+      "geoSourceHint": "Repository the geo rule-set databases (geosite/geoip) are downloaded from. Runetfreedom is tuned for RU-unblocking, SagerNet is general-purpose.",
+      "geoSourceRunetfreedom": "Runetfreedom (RU)",
+      "geoSourceSagerNet": "SagerNet",
+      "geoSourceCustom": "Custom URL",
+      "geoCustomUrl": "Source base URL",
+      "geoCustomUrlHint": "Base address of the .srs repository (same layout as SagerNet).",
+      "geoCustomUrlPlaceholder": "https://raw.githubusercontent.com/SagerNet",
+      "geoDatabases": "Geo databases",
+      "geoDatabasesHint": "Download/refresh the .srs files for the current source.",
+      "geoUpdate": "Update databases",
+      "geoUpdating": "Loading…",
+      "geoUpdatingPct": "Loading… {{pct}}%"
     },
     "killSwitch": {
       "title": "Kill switch",

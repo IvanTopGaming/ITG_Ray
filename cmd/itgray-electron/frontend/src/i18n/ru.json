@@ -47,7 +47,8 @@
       "connecting": "Подключение…",
       "connected": "Подключено",
       "disconnecting": "Отключение…",
-      "error": "Ошибка"
+      "error": "Ошибка",
+      "geoLoading": "Загрузка геобаз… {{pct}}%"
     },
     "connectionFailed": "Не удалось подключиться",
     "noActiveConnection": "Нет активного подключения",
@@ -331,7 +332,20 @@
       "interfaceCidrHint": "IPv4-адрес и подсеть адаптера TUN. По умолчанию 198.18.0.1/15.",
       "interfaceCidrPlaceholder": "198.18.0.1/15",
       "mtu": "MTU",
-      "mtuHint": "MTU интерфейса TUN в байтах. По умолчанию 1500. Диапазон 576–9000."
+      "mtuHint": "MTU интерфейса TUN в байтах. По умолчанию 1500. Диапазон 576–9000.",
+      "geoSource": "Источник geo-правил",
+      "geoSourceHint": "Репозиторий баз geo-правил (geosite/geoip). Runetfreedom — под РФ-обход, SagerNet — универсальный.",
+      "geoSourceRunetfreedom": "Runetfreedom (RU)",
+      "geoSourceSagerNet": "SagerNet",
+      "geoSourceCustom": "Свой URL",
+      "geoCustomUrl": "Базовый URL источника",
+      "geoCustomUrlHint": "Адрес репозитория с .srs-файлами (схема как у SagerNet).",
+      "geoCustomUrlPlaceholder": "https://raw.githubusercontent.com/SagerNet",
+      "geoDatabases": "Базы geo-правил",
+      "geoDatabasesHint": "Скачать/обновить .srs для текущего источника.",
+      "geoUpdate": "Обновить базы",
+      "geoUpdating": "Загрузка…",
+      "geoUpdatingPct": "Загрузка… {{pct}}%"
     },
     "killSwitch": {
       "title": "Аварийное отключение",
