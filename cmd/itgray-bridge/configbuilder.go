@@ -89,6 +89,7 @@ func buildConfigs(dataDir, configPath string, store *rules.Store) chainctl.Confi
 				DNSUpstreams:        chainctl.ResolveDNS(net.DNS),
 				AllowLAN:            net.AllowLAN,
 				IPv6Strategy:        chainctl.MapIPv6Strategy(net.IPv6Mode),
+				GeoBaseURL:          net.GeoBaseURL,
 				Rules:               loadRulesFromDataDir(dataDir, store),
 				LogLevel:            logLevel,
 				RouteExcludeAddress: serverExcludeForTUN(serverIP),
@@ -103,6 +104,7 @@ func buildConfigs(dataDir, configPath string, store *rules.Store) chainctl.Confi
 				DNSUpstreams:     chainctl.ResolveDNS(net.DNS),
 				AllowLAN:         net.AllowLAN,
 				IPv6Strategy:     chainctl.MapIPv6Strategy(net.IPv6Mode),
+				GeoBaseURL:       net.GeoBaseURL,
 				Rules:            loadRulesFromDataDir(dataDir, store),
 				LogLevel:         logLevel,
 			}

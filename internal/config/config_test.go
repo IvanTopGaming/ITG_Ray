@@ -17,6 +17,13 @@ func TestConfig_LoadDefaults(t *testing.T) {
 	require.Equal(t, 1500, c.Network.TUN.MTU)
 }
 
+func TestDefaults_GeoBaseURL(t *testing.T) {
+	c := defaults()
+	if c.Network.GeoBaseURL != "https://raw.githubusercontent.com/SagerNet" {
+		t.Fatalf("GeoBaseURL default = %q", c.Network.GeoBaseURL)
+	}
+}
+
 func TestConfig_SaveLoadRoundTrip(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "c.json")
 	c, _ := Load(p)
