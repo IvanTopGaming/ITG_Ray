@@ -87,7 +87,7 @@ export function Dropdown<T extends string = string>({
             exit={{ opacity: 0, y: -4, scale: 0.98 }}
             transition={{ duration: 0.15, ease: SNAP_EASE }}
             className={cn(
-              "absolute left-0 top-full z-30 mt-1 max-h-[220px] w-max min-w-full max-w-[min(20rem,90vw)] overflow-y-auto rounded-lg border border-white/[0.18] bg-bg-1/95 p-1 shadow-[0_18px_36px_-10px_rgba(0,0,0,0.6)] backdrop-blur-xl",
+              "absolute right-0 top-full z-30 mt-1 max-h-[220px] w-max min-w-full max-w-[min(20rem,90vw)] overflow-y-auto rounded-lg border border-white/[0.18] bg-bg-1/95 p-1 shadow-[0_18px_36px_-10px_rgba(0,0,0,0.6)] backdrop-blur-xl",
               menuClassName
             )}
           >
