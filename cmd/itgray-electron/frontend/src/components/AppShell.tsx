@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
@@ -63,7 +63,9 @@ export function AppShell() {
       <div className="relative z-10 flex w-full min-h-0 flex-1">
         <Sidebar />
         <main className="relative flex-1 overflow-y-auto px-8 py-8">
-          <Outlet />
+          <Suspense fallback={null}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
 

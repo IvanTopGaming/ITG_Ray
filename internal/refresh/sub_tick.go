@@ -53,6 +53,9 @@ func (d *Driver) syncOne(ctx context.Context, sub subscription.Stored) {
 		slog.String("message", truncate(meta.Message, 80)),
 		slog.Duration("duration", d.now().Sub(start)),
 	)
+	if d.onSync != nil {
+		d.onSync(sub.ID)
+	}
 }
 
 // recordMeta is a small helper that respects ctx-cancel for shutdown.

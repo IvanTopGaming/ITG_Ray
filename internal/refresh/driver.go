@@ -49,6 +49,10 @@ type Config struct {
 	Now                func() time.Time
 	Rand               *rand.Rand
 	Log                *slog.Logger
+	// OnSync, when set, is called with the subscription ID after each
+	// sync attempt completes (success or recorded failure). The Electron
+	// bridge uses it to publish hub events so the UI refreshes live.
+	OnSync func(subID string)
 }
 
 // Driver owns the background goroutines.
@@ -65,6 +69,7 @@ type Driver struct {
 	now                func() time.Time
 	rand               *rand.Rand
 	log                *slog.Logger
+	onSync             func(subID string)
 
 	serversMu sync.Mutex
 	randMu    sync.Mutex
@@ -87,6 +92,7 @@ func NewDriver(c Config) *Driver {
 		now:                c.Now,
 		rand:               c.Rand,
 		log:                c.Log,
+		onSync:             c.OnSync,
 	}
 	if d.syncFunc == nil {
 		d.syncFunc = subscription.Sync

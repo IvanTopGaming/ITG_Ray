@@ -816,21 +816,20 @@ function ConnectionInfo({
             </span>
           </div>
         ))}
-        <div className="my-1 h-px bg-white/8" />
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-white/40">
-            {t("dashboard.conn.helper")}
-          </span>
-          <span className="flex items-center gap-1.5 font-mono text-[11px] text-white/85">
-            <span
-              className={cn(
-                "inline-block h-1.5 w-1.5 rounded-full",
-                helperColor,
-              )}
-            />
-            {t(`status.${helperState}`)}
-          </span>
-        </div>
+      </div>
+      <div className="mt-auto flex items-center justify-between gap-3 border-t border-white/[0.08] pt-3">
+        <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-white/40">
+          {t("dashboard.conn.helper")}
+        </span>
+        <span className="flex items-center gap-1.5 font-mono text-[11px] text-white/85">
+          <span
+            className={cn(
+              "inline-block h-1.5 w-1.5 rounded-full",
+              helperColor,
+            )}
+          />
+          {t(`status.${helperState}`)}
+        </span>
       </div>
     </div>
   );

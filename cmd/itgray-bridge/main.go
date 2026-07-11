@@ -24,6 +24,7 @@ import (
 	"github.com/itg-team/itg-ray/internal/geo"
 	"github.com/itg-team/itg-ray/internal/hub"
 	"github.com/itg-team/itg-ray/internal/hwid"
+	"github.com/itg-team/itg-ray/internal/refresh"
 	"github.com/itg-team/itg-ray/internal/rules"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/subscription"
@@ -314,6 +315,22 @@ func main() {
 	// until the goroutine has flushed any buffered events — call it after
 	// d.Serve so in-flight notifications reach stdout before main exits.
 	waitFwd := forwarder.Forwarder{Hub: h, Bus: b}.Start(ctx)
+
+	// Start the background subscription auto-refresh loop (per-sub interval
+	// from config, first tick within 30s of launch). OnSync republishes hub
+	// events so the renderer's subs/servers stores refresh live. This was
+	// previously wired only in itgray-cli, so the Electron app never
+	// auto-updated subscriptions.
+	refreshDriver := refresh.NewDriver(refresh.Config{
+		Subs:        &subStore,
+		ServersPath: serverStore.path,
+		Log:         slog.Default(),
+		OnSync: func(subID string) {
+			h.Publish(hub.Event{Name: hub.EventSubSynced, Payload: map[string]any{"id": subID}})
+			h.Publish(hub.Event{Name: hub.EventServersChanged, Payload: map[string]any{}})
+		},
+	})
+	go func() { _ = refreshDriver.Run(ctx) }()
 
 	// Announce bridge readiness. Renderer gates mutation buttons on
 	// this state; "restarting"/"failed" are emitted by Electron main
