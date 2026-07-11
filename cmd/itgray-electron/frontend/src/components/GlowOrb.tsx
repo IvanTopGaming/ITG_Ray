@@ -17,6 +17,7 @@ interface GlowOrbProps {
   disabled?: boolean;
   ariaLabel?: string;
   className?: string;
+  progress?: number | null;
 }
 
 interface OrbStyle {
@@ -82,9 +83,11 @@ export const GlowOrb = React.memo(function GlowOrb({
   disabled = false,
   ariaLabel,
   className,
+  progress = null,
 }: GlowOrbProps) {
   const { t } = useTranslation();
   const s = STYLES[status];
+  const pct = progress == null ? null : Math.max(0, Math.min(100, progress));
   const interactive = Boolean(onClick) && !disabled;
   const iconSize = Math.round(size * 0.34);
 
@@ -106,7 +109,7 @@ export const GlowOrb = React.memo(function GlowOrb({
 
   const content = (
     <>
-      {status === "connecting" && (
+      {status === "connecting" && pct == null && (
         <svg
           aria-hidden
           className="absolute inset-0 -rotate-90 animate-spin"
@@ -123,6 +126,36 @@ export const GlowOrb = React.memo(function GlowOrb({
             strokeWidth="2"
             strokeLinecap="round"
             pathLength={100}
+          />
+        </svg>
+      )}
+      {status === "connecting" && pct != null && (
+        <svg
+          aria-hidden
+          className="absolute inset-0 -rotate-90"
+          viewBox="0 0 100 100"
+        >
+          <circle
+            cx="50"
+            cy="50"
+            r="49"
+            fill="none"
+            stroke="rgba(255,194,102,0.18)"
+            strokeWidth="2"
+          />
+          <circle
+            cx="50"
+            cy="50"
+            r="49"
+            fill="none"
+            stroke="#ffc266"
+            strokeWidth="2"
+            strokeLinecap="round"
+            pathLength={100}
+            strokeDasharray={`${pct} 100`}
+            style={{
+              transition: "stroke-dasharray 220ms cubic-bezier(0.16, 1, 0.3, 1)",
+            }}
           />
         </svg>
       )}

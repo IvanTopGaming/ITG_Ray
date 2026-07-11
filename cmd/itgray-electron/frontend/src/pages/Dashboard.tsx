@@ -25,6 +25,7 @@ import {
   type SpeedPoint,
 } from "@/lib/dashStore";
 import { useIp, ipRefresh, ipReset } from "@/lib/ipStore";
+import { useGeoProgress } from "@/lib/geoStore";
 import { useSettings } from "@/lib/settings";
 import { pickQuickSwitch } from "@/lib/quickSwitch";
 import type { hub } from "@/lib/itg/models";
@@ -54,8 +55,11 @@ export function Dashboard() {
   const { t } = useTranslation();
   const dash = useDash();
   const ip = useIp();
+  const geo = useGeoProgress();
   const [settings] = useSettings();
   const eff = effectiveStatus(dash) as OrbStatus;
+  const geoLoading = eff === "connecting" && geo.active && geo.total > 0;
+  const geoPct = geoLoading ? Math.round((geo.done / geo.total) * 100) : null;
 
   const quickSwitchServers = useMemo(
     () => pickQuickSwitch(dash.allServers, 3),
@@ -180,11 +184,12 @@ export function Dashboard() {
               onClick={handleOrbClick}
               disabled={orbDisabled}
               ariaLabel={ariaLabelFor(eff, t)}
+              progress={geoPct}
             />
           </div>
 
           <div className="flex h-[140px] min-w-0 flex-1 flex-col gap-4">
-            <StatusLine status={eff} />
+            <StatusLine status={eff} geoPct={geoPct} />
             <ActiveRoute
               status={eff}
               mode={dash.mode}
@@ -258,15 +263,24 @@ function ariaLabelFor(
   }
 }
 
-function StatusLine({ status }: { status: OrbStatus }) {
+function StatusLine({
+  status,
+  geoPct,
+}: {
+  status: OrbStatus;
+  geoPct?: number | null;
+}) {
   const { t } = useTranslation();
-  const label = {
-    idle: t("dashboard.statusLine.idle"),
-    connecting: t("dashboard.statusLine.connecting"),
-    connected: t("dashboard.statusLine.connected"),
-    disconnecting: t("dashboard.statusLine.disconnecting"),
-    error: t("dashboard.statusLine.error"),
-  }[status];
+  const label =
+    geoPct != null
+      ? `Загрузка геобаз… ${geoPct}%`
+      : {
+          idle: t("dashboard.statusLine.idle"),
+          connecting: t("dashboard.statusLine.connecting"),
+          connected: t("dashboard.statusLine.connected"),
+          disconnecting: t("dashboard.statusLine.disconnecting"),
+          error: t("dashboard.statusLine.error"),
+        }[status];
   const color = {
     idle: "text-white/55",
     connecting: "text-warn",
