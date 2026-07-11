@@ -39,6 +39,9 @@ contextBridge.exposeInMainWorld("itg", {
     update: (section: string, patch: Record<string, unknown>) =>
       rpc("settings.update", { section, patch }),
   },
+  geo: {
+    refresh: () => rpc("geo.refresh"),
+  },
   helper: {
     status: () => rpc("helper.status"),
     install: () => rpc("helper.install"),

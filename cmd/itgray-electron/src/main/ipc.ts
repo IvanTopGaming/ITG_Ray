@@ -8,6 +8,7 @@ import { defaultAutostart } from "./autostart";
 // `bridge.state` is supervisor-driven and forwarded separately below.
 const BRIDGE_TOPICS: Exclude<EventTopic, "bridge.state">[] = [
   "chain.error",
+  "geo.progress",
   "helper.state",
   "probe.result",
   "servers.changed",
