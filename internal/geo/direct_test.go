@@ -83,3 +83,23 @@ func TestResolve_Direct_MissingTagErrors(t *testing.T) {
 		t.Fatalf("want error naming tag, got %v", err)
 	}
 }
+
+func TestResolve_Direct_CategoryFallback(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/geosite-category-ru.srs") {
+			_, _ = w.Write([]byte("CAT-RU"))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	m := NewManager(t.TempDir(), nil)
+	got, err := m.Resolve(context.Background(), Source{Preset: PresetCustom, CustomURL: srv.URL}, []string{"geosite-ru"})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if b, _ := os.ReadFile(got["geosite-ru"]); string(b) != "CAT-RU" {
+		t.Fatalf("fallback bytes = %q", b)
+	}
+}

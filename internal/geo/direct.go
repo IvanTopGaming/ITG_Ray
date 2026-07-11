@@ -29,7 +29,7 @@ func (m *Manager) fetchDirect(ctx context.Context, preset, base string, tags []s
 				continue
 			}
 		}
-		data, err := m.download(ctx, directURL(tag, base))
+		data, err := m.downloadFirst(ctx, base, sourceNames(tag))
 		if err != nil {
 			return nil, fmt.Errorf("geo: fetch %q from %s: %w", tag, preset, err)
 		}
@@ -42,6 +42,18 @@ func (m *Manager) fetchDirect(ctx context.Context, preset, base string, tags []s
 		m.report(done, total)
 	}
 	return out, nil
+}
+
+func (m *Manager) downloadFirst(ctx context.Context, base string, names []string) ([]byte, error) {
+	var lastErr error
+	for _, n := range names {
+		data, err := m.download(ctx, directURL(n, base))
+		if err == nil {
+			return data, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
 }
 
 func (m *Manager) download(ctx context.Context, url string) ([]byte, error) {

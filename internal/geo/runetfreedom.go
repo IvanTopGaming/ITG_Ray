@@ -51,8 +51,14 @@ func (m *Manager) fetchRunetfreedom(ctx context.Context, tags []string, force bo
 		index[f.Name] = f
 	}
 	for _, tag := range missing {
-		f, ok := index[runetfreedomZipEntry(tag)]
-		if !ok {
+		var f *zip.File
+		for _, n := range sourceNames(tag) {
+			if hit, ok := index[runetfreedomZipEntry(n)]; ok {
+				f = hit
+				break
+			}
+		}
+		if f == nil {
 			return nil, fmt.Errorf("geo: tag %q not found in runetfreedom source", tag)
 		}
 		rc, err := f.Open()

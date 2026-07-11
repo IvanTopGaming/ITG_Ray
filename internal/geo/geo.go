@@ -49,6 +49,13 @@ func (m *Manager) report(done, total int64) {
 	}
 }
 
+func sourceNames(tag string) []string {
+	if strings.HasPrefix(tag, "geosite-") && !strings.HasPrefix(tag, "geosite-category-") {
+		return []string{tag, "geosite-category-" + strings.TrimPrefix(tag, "geosite-")}
+	}
+	return []string{tag}
+}
+
 func presetDir(preset string) string {
 	switch preset {
 	case PresetRunetfreedom, PresetSagerNet, PresetCustom:

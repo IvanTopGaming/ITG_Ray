@@ -80,3 +80,32 @@ func TestResolve_Runetfreedom_AbsentTagErrors(t *testing.T) {
 		t.Fatalf("want error naming absent tag, got %v", err)
 	}
 }
+
+func TestResolve_Runetfreedom_CategoryFallback(t *testing.T) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, err := zw.Create("rule-set-geosite/geosite-category-ru.srs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write([]byte("CAT-RU")); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(buf.Bytes())
+	}))
+	defer srv.Close()
+
+	m := NewManager(t.TempDir(), nil)
+	m.zipURLOverride = srv.URL
+	got, err := m.Resolve(context.Background(), Source{Preset: PresetRunetfreedom}, []string{"geosite-ru"})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if b, _ := os.ReadFile(got["geosite-ru"]); string(b) != "CAT-RU" {
+		t.Fatalf("fallback bytes = %q", b)
+	}
+}
