@@ -28,13 +28,19 @@ type SysProxy struct {
 
 // Network bundles the operation-mode-specific options.
 type Network struct {
-	Mode       string   `json:"mode"`
-	TUN        TUN      `json:"tun"`
-	SysProxy   SysProxy `json:"sysproxy"`
-	AllowLAN   bool     `json:"allow_lan"`
-	IPv6Mode   string   `json:"ipv6_mode"` // "prefer-v4" | "prefer-v6" | "disabled"
-	DNS        DNS      `json:"dns"`
-	GeoBaseURL string   `json:"geo_base_url"`
+	Mode      string    `json:"mode"`
+	TUN       TUN       `json:"tun"`
+	SysProxy  SysProxy  `json:"sysproxy"`
+	AllowLAN  bool      `json:"allow_lan"`
+	IPv6Mode  string    `json:"ipv6_mode"` // "prefer-v4" | "prefer-v6" | "disabled"
+	DNS       DNS       `json:"dns"`
+	GeoSource GeoSource `json:"geo_source"`
+}
+
+// GeoSource selects the geo rule-set repository.
+type GeoSource struct {
+	Preset    string `json:"preset"`
+	CustomURL string `json:"custom_url"`
 }
 
 // EffectiveMode returns the user-facing Mode, normalizing the legacy
@@ -102,13 +108,13 @@ func defaults() Config {
 		Version: 1,
 		General: General{Language: "en"},
 		Network: Network{
-			Mode:       "tun",
-			TUN:        TUN{IPv4CIDR: "198.18.0.1/15", MTU: 1500},
-			SysProxy:   SysProxy{HTTPPort: 8888, SOCKSPort: 1080},
-			AllowLAN:   false,
-			IPv6Mode:   "prefer-v4",
-			DNS:        DNS{Mode: "auto", Servers: nil},
-			GeoBaseURL: "https://raw.githubusercontent.com/SagerNet",
+			Mode:      "tun",
+			TUN:       TUN{IPv4CIDR: "198.18.0.1/15", MTU: 1500},
+			SysProxy:  SysProxy{HTTPPort: 8888, SOCKSPort: 1080},
+			AllowLAN:  false,
+			IPv6Mode:  "prefer-v4",
+			DNS:       DNS{Mode: "auto", Servers: nil},
+			GeoSource: GeoSource{Preset: "runetfreedom", CustomURL: ""},
 		},
 		KillSwitch: KillSwitch{Enabled: true},
 		Subscriptions: Subscriptions{

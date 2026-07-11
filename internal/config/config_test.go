@@ -17,10 +17,13 @@ func TestConfig_LoadDefaults(t *testing.T) {
 	require.Equal(t, 1500, c.Network.TUN.MTU)
 }
 
-func TestDefaults_GeoBaseURL(t *testing.T) {
+func TestDefaults_GeoSource(t *testing.T) {
 	c := defaults()
-	if c.Network.GeoBaseURL != "https://raw.githubusercontent.com/SagerNet" {
-		t.Fatalf("GeoBaseURL default = %q", c.Network.GeoBaseURL)
+	if c.Network.GeoSource.Preset != "runetfreedom" {
+		t.Fatalf("GeoSource.Preset default = %q", c.Network.GeoSource.Preset)
+	}
+	if c.Network.GeoSource.CustomURL != "" {
+		t.Fatalf("GeoSource.CustomURL default = %q", c.Network.GeoSource.CustomURL)
 	}
 }
 
