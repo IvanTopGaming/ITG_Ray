@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -36,6 +37,11 @@ func Spawn(name, exe string, args []string, logPath string) (*Child, error) {
 	}
 
 	cmd := exec.Command(exe, args...) //nolint:gosec // exe and args fully controlled by Helper
+	// Run in the runtime dir (where logPath lives) so relative files the
+	// child writes — e.g. sing-box's cache_file "cache.db" — land beside the
+	// session config/logs instead of the process CWD (root "/" under systemd
+	// on Linux, System32 for a Windows service).
+	cmd.Dir = filepath.Dir(logPath)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 

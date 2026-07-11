@@ -52,3 +52,18 @@ func TestStopOnExitedProcessIsNoop(t *testing.T) {
 	// Stop on an already-exited process should not error.
 	require.NoError(t, c.Stop(time.Second))
 }
+
+func TestSpawnRunsInLogDir(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "child.log")
+	// The child writes a RELATIVE file; with cmd.Dir set to the log's dir it
+	// must land in `dir`, not the test process CWD.
+	c, err := Spawn("writer", "/bin/sh", []string{"-c", "echo ok > relout.txt"}, logPath)
+	if err != nil {
+		t.Fatalf("Spawn: %v", err)
+	}
+	<-c.Done()
+	if _, err := os.Stat(filepath.Join(dir, "relout.txt")); err != nil {
+		t.Fatalf("relative file did not land in log dir: %v", err)
+	}
+}
