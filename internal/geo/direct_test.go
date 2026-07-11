@@ -63,6 +63,15 @@ func TestResolve_Direct_DownloadsAndCaches(t *testing.T) {
 	}
 }
 
+func TestResolve_RejectsPathTraversalTag(t *testing.T) {
+	m := NewManager(t.TempDir(), nil)
+	for _, bad := range []string{"geosite-../../etc", "geosite-a/b", `geosite-a\b`} {
+		if _, err := m.Resolve(context.Background(), Source{Preset: PresetSagerNet}, []string{bad}); err == nil {
+			t.Fatalf("expected error for tag %q", bad)
+		}
+	}
+}
+
 func TestResolve_Direct_MissingTagErrors(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)

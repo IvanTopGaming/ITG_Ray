@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -96,6 +97,13 @@ func (m *Manager) Refresh(ctx context.Context, src Source, tags []string) error 
 func (m *Manager) fetch(ctx context.Context, src Source, tags []string, force bool) (map[string]string, error) {
 	if len(tags) == 0 {
 		return map[string]string{}, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
+	defer cancel()
+	for _, tag := range tags {
+		if strings.ContainsAny(tag, `/\`) || strings.Contains(tag, "..") {
+			return nil, fmt.Errorf("geo: invalid tag %q", tag)
+		}
 	}
 	switch src.Preset {
 	case PresetRunetfreedom:
