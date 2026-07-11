@@ -1,5 +1,4 @@
 import React from "react";
-import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Zap } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -111,86 +110,37 @@ export const GlowOrb = React.memo(function GlowOrb({
   const content = (
     <>
       {status === "connecting" && (
-        <>
-          <motion.div
-            aria-hidden
-            className="absolute inset-0 rounded-full"
-            style={{ boxShadow: "0 0 24px rgba(255,188,90,0.45)" }}
-            animate={{ opacity: [0.3, 0.75, 0.3], scale: [0.97, 1.05, 0.97] }}
-            transition={{ repeat: Infinity, duration: 1.9, ease: "easeInOut" }}
+        <svg
+          aria-hidden
+          className={cn("absolute inset-0", pct == null ? "animate-spin" : "-rotate-90")}
+          style={pct == null ? { animationDuration: "0.9s" } : undefined}
+          viewBox="0 0 100 100"
+        >
+          <circle
+            cx="50"
+            cy="50"
+            r="46"
+            fill="none"
+            stroke="rgba(255,194,102,0.16)"
+            strokeWidth="3"
           />
-          <svg aria-hidden className="absolute inset-0" viewBox="0 0 100 100">
-            <circle
-              cx="50"
-              cy="50"
-              r="46"
-              fill="none"
-              stroke="rgba(255,194,102,0.14)"
-              strokeWidth="3"
-            />
-          </svg>
-          {pct == null ? (
-            <>
-              <motion.div
-                aria-hidden
-                className="absolute inset-0"
-                animate={{ rotate: 360 }}
-                transition={{ repeat: Infinity, ease: "linear", duration: 1.1 }}
-              >
-                <svg className="h-full w-full" viewBox="0 0 100 100">
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="46"
-                    fill="none"
-                    stroke="#ffc266"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                    pathLength={100}
-                    strokeDasharray="30 100"
-                  />
-                </svg>
-              </motion.div>
-              <motion.div
-                aria-hidden
-                className="absolute inset-0"
-                animate={{ rotate: -360 }}
-                transition={{ repeat: Infinity, ease: "linear", duration: 1.7 }}
-              >
-                <svg className="h-full w-full" viewBox="0 0 100 100">
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="38"
-                    fill="none"
-                    stroke="rgba(255,224,151,0.65)"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    pathLength={100}
-                    strokeDasharray="16 100"
-                  />
-                </svg>
-              </motion.div>
-            </>
-          ) : (
-            <svg aria-hidden className="absolute inset-0 -rotate-90" viewBox="0 0 100 100">
-              <circle
-                cx="50"
-                cy="50"
-                r="46"
-                fill="none"
-                stroke="#ffc266"
-                strokeWidth="3"
-                strokeLinecap="round"
-                pathLength={100}
-                strokeDasharray={`${pct} 100`}
-                style={{
-                  transition: "stroke-dasharray 220ms cubic-bezier(0.16, 1, 0.3, 1)",
-                }}
-              />
-            </svg>
-          )}
-        </>
+          <circle
+            cx="50"
+            cy="50"
+            r="46"
+            fill="none"
+            stroke="#ffc266"
+            strokeWidth="3"
+            strokeLinecap="round"
+            pathLength={100}
+            strokeDasharray={pct == null ? "26 100" : `${pct} 100`}
+            style={
+              pct == null
+                ? undefined
+                : { transition: "stroke-dasharray 220ms cubic-bezier(0.16, 1, 0.3, 1)" }
+            }
+          />
+        </svg>
       )}
       <Zap
         width={iconSize}
