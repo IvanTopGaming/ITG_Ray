@@ -112,7 +112,7 @@ export const GlowOrb = React.memo(function GlowOrb({
       {status === "connecting" && (
         <svg
           aria-hidden
-          className={cn("absolute inset-0 -rotate-90", pct == null && "animate-spin")}
+          className={cn("absolute inset-0", pct == null ? "animate-spin" : "-rotate-90")}
           style={pct == null ? { animationDuration: "0.9s" } : undefined}
           viewBox="0 0 100 100"
         >
