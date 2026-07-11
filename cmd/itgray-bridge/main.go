@@ -21,6 +21,7 @@ import (
 	"github.com/itg-team/itg-ray/internal/bindings"
 	"github.com/itg-team/itg-ray/internal/chainctl"
 	"github.com/itg-team/itg-ray/internal/config"
+	"github.com/itg-team/itg-ray/internal/geo"
 	"github.com/itg-team/itg-ray/internal/hub"
 	"github.com/itg-team/itg-ray/internal/hwid"
 	"github.com/itg-team/itg-ray/internal/rules"
@@ -184,13 +185,20 @@ func main() {
 		Hub:   h,
 	})
 
+	geoMgr := geo.NewManager(dataDir, func(done, total int64) {
+		h.Publish(hub.Event{
+			Name:    hub.EventGeoProgress,
+			Payload: map[string]any{"done": done, "total": total},
+		})
+	})
+
 	chainCtrl := chainctl.New(&chainctl.Deps{
 		DataDir:      dataDir,
 		ServerStore:  serverStoreGetter{ss: serverStore},
 		Helper:       helperClient,
 		Sysproxy:     sysproxy.New(),
 		Hub:          h,
-		BuildConfigs: buildConfigs(dataDir, configPath, ruleStore),
+		BuildConfigs: buildConfigs(dataDir, configPath, ruleStore, geoMgr),
 		Network:      networkLoader,
 		KillSwitch:   killSwitchLoader,
 	})
@@ -279,6 +287,14 @@ func main() {
 	run := handlers.RunHandlers{Svc: runSvc}
 	d.Register("run.connect", run.Connect)
 	d.Register("run.disconnect", run.Disconnect)
+
+	geoH := handlers.GeoHandlers{Svc: &geoService{
+		mgr:        geoMgr,
+		configPath: configPath,
+		dataDir:    dataDir,
+		ruleStore:  ruleStore,
+	}}
+	d.Register("geo.refresh", geoH.Refresh)
 
 	// Bus serializes outbound JSON-RPC notifications onto stdout.
 	b := bus.New(out)

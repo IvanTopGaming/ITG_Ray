@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/itg-team/itg-ray/internal/chainctl"
 	"github.com/itg-team/itg-ray/internal/config"
 	"github.com/itg-team/itg-ray/internal/configgen"
+	"github.com/itg-team/itg-ray/internal/geo"
 	"github.com/itg-team/itg-ray/internal/rules"
 	"github.com/itg-team/itg-ray/internal/server"
 )
@@ -61,12 +64,8 @@ func loadRulesFromDataDir(dataDir string, store *rules.Store) rules.Model {
 // Network values come from chainctl's per-Connect read of config.Network
 // (Tier 2b runtime wiring). chainctl.{ClampMTU,ResolveDNS,MapIPv6Strategy}
 // translate user-facing knobs into sing-box-compatible shapes.
-func buildConfigs(dataDir, configPath string, store *rules.Store) chainctl.ConfigBuilder {
+func buildConfigs(dataDir, configPath string, store *rules.Store, geoMgr *geo.Manager) chainctl.ConfigBuilder {
 	return func(srv *server.Server, mode chainctl.Mode, net config.Network) (singboxJSON, xrayJSON []byte, err error) {
-		// Debug.LogLevel lives on config.Config, not the config.Network
-		// chainctl passes in. Re-load the persisted config here (cheap,
-		// once per Connect) so the user's log-level setting reaches the
-		// generated sing-box config. Fall back to "" → "info" on error.
 		logLevel := ""
 		if c, lerr := config.Load(configPath); lerr == nil {
 			logLevel = c.Debug.LogLevel
@@ -75,6 +74,21 @@ func buildConfigs(dataDir, configPath string, store *rules.Store) chainctl.Confi
 		if err != nil {
 			return nil, nil, fmt.Errorf("resolve server host %q: %w", srv.Vless.Address, err)
 		}
+
+		model := loadRulesFromDataDir(dataDir, store)
+		geoSets := map[string]string{}
+		if tags := configgen.GeoTags(model); len(tags) > 0 && geoMgr != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+			geoSets, err = geoMgr.Resolve(ctx, geo.Source{
+				Preset:    net.GeoSource.Preset,
+				CustomURL: net.GeoSource.CustomURL,
+			}, tags)
+			cancel()
+			if err != nil {
+				return nil, nil, fmt.Errorf("geo resolve: %w", err)
+			}
+		}
+
 		var sbInput configgen.SingboxInput
 		switch mode {
 		case chainctl.ModeTUN:
@@ -89,8 +103,8 @@ func buildConfigs(dataDir, configPath string, store *rules.Store) chainctl.Confi
 				DNSUpstreams:        chainctl.ResolveDNS(net.DNS),
 				AllowLAN:            net.AllowLAN,
 				IPv6Strategy:        chainctl.MapIPv6Strategy(net.IPv6Mode),
-				GeoBaseURL:          net.GeoBaseURL,
-				Rules:               loadRulesFromDataDir(dataDir, store),
+				GeoRuleSets:         geoSets,
+				Rules:               model,
 				LogLevel:            logLevel,
 				RouteExcludeAddress: serverExcludeForTUN(serverIP),
 			}
@@ -104,8 +118,8 @@ func buildConfigs(dataDir, configPath string, store *rules.Store) chainctl.Confi
 				DNSUpstreams:     chainctl.ResolveDNS(net.DNS),
 				AllowLAN:         net.AllowLAN,
 				IPv6Strategy:     chainctl.MapIPv6Strategy(net.IPv6Mode),
-				GeoBaseURL:       net.GeoBaseURL,
-				Rules:            loadRulesFromDataDir(dataDir, store),
+				GeoRuleSets:      geoSets,
+				Rules:            model,
 				LogLevel:         logLevel,
 			}
 		default:
