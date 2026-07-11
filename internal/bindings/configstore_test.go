@@ -101,6 +101,27 @@ func TestApplyNetwork_PortRangeGuard(t *testing.T) {
 	require.Equal(t, 8889, c.Network.SysProxy.HTTPPort, "in-range accepted")
 }
 
+// TestUpdateSection_GeoBaseURL_RoundTrips guards the geoBaseURL wiring:
+// a patch through the "network" section must persist and be reported back
+// by toView. Mirrors the allowLan/ipv6Mode round-trip shape.
+func TestUpdateSection_GeoBaseURL_RoundTrips(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json")
+	store := NewConfigStore(cfgPath, "test", "test")
+
+	view, err := store.UpdateSection("network", map[string]any{
+		"geoBaseURL": "https://mirror.example",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "https://mirror.example", view.Network.GeoBaseURL)
+
+	// Survives a fresh reload from disk.
+	store2 := NewConfigStore(cfgPath, "test", "test")
+	v, err := store2.View()
+	require.NoError(t, err)
+	require.Equal(t, "https://mirror.example", v.Network.GeoBaseURL)
+}
+
 // TestApplyKillSwitch verifies the per-key type-asserted handler writes
 // both kill-switch fields independently.
 func TestApplyKillSwitch(t *testing.T) {

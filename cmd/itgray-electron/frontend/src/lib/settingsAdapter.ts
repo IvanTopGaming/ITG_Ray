@@ -49,6 +49,9 @@ export function backendToFrontend(view: hub.SettingsView): Partial<Settings> {
   if (ipv6 === 'prefer-v4' || ipv6 === 'prefer-v6' || ipv6 === 'disabled') {
     patch.ipv6Mode = ipv6;
   }
+  if (typeof view.network?.geoBaseURL === 'string') {
+    patch.geoBaseURL = view.network.geoBaseURL;
+  }
   const dnsMode = view.network?.dns?.mode;
   if (dnsMode === 'auto' || dnsMode === 'custom') {
     patch.dnsMode = dnsMode;
@@ -143,6 +146,7 @@ export function frontendToBackend(
   if (patch.httpPort !== undefined) ensure('network').httpPort = patch.httpPort;
   if (patch.allowLan !== undefined) ensure('network').allowLan = patch.allowLan;
   if (patch.ipv6Mode !== undefined) ensure('network').ipv6Mode = patch.ipv6Mode;
+  if (patch.geoBaseURL !== undefined) ensure('network').geoBaseURL = patch.geoBaseURL;
   if (patch.dnsMode !== undefined) ensure('network').dnsMode = patch.dnsMode;
   if (patch.dnsCustom !== undefined) {
     ensure('network').dnsServers = patch.dnsCustom

@@ -338,6 +338,15 @@ export function Settings() {
             ] as const}
           />
         </SettingRow>
+        <SettingRow label="Geo rule-set source (base URL)" stacked>
+          <input
+            type="text"
+            aria-label="Geo rule-set source (base URL)"
+            value={s.geoBaseURL}
+            onChange={(e) => update({ geoBaseURL: e.target.value })}
+            className="w-full rounded-[10px] border border-white/[0.10] bg-white/[0.04] px-3 py-1.5 text-[13px] text-white/[0.92] placeholder:text-white/[0.35] focus:border-accent/40 focus:bg-white/[0.06] focus:outline-none"
+          />
+        </SettingRow>
         <Reveal show={s.defaultMode === 'tun'}>
           <div className="mt-2">
             <button

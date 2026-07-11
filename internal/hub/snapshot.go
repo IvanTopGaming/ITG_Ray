@@ -86,6 +86,7 @@ type NetworkSettings struct {
 	HttpPort    int         `json:"httpPort"`    // sysproxy mode local HTTP port
 	AllowLAN    bool        `json:"allowLan"`    // expose proxy to LAN
 	IPv6Mode    string      `json:"ipv6Mode"`    // "prefer-v4" | "prefer-v6" | "disabled"
+	GeoBaseURL  string      `json:"geoBaseURL"`  // rule-set source base URL
 	DNS         DNSSettings `json:"dns"`
 }
 

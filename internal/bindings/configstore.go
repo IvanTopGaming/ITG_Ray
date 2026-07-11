@@ -90,6 +90,7 @@ func (s *ConfigStore) toView(c *config.Config) hub.SettingsView {
 			HttpPort:    c.Network.SysProxy.HTTPPort,
 			AllowLAN:    c.Network.AllowLAN,
 			IPv6Mode:    c.Network.IPv6Mode,
+			GeoBaseURL:  c.Network.GeoBaseURL,
 			DNS: hub.DNSSettings{
 				Mode:    c.Network.DNS.Mode,
 				Servers: c.Network.DNS.Servers,
@@ -215,6 +216,9 @@ func applyNetwork(n *config.Network, p map[string]any) {
 	}
 	if v, ok := p["ipv6Mode"].(string); ok {
 		n.IPv6Mode = v
+	}
+	if v, ok := p["geoBaseURL"].(string); ok {
+		n.GeoBaseURL = v
 	}
 	if v, ok := p["dnsMode"].(string); ok {
 		n.DNS.Mode = v

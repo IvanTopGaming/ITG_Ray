@@ -46,6 +46,7 @@ export type Settings = {
   httpPort: number;
   allowLan: boolean;
   ipv6Mode: Ipv6Mode;
+  geoBaseURL: string;
   dnsMode: DnsMode;
   dnsCustom: string;
   tunCidr: string;
@@ -79,6 +80,7 @@ export const DEFAULTS = {
   httpPort: 8888,
   allowLan: false,
   ipv6Mode: 'prefer-v4',
+  geoBaseURL: 'https://raw.githubusercontent.com/SagerNet',
   dnsMode: 'auto',
   dnsCustom: '',
   tunCidr: '198.18.0.1/15',

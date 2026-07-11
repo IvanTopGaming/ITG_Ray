@@ -113,6 +113,7 @@ describe('backendToFrontend > network', () => {
         httpPort: 8888,
         allowLan: true,
         ipv6Mode: 'disabled',
+        geoBaseURL: 'https://mirror.example',
         dns: { mode: 'custom', servers: ['1.1.1.1', '9.9.9.9'] },
       },
       notifications: {},
@@ -125,6 +126,7 @@ describe('backendToFrontend > network', () => {
     expect(patch.httpPort).toBe(8888);
     expect(patch.allowLan).toBe(true);
     expect(patch.ipv6Mode).toBe('disabled');
+    expect(patch.geoBaseURL).toBe('https://mirror.example');
     expect(patch.dnsMode).toBe('custom');
     expect(patch.dnsCustom).toBe('1.1.1.1, 9.9.9.9');
   });
@@ -210,6 +212,11 @@ describe('frontendToBackend', () => {
   it('routes a single network field to the network section', () => {
     const map = frontendToBackend({ socksPort: 1080 });
     expect(map.get('network')).toEqual({ socksPort: 1080 });
+  });
+
+  it('routes geoBaseURL to the network section', () => {
+    const map = frontendToBackend({ geoBaseURL: 'https://mirror.example' });
+    expect(map.get('network')).toEqual({ geoBaseURL: 'https://mirror.example' });
   });
 
   it('splits a multi-section patch into per-section entries', () => {

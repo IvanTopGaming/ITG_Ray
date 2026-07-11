@@ -76,6 +76,7 @@ export interface NetworkSettings {
   httpPort: number;
   allowLan: boolean;
   ipv6Mode: string;
+  geoBaseURL: string;
   dns: DNSSettings;
 }
 
