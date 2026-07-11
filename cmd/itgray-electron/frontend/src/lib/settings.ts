@@ -14,6 +14,7 @@ export type NetworkMode = 'tun' | 'sysproxy';
 export type DnsMode = 'auto' | 'custom';
 export type LogLevel = 'error' | 'info' | 'debug' | 'trace';
 export type Ipv6Mode = 'prefer-v4' | 'prefer-v6' | 'disabled';
+export type GeoPreset = 'runetfreedom' | 'sagernet' | 'custom';
 
 // NetworkSnapshot captures the network-section values the runtime ACTUALLY
 // used at the last successful Connect (sourced from the vpn:status connected
@@ -46,7 +47,8 @@ export type Settings = {
   httpPort: number;
   allowLan: boolean;
   ipv6Mode: Ipv6Mode;
-  geoBaseURL: string;
+  geoPreset: GeoPreset;
+  geoCustomURL: string;
   dnsMode: DnsMode;
   dnsCustom: string;
   tunCidr: string;
@@ -80,7 +82,8 @@ export const DEFAULTS = {
   httpPort: 8888,
   allowLan: false,
   ipv6Mode: 'prefer-v4',
-  geoBaseURL: 'https://raw.githubusercontent.com/SagerNet',
+  geoPreset: 'runetfreedom',
+  geoCustomURL: '',
   dnsMode: 'auto',
   dnsCustom: '',
   tunCidr: '198.18.0.1/15',
