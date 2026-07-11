@@ -40,6 +40,7 @@ export default {
         "orb-pulse": "orb-pulse 2.5s ease-in-out infinite",
         "orb-shake": "orb-shake 0.4s ease-in-out 2",
         "orb-breathe": "orb-breathe 2.8s ease-in-out infinite",
+        "sweep-pulse": "sweep-pulse 1.6s ease-in-out infinite",
         "spin-slow": "spin 2s linear infinite",
       },
       keyframes: {
@@ -55,6 +56,10 @@ export default {
         "orb-breathe": {
           "0%, 100%": { transform: "scale(1)" },
           "50%": { transform: "scale(1.025)" },
+        },
+        "sweep-pulse": {
+          "0%, 100%": { strokeDasharray: "15 85" },
+          "50%": { strokeDasharray: "70 30" },
         },
       },
       transitionTimingFunction: {

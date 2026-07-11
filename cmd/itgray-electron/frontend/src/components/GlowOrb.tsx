@@ -109,39 +109,56 @@ export const GlowOrb = React.memo(function GlowOrb({
 
   const content = (
     <>
-      {status === "connecting" && (
-        <svg
-          aria-hidden
-          className={cn("absolute inset-0", pct == null ? "animate-spin" : "-rotate-90")}
-          style={pct == null ? { animationDuration: "0.9s" } : undefined}
-          viewBox="0 0 100 100"
-        >
-          <circle
-            cx="50"
-            cy="50"
-            r="46"
-            fill="none"
-            stroke="rgba(255,194,102,0.16)"
-            strokeWidth="3"
-          />
-          <circle
-            cx="50"
-            cy="50"
-            r="46"
-            fill="none"
-            stroke="#ffc266"
-            strokeWidth="3"
-            strokeLinecap="round"
-            pathLength={100}
-            strokeDasharray={pct == null ? "26 100" : `${pct} 100`}
-            style={
-              pct == null
-                ? undefined
-                : { transition: "stroke-dasharray 220ms cubic-bezier(0.16, 1, 0.3, 1)" }
-            }
-          />
-        </svg>
-      )}
+      {status === "connecting" &&
+        (pct == null ? (
+          <svg
+            aria-hidden
+            className="absolute inset-0 animate-spin"
+            style={{ animationDuration: "1s" }}
+            viewBox="0 0 100 100"
+          >
+            <circle
+              className="animate-sweep-pulse"
+              cx="50"
+              cy="50"
+              r="49"
+              fill="none"
+              stroke="#ffc266"
+              strokeWidth="2"
+              strokeLinecap="round"
+              pathLength={100}
+            />
+          </svg>
+        ) : (
+          <svg
+            aria-hidden
+            className="absolute inset-0 -rotate-90"
+            viewBox="0 0 100 100"
+          >
+            <circle
+              cx="50"
+              cy="50"
+              r="49"
+              fill="none"
+              stroke="rgba(255,194,102,0.18)"
+              strokeWidth="2"
+            />
+            <circle
+              cx="50"
+              cy="50"
+              r="49"
+              fill="none"
+              stroke="#ffc266"
+              strokeWidth="2"
+              strokeLinecap="round"
+              pathLength={100}
+              strokeDasharray={`${pct} 100`}
+              style={{
+                transition: "stroke-dasharray 220ms cubic-bezier(0.16, 1, 0.3, 1)",
+              }}
+            />
+          </svg>
+        ))}
       <Zap
         width={iconSize}
         height={iconSize}
