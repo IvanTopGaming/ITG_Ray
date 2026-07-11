@@ -52,7 +52,7 @@ func TestCompile_ProduceExpectedSingboxRules(t *testing.T) {
 
 	r1 := doc.Rules[1]
 	require.Equal(t, "block", r1["outbound"])
-	require.Equal(t, []any{"category-ads-all"}, r1["rule_set"])
+	require.Equal(t, []any{"geosite-category-ads-all"}, r1["rule_set"])
 }
 
 func TestCompile_RejectsInvalidModel(t *testing.T) {
@@ -90,7 +90,7 @@ func TestCompile_Domains(t *testing.T) {
 	require.Equal(t, []any{"^ads-.*"}, r["domain_regex"])
 }
 
-func TestCompile_GeoIPStripsPrefix(t *testing.T) {
+func TestCompile_GeoIPEmitsPrefixedRuleSet(t *testing.T) {
 	m := Model{
 		DefaultAction: ActionProxy,
 		Groups: []Group{{ID: "g", Enabled: true, Rules: []Rule{
@@ -102,7 +102,43 @@ func TestCompile_GeoIPStripsPrefix(t *testing.T) {
 	require.NoError(t, err)
 	var doc struct{ Rules []map[string]any }
 	require.NoError(t, json.Unmarshal(out, &doc))
-	require.Equal(t, []any{"ru", "private"}, doc.Rules[0]["geoip"])
+	require.Equal(t, []any{"geoip-ru", "geoip-private"}, doc.Rules[0]["rule_set"])
+	_, ok := doc.Rules[0]["geoip"]
+	require.False(t, ok)
+}
+
+func TestCompile_GeoEmitsPrefixedRuleSetTags(t *testing.T) {
+	m := Model{
+		DefaultAction: ActionProxy,
+		Groups: []Group{{
+			ID: "g", Enabled: true,
+			Rules: []Rule{{
+				ID: "r", Enabled: true, Action: ActionDirect,
+				Conditions: Conditions{Geo: []string{"geosite:ru", "geoip:ru"}},
+			}},
+		}},
+	}
+	raw, err := Compile(m)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	var doc struct {
+		Rules []map[string]any `json:"rules"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(doc.Rules) != 1 {
+		t.Fatalf("want 1 rule, got %d", len(doc.Rules))
+	}
+	r := doc.Rules[0]
+	if _, ok := r["geoip"]; ok {
+		t.Fatal("legacy geoip field must be gone")
+	}
+	got, _ := json.Marshal(r["rule_set"])
+	if string(got) != `["geosite-ru","geoip-ru"]` {
+		t.Fatalf(`rule_set = %s, want ["geosite-ru","geoip-ru"]`, got)
+	}
 }
 
 func TestCompile_GroupWithOnlyDisabledRulesEmitsNothing(t *testing.T) {

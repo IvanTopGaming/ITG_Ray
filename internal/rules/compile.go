@@ -1,7 +1,7 @@
 // Package rules models routing rules and compiles them to sing-box config.
-// The compiler treats Geo entries as bare tag names: "geosite:NAME" emits "NAME"
-// into rule_set, expecting the sing-box config generator (A9.1) to declare matching
-// route.rule_set[] entries. "geoip:CC" emits "CC" into the legacy geoip field.
+// The compiler treats Geo entries as prefixed rule_set tags: "geosite:NAME" emits
+// "geosite-NAME" and "geoip:CC" emits "geoip-CC" into rule_set, expecting the sing-box
+// config generator (A9.1) to declare matching route.rule_set[] entries.
 package rules
 
 import (
@@ -68,7 +68,7 @@ func compileRule(r *Rule) map[string]any {
 		rule["port_range"] = ranges
 	}
 
-	var domain, suffix, keyword, regex, geosite, geoip, ruleset []any
+	var domain, suffix, keyword, regex, ruleset []any
 	for _, d := range r.Conditions.Domains {
 		switch d.Kind {
 		case "exact":
@@ -84,10 +84,9 @@ func compileRule(r *Rule) map[string]any {
 	for _, g := range r.Conditions.Geo {
 		switch {
 		case strings.HasPrefix(g, "geosite:"):
-			// sing-box rule_set takes the bare tag name; A9.1 declares matching route.rule_set[] entries.
-			geosite = append(geosite, strings.TrimPrefix(g, "geosite:"))
+			ruleset = append(ruleset, "geosite-"+strings.TrimPrefix(g, "geosite:"))
 		case strings.HasPrefix(g, "geoip:"):
-			geoip = append(geoip, strings.TrimPrefix(g, "geoip:"))
+			ruleset = append(ruleset, "geoip-"+strings.TrimPrefix(g, "geoip:"))
 		}
 	}
 	set := func(k string, v []any) {
@@ -99,12 +98,6 @@ func compileRule(r *Rule) map[string]any {
 	set("domain_suffix", suffix)
 	set("domain_keyword", keyword)
 	set("domain_regex", regex)
-	if len(geosite) > 0 {
-		ruleset = append(ruleset, geosite...)
-	}
-	if len(geoip) > 0 {
-		rule["geoip"] = geoip
-	}
 	set("rule_set", ruleset)
 
 	return rule
