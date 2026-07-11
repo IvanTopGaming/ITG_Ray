@@ -16,6 +16,9 @@ import type { HelperState } from '@/lib/helperAdapter';
 import { ScrollSpy, useScrollSpy, scrollToSection } from '@/components/controls/ScrollSpy';
 import { Get as GetSettings } from '@/lib/itg/SettingsService';
 import { SetAutostart } from '@/lib/itg/AppService';
+import { Refresh as GeoRefresh } from '@/lib/itg/GeoService';
+import { useGeoProgress, geoBegin, geoEnd } from '@/lib/geoStore';
+import type { GeoPreset } from '@/lib/settings';
 import type { hub } from '@/lib/itg/models';
 
 const pageVariants: Variants = {
@@ -168,6 +171,20 @@ export function Settings() {
     await new Promise((r) => setTimeout(r, 1500));
     setUpdateState('uptodate');
   };
+
+  const geo = useGeoProgress();
+  const [geoRefreshing, setGeoRefreshing] = useState(false);
+  const updateGeoDatabases = async () => {
+    setGeoRefreshing(true);
+    geoBegin();
+    try {
+      await GeoRefresh();
+    } finally {
+      geoEnd();
+      setGeoRefreshing(false);
+    }
+  };
+  const geoPercent = geo.total > 0 ? Math.round((geo.done / geo.total) * 100) : 0;
 
   return (
     <motion.section
@@ -338,14 +355,40 @@ export function Settings() {
             ] as const}
           />
         </SettingRow>
-        <SettingRow label="Geo rule-set source (base URL)" stacked>
-          <input
-            type="text"
-            aria-label="Geo rule-set source (base URL)"
-            value={s.geoBaseURL}
-            onChange={(e) => update({ geoBaseURL: e.target.value })}
-            className="w-full rounded-[10px] border border-white/[0.10] bg-white/[0.04] px-3 py-1.5 text-[13px] text-white/[0.92] placeholder:text-white/[0.35] focus:border-accent/40 focus:bg-white/[0.06] focus:outline-none"
+        <SettingRow label="Источник geo-правил">
+          <Dropdown
+            value={s.geoPreset}
+            onChange={(v) => update({ geoPreset: v as GeoPreset })}
+            options={[
+              { value: 'runetfreedom', label: 'Runetfreedom (RU)' },
+              { value: 'sagernet', label: 'SagerNet' },
+              { value: 'custom', label: 'Свой URL' },
+            ] as const}
           />
+        </SettingRow>
+        <Reveal show={s.geoPreset === 'custom'}>
+          <SettingRow label="Базовый URL источника" stacked>
+            <input
+              type="text"
+              aria-label="Базовый URL источника geo-правил"
+              value={s.geoCustomURL}
+              onChange={(e) => update({ geoCustomURL: e.target.value })}
+              placeholder="https://raw.githubusercontent.com/SagerNet"
+              className="w-full rounded-[10px] border border-white/[0.10] bg-white/[0.04] px-3 py-1.5 text-[13px] text-white/[0.92] placeholder:text-white/[0.35] focus:border-accent/40 focus:bg-white/[0.06] focus:outline-none"
+            />
+          </SettingRow>
+        </Reveal>
+        <SettingRow label="Базы geo-правил" hint="Скачать/обновить .srs для текущего источника">
+          <button
+            type="button"
+            onClick={updateGeoDatabases}
+            disabled={geoRefreshing}
+            className="px-3.5 py-1.5 text-xs font-semibold rounded-[10px] bg-gradient-to-b from-accent-start to-accent-mid text-white disabled:opacity-60"
+          >
+            {geoRefreshing
+              ? (geo.total > 0 ? `Загрузка… ${geoPercent}%` : 'Загрузка…')
+              : 'Обновить базы'}
+          </button>
         </SettingRow>
         <Reveal show={s.defaultMode === 'tun'}>
           <div className="mt-2">
