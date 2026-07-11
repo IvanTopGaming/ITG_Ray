@@ -355,7 +355,10 @@ export function Settings() {
             ] as const}
           />
         </SettingRow>
-        <SettingRow label="Источник geo-правил">
+        <SettingRow
+          label="Источник geo-правил"
+          hint="Репозиторий, откуда скачиваются базы geo-правил (geosite/geoip) для маршрутизации по категориям и странам — например, направить все российские сервисы напрямую в обход. Runetfreedom заточен под РФ-обход, SagerNet — универсальный. Базы качаются перед подключением и кэшируются."
+        >
           <Dropdown
             value={s.geoPreset}
             onChange={(v) => update({ geoPreset: v as GeoPreset })}
@@ -367,7 +370,11 @@ export function Settings() {
           />
         </SettingRow>
         <Reveal show={s.geoPreset === 'custom'}>
-          <SettingRow label="Базовый URL источника" stacked>
+          <SettingRow
+            label="Базовый URL источника"
+            hint="Базовый адрес репозитория с .srs-файлами. Схема как у SagerNet: <base>/sing-geosite/rule-set/geosite-<тег>.srs и <base>/sing-geoip/rule-set/geoip-<тег>.srs."
+            stacked
+          >
             <input
               type="text"
               aria-label="Базовый URL источника geo-правил"
