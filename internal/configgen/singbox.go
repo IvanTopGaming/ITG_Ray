@@ -4,9 +4,13 @@ package configgen
 import (
 	"encoding/json"
 	"log/slog"
+	"strings"
 
 	"github.com/itg-team/itg-ray/internal/rules"
 )
+
+// DefaultGeoBaseURL is the rule-set source used when GeoBaseURL is empty.
+const DefaultGeoBaseURL = "https://raw.githubusercontent.com/SagerNet"
 
 // Mode selects the sing-box inbound shape.
 type Mode string
@@ -54,6 +58,10 @@ type SingboxInput struct {
 	// LogLevel sets the sing-box log block's "level". Valid sing-box
 	// values: trace|debug|info|warn|error|fatal|panic. Empty → "info".
 	LogLevel string
+	// GeoBaseURL is the base for remote rule-set (.srs) downloads. Empty →
+	// DefaultGeoBaseURL. geosite-<x> → <base>/sing-geosite/rule-set/geosite-<x>.srs;
+	// geoip-<cc> → <base>/sing-geoip/rule-set/geoip-<cc>.srs.
+	GeoBaseURL string
 }
 
 // logLevelOrDefault returns a valid sing-box log level, defaulting to
@@ -125,6 +133,55 @@ func defaultDomainResolverFor(in *SingboxInput) string {
 		return "remote"
 	}
 	return "default"
+}
+
+func geoRuleSetURL(tag, base string) string {
+	base = strings.TrimRight(base, "/")
+	if strings.HasPrefix(tag, "geoip-") {
+		return base + "/sing-geoip/rule-set/" + tag + ".srs"
+	}
+	return base + "/sing-geosite/rule-set/" + tag + ".srs"
+}
+
+// collectRuleSetTags returns the deduped set of rule_set tags referenced by
+// the route's rules, preserving first-seen order.
+func collectRuleSetTags(route map[string]any) []string {
+	var rules []any
+	switch rs := route["rules"].(type) {
+	case []any:
+		rules = rs
+	case []map[string]any:
+		for _, m := range rs {
+			rules = append(rules, m)
+		}
+	}
+	seen := map[string]bool{}
+	var tags []string
+	appendTag := func(s string) {
+		if !seen[s] {
+			seen[s] = true
+			tags = append(tags, s)
+		}
+	}
+	for _, r := range rules {
+		m, ok := r.(map[string]any)
+		if !ok {
+			continue
+		}
+		switch v := m["rule_set"].(type) {
+		case []any:
+			for _, t := range v {
+				if s, ok := t.(string); ok {
+					appendTag(s)
+				}
+			}
+		case []string:
+			for _, s := range v {
+				appendTag(s)
+			}
+		}
+	}
+	return tags
 }
 
 // lanBypassCIDRs is the canonical RFC1918 + loopback + link-local + multicast
@@ -405,6 +462,27 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 			{"type": "block", "tag": "block"},
 		},
 		"route": route,
+	}
+	if tags := collectRuleSetTags(route); len(tags) > 0 {
+		base := in.GeoBaseURL
+		if base == "" {
+			base = DefaultGeoBaseURL
+		}
+		decls := make([]map[string]any, 0, len(tags))
+		for _, tag := range tags {
+			decls = append(decls, map[string]any{
+				"tag":             tag,
+				"type":            "remote",
+				"format":          "binary",
+				"url":             geoRuleSetURL(tag, base),
+				"download_detour": "proxy",
+				"update_interval": "168h",
+			})
+		}
+		route["rule_set"] = decls
+		doc["experimental"] = map[string]any{
+			"cache_file": map[string]any{"enabled": true},
+		}
 	}
 	var inbounds []map[string]any
 	switch in.Mode {
