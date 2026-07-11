@@ -87,7 +87,7 @@ export function Dropdown<T extends string = string>({
             exit={{ opacity: 0, y: -4, scale: 0.98 }}
             transition={{ duration: 0.15, ease: SNAP_EASE }}
             className={cn(
-              "absolute left-0 right-0 top-full z-30 mt-1 max-h-[220px] overflow-y-auto rounded-lg border border-white/[0.18] bg-bg-1/95 p-1 shadow-[0_18px_36px_-10px_rgba(0,0,0,0.6)] backdrop-blur-xl",
+              "absolute left-0 top-full z-30 mt-1 max-h-[220px] w-max min-w-full max-w-[min(20rem,90vw)] overflow-y-auto rounded-lg border border-white/[0.18] bg-bg-1/95 p-1 shadow-[0_18px_36px_-10px_rgba(0,0,0,0.6)] backdrop-blur-xl",
               menuClassName
             )}
           >
@@ -100,7 +100,7 @@ export function Dropdown<T extends string = string>({
                   setOpen(false);
                 }}
                 className={cn(
-                  "flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors duration-instant ease-snap",
+                  "flex w-full items-center whitespace-nowrap rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors duration-instant ease-snap",
                   o.value === value
                     ? "bg-white/[0.12] text-white"
                     : "text-white/75 hover:bg-white/[0.06] hover:text-white",
