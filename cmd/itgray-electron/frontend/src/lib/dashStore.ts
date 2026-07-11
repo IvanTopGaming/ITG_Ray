@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { GetSnapshot } from "@/lib/itg/AppService";
 import { Connect, Disconnect } from "@/lib/itg/RunService";
+import { Update as UpdateSettings } from "@/lib/itg/SettingsService";
 import { TestLatency } from "@/lib/itg/ServersService";
 import { EventsOn } from "@/lib/itg/runtime";
 import type { hub } from "@/lib/itg/models";
@@ -388,8 +389,15 @@ export async function dashDisconnect(): Promise<void> {
   }
 }
 
+// persistMode writes the chosen mode to config.Network.Mode so the choice
+// survives restarts (GetSnapshot seeds the toggle from it). Fire-and-forget.
+function persistMode(mode: Mode): void {
+  void UpdateSettings("network", { defaultMode: mode }).catch(() => {});
+}
+
 export async function dashSwitchMode(mode: Mode): Promise<void> {
   if (state.mode === mode) return;
+  persistMode(mode);
   if (state.status !== "connected") {
     setState({ ...state, mode });
     return;

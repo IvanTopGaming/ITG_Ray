@@ -105,6 +105,19 @@ func (a *AppService) GetVersion() string { return a.d.Version }
 // cmd/itgray-electron/src/main/ipc.ts.
 func (a *AppService) Quit() {}
 
+// idleModeFromSettings resolves the idle/default connect mode from the
+// persisted Network.DefaultMode setting, falling back to the platform
+// default for "auto"/unset values. This makes the Dashboard mode toggle's
+// persisted choice survive restarts.
+func idleModeFromSettings(m string) chainctl.Mode {
+	switch chainctl.Mode(m) {
+	case chainctl.ModeTUN, chainctl.ModeSysProxy:
+		return chainctl.Mode(m)
+	default:
+		return defaultIdleMode()
+	}
+}
+
 // GetSnapshot collects the current app state into a Snapshot DTO.
 func (a *AppService) GetSnapshot() (hub.Snapshot, error) {
 	servers, err := a.d.ServerStore.Load()
@@ -121,13 +134,13 @@ func (a *AppService) GetSnapshot() (hub.Snapshot, error) {
 	}
 
 	st := hub.StatusIdle
-	mode := defaultIdleMode()
+	mode := idleModeFromSettings(settings.Network.DefaultMode)
 	var current *hub.ServerView
 	if a.d.Chain != nil {
 		var srv *server.Server
 		st, srv, mode = a.d.Chain.Status()
 		if mode == "" {
-			mode = defaultIdleMode()
+			mode = idleModeFromSettings(settings.Network.DefaultMode)
 		}
 		if srv != nil {
 			views := toServerViews([]server.Server{*srv}, subOriginByID(subs))

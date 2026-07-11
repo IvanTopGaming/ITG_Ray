@@ -243,19 +243,6 @@ export function Settings() {
       {/* Connection */}
       <motion.div id="connection" variants={sectionVariants} className="glass-regular rounded-2xl p-5">
         <SectionHeader title={t('settings.connection.title')} />
-        <SettingRow
-          label={t('settings.connection.networkMode')}
-          hint={t('settings.connection.networkModeHint')}
-        >
-          <Segmented
-            value={s.defaultMode}
-            onChange={(v) => update({ defaultMode: v })}
-            options={[
-              { value: 'tun', label: t('settings.connection.modeTun') },
-              { value: 'sysproxy', label: t('settings.connection.modeSysproxy') },
-            ] as const}
-          />
-        </SettingRow>
         <SettingRow label={t('settings.connection.dns')} hint={t('settings.connection.dnsHint')}>
           <Dropdown
             value={s.dnsMode}
@@ -402,7 +389,6 @@ export function Settings() {
               : t('settings.connection.geoUpdate')}
           </button>
         </SettingRow>
-        <Reveal show={s.defaultMode === 'tun'}>
           <div className="mt-2">
             <button
               type="button"
@@ -472,7 +458,6 @@ export function Settings() {
               </Reveal>
             </div>
           </div>
-        </Reveal>
       </motion.div>
 
       {/* Kill switch */}
