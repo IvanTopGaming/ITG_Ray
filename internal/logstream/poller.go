@@ -3,6 +3,7 @@ package logstream
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +20,8 @@ type logFile struct {
 	source string
 	offset int64
 	rest   string
+	warned bool
+	seeded bool
 }
 
 type Poller struct {
@@ -49,6 +52,8 @@ func (p *Poller) Start(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	p.cancel = cancel
 	p.mu.Unlock()
+
+	slog.Info("logstream: engine-log poller started")
 
 	go func() {
 		t := time.NewTicker(time.Second)
@@ -82,11 +87,20 @@ func (p *Poller) pollOnce(ctx context.Context) {
 		args, _ := json.Marshal(protocol.ReadLogsArgs{Name: lf.name, Offset: lf.offset})
 		raw, err := p.reader.Call(ctx, protocol.OpReadLogs, args)
 		if err != nil {
+			if !lf.warned {
+				lf.warned = true
+				slog.Warn("logstream: engine log read failed", "file", lf.name, "err", err.Error())
+			}
 			continue
 		}
+		lf.warned = false
 		var res protocol.ReadLogsResult
 		if json.Unmarshal(raw, &res) != nil {
 			continue
+		}
+		if len(res.Data) > 0 && !lf.seeded {
+			lf.seeded = true
+			slog.Info("logstream: engine log streaming", "file", lf.name, "bytes", len(res.Data))
 		}
 		if res.Truncated {
 			lf.rest = ""
