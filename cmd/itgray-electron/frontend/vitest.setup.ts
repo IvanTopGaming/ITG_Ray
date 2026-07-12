@@ -19,3 +19,7 @@ if (jsdom) {
     configurable: true,
   });
 }
+
+if (typeof window !== "undefined" && !(window as { itg?: unknown }).itg) {
+  (window as { itg?: unknown }).itg = { on: () => () => {} };
+}
