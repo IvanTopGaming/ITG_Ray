@@ -25,7 +25,7 @@ export function ReconnectToast({
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 36, opacity: 0 }}
           transition={{ duration: 0.26, ease: [0.32, 0.72, 0, 1] }}
-          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 flex items-center gap-3 rounded-full border border-amber-400/45 bg-amber-500/90 px-4 py-2 text-[12.5px] font-medium text-amber-50 shadow-lg shadow-amber-500/25 backdrop-blur-md"
+          className="fixed bottom-6 left-0 right-0 z-50 mx-auto flex w-max max-w-[90vw] items-center gap-3 rounded-full border border-amber-400/45 bg-amber-500/90 px-4 py-2 text-[12.5px] font-medium text-amber-50 shadow-lg shadow-amber-500/25 backdrop-blur-md"
         >
           <span>{message}</span>
           {onReconnect && (
