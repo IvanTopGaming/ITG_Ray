@@ -37,6 +37,7 @@ import {
   snapshotFromConnectedPayload,
   clearConnectSnapshot,
   markActiveServerEdited,
+  markRulesDirty,
   __resetForTests,
 } from '@/lib/settings';
 
@@ -191,6 +192,42 @@ describe('AppShell reconnect pill', () => {
     await act(async () => {
       await user.click(screen.getByRole('button', { name: /dismiss/i }));
     });
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
+  });
+
+  it('dismiss hides toast armed by a rules edit (rulesDirtyAfterConnect)', async () => {
+    markRulesDirty();
+    const user = userEvent.setup();
+    await renderShell();
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: /dismiss/i }));
+    });
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
+  });
+
+  it('Reconnect hides toast armed by an active-server edit', async () => {
+    snapshotFromConnectedPayload({
+      serverId: 's1',
+      mode: 'tun',
+      network: {
+        tunCidr: '198.18.0.1/15',
+        tunMtu: 1500,
+        socksPort: 1080,
+        httpPort: 8888,
+        allowLan: false,
+        ipv6Mode: 'prefer-v4',
+        dns: { mode: 'auto' },
+      },
+    });
+    markActiveServerEdited();
+    const user = userEvent.setup();
+    await renderShell();
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: /reconnect/i }));
+    });
+    expect(dashReconnectMock).toHaveBeenCalledWith('s1', 'tun');
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
   });
 });

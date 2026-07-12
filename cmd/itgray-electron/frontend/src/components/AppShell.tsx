@@ -9,6 +9,7 @@ import {
   getConnectSnapshot,
   clearActiveServerEdited,
   dismissNetworkDiff,
+  clearRulesDirty,
 } from "@/lib/settings";
 import { dashReconnect } from "@/lib/dashStore";
 import { ReconnectToast } from "./ReconnectToast";
@@ -25,6 +26,14 @@ export function AppShell() {
   const handleReconnect = async () => {
     const snap = getConnectSnapshot();
     if (!snap) return;
+    // Reconnecting applies every pending change (edited active server,
+    // dirty rules, changed network settings), so optimistically clear
+    // all three reconnect signals — otherwise the toast lingers even
+    // after a successful reconnect. The connected event rebuilds the
+    // snapshot and re-derives the diff, so this can only under-report.
+    clearActiveServerEdited();
+    clearRulesDirty();
+    dismissNetworkDiff();
     try {
       await dashReconnect(snap.serverId, snap.mode);
     } catch {
@@ -33,13 +42,15 @@ export function AppShell() {
   };
 
   const handleDismiss = () => {
-    // Clear the active-edit signal AND mark the current network-diff as
-    // dismissed. We do NOT drop lastConnectSnapshot here — keeping it
-    // means networkDiffersFromSnapshot() can still flip back to true on
-    // a future edit, which clears networkDiffDismissed in useSettings
-    // .update() and re-arms the toast. Dropping the snapshot would
-    // disarm network-diff detection until the next reconnect.
+    // Dismiss must clear EVERY reconnect signal reconnectNeeded() ORs
+    // together — active-server edit, dirty rules, and network-diff —
+    // else a toast armed by a signal we forget to clear can never be
+    // dismissed. We do NOT drop lastConnectSnapshot: keeping it means
+    // networkDiffersFromSnapshot() can still flip back to true on a
+    // future edit, which clears networkDiffDismissed in useSettings
+    // .update() and re-arms the toast.
     clearActiveServerEdited();
+    clearRulesDirty();
     dismissNetworkDiff();
   };
 
