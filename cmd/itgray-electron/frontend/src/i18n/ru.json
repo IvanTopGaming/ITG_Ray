@@ -413,7 +413,7 @@
       "levelDebug": "Debug",
       "levelTrace": "Trace",
       "openFolder": "Открыть папку логов",
-      "folderHint": "%LOCALAPPDATA%\\ITG Ray\\logs ({{mb}} МБ)",
+      "folderHint": "Логи sing-box, xray и бриджа ({{mb}} МБ)",
       "openFolderButton": "Открыть папку",
       "clearOldLogs": "Очистить старые логи",
       "clearOldLogsHint": "Удалить файлы логов старше 7 дней."
