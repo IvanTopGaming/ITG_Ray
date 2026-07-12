@@ -24,6 +24,8 @@ import (
 	"github.com/itg-team/itg-ray/internal/geo"
 	"github.com/itg-team/itg-ray/internal/hub"
 	"github.com/itg-team/itg-ray/internal/hwid"
+	"github.com/itg-team/itg-ray/internal/logging"
+	"github.com/itg-team/itg-ray/internal/logstream"
 	"github.com/itg-team/itg-ray/internal/refresh"
 	"github.com/itg-team/itg-ray/internal/rules"
 	"github.com/itg-team/itg-ray/internal/server"
@@ -114,6 +116,10 @@ func main() {
 	// servers.changed / sub.synced events into it; Phase 4 will subscribe
 	// a forwarder that emits them as JSON-RPC notifications over stdout.
 	h := hub.New()
+
+	logBuf := logstream.New(h, 2000)
+	slog.SetDefault(slog.New(logstream.NewTapHandler(
+		logging.NewHandler(os.Stderr, slog.LevelInfo), logBuf)))
 
 	// HWID + DeviceInfo for SubsService HWID-aware sync. Failure is
 	// non-fatal: SubsService treats empty HWID as "HWID disabled".
