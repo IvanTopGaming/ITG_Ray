@@ -11,6 +11,10 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"golang.org/x/sys/windows/registry"
+	"golang.org/x/sys/windows/svc"
+	"golang.org/x/sys/windows/svc/mgr"
 )
 
 // Settings is the per-interface DNS state.
@@ -61,6 +65,15 @@ func runNetsh(args ...string) (string, error) {
 	return string(out), nil
 }
 
+// nrptKeyPath is the local (non-GPO) NRPT store the DNS Client service
+// reads; each direct child key is one rule and its name is arbitrary.
+const nrptKeyPath = `SYSTEM\CurrentControlSet\Services\Dnscache\Parameters\DnsPolicyConfig`
+
+// nrptOverrideDNS is the ConfigOptions bit that tells the resolver to send
+// matching queries to this rule's GenericDNSServers (matches what
+// Add-DnsClientNrptRule and Tailscale write).
+const nrptOverrideDNS = 0x8
+
 // AddNrptRule installs a Name Resolution Policy Table rule that forces
 // every DNS query matching the namespace to the given nameServers,
 // bypassing per-adapter resolver bindings.
@@ -76,50 +89,66 @@ func runNetsh(args ...string) (string, error) {
 // race against ISP DNS is non-deterministic and leaks domain queries
 // to the ISP whenever it answers first.
 //
-// displayName is the user-visible label written to the rule (we
-// search by it for removal). namespace="." matches every FQDN.
+// displayName doubles as the rule's registry key name (the key name is
+// arbitrary), so removal is a direct key delete. namespace="." matches
+// every FQDN. Written directly to the registry instead of via
+// Add-DnsClientNrptRule: the PowerShell cmdlet costs ~1s to spawn and it
+// sits on the synchronous Connect path.
 func AddNrptRule(displayName, namespace string, nameServers []string) error {
 	if displayName == "" || namespace == "" || len(nameServers) == 0 {
 		return errors.New("dns.AddNrptRule: displayName, namespace, and at least one nameServer required")
 	}
-	servers := strings.Join(quoteAll(nameServers), ",")
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", //nolint:gosec // displayName/namespace/servers are caller-controlled (helper-internal); single-quoted in the script.
-		fmt.Sprintf(`Add-DnsClientNrptRule -Namespace '%s' -NameServers @(%s) -DisplayName '%s' -ErrorAction Stop`,
-			psQuote(namespace), servers, psQuote(displayName)))
-	out, err := cmd.CombinedOutput()
+	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, nrptKeyPath+`\`+displayName, registry.WRITE)
 	if err != nil {
-		return fmt.Errorf("Add-DnsClientNrptRule: %w (%s)", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("create NRPT rule %q: %w", displayName, err)
 	}
-	return nil
+	defer k.Close()
+	if err := k.SetDWordValue("Version", 1); err != nil {
+		return fmt.Errorf("set Version: %w", err)
+	}
+	if err := k.SetStringsValue("Name", []string{namespace}); err != nil {
+		return fmt.Errorf("set Name: %w", err)
+	}
+	if err := k.SetStringValue("GenericDNSServers", strings.Join(nameServers, ";")); err != nil {
+		return fmt.Errorf("set GenericDNSServers: %w", err)
+	}
+	if err := k.SetDWordValue("ConfigOptions", nrptOverrideDNS); err != nil {
+		return fmt.Errorf("set ConfigOptions: %w", err)
+	}
+	return notifyDNSClient()
 }
 
-// RemoveNrptRule deletes any NRPT rule with the given DisplayName.
-// Idempotent: succeeds silently if no matching rule exists, so callers
-// can use this on a rollback path even when AddNrptRule never landed.
+// RemoveNrptRule deletes the NRPT rule key of the given name. Idempotent:
+// a missing key (rule never landed or already cleared) is not an error,
+// so callers can use this on a rollback path.
 func RemoveNrptRule(displayName string) error {
 	if displayName == "" {
 		return errors.New("dns.RemoveNrptRule: displayName required")
 	}
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", //nolint:gosec // displayName is caller-controlled (helper-internal); single-quoted in the script.
-		fmt.Sprintf(`Get-DnsClientNrptRule | Where-Object { $_.DisplayName -eq '%s' } | Remove-DnsClientNrptRule -Force -ErrorAction Stop`,
-			psQuote(displayName)))
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("Remove-DnsClientNrptRule(%s): %w (%s)", displayName, err, strings.TrimSpace(string(out)))
+	err := registry.DeleteKey(registry.LOCAL_MACHINE, nrptKeyPath+`\`+displayName)
+	if err != nil && !errors.Is(err, registry.ErrNotExist) {
+		return fmt.Errorf("delete NRPT rule %q: %w", displayName, err)
 	}
-	return nil
+	return notifyDNSClient()
 }
 
-// psQuote escapes a string for embedding inside a PowerShell single-quoted
-// literal: doubles any embedded single-quote.
-func psQuote(s string) string { return strings.ReplaceAll(s, `'`, `''`) }
-
-// quoteAll wraps each element of in[] in single-quotes after psQuote
-// escaping, so the result can be joined with commas inside @(...).
-func quoteAll(in []string) []string {
-	out := make([]string, len(in))
-	for i, s := range in {
-		out[i] = "'" + psQuote(s) + "'"
+// notifyDNSClient forces the DNS Client (Dnscache) service to reload the
+// NRPT from the registry. Raw registry writes are otherwise ignored — the
+// policy is cached in the service's memory — so a SERVICE_CONTROL_PARAMCHANGE
+// (the API equivalent of `sc control DnsCache paramchange`) is required.
+func notifyDNSClient() error {
+	m, err := mgr.Connect()
+	if err != nil {
+		return fmt.Errorf("SCM connect: %w", err)
 	}
-	return out
+	defer m.Disconnect()
+	s, err := m.OpenService("Dnscache")
+	if err != nil {
+		return fmt.Errorf("open Dnscache: %w", err)
+	}
+	defer s.Close()
+	if _, err := s.Control(svc.ParamChange); err != nil {
+		return fmt.Errorf("Dnscache paramchange: %w", err)
+	}
+	return nil
 }
