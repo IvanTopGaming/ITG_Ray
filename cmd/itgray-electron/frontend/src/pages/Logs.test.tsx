@@ -40,6 +40,7 @@ import { Logs } from "./Logs";
 beforeEach(() => {
   startLogsMock.mockReset();
   stopLogsMock.mockReset();
+  localStorage.clear();
   (window as any).itg = {
     logs: {
       start: vi.fn().mockResolvedValue({ entries: [] }),
@@ -65,6 +66,18 @@ describe("Logs page", () => {
 
     await user.click(screen.getByRole("button", { name: "bridge" }));
 
+    expect(screen.queryByText("bridge-line-alpha")).not.toBeInTheDocument();
+    expect(screen.getByText("xray-line-beta")).toBeInTheDocument();
+  });
+
+  it("persists the source filter across a remount (tab switch)", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<Logs />);
+    await user.click(screen.getByRole("button", { name: "bridge" }));
+    expect(screen.queryByText("bridge-line-alpha")).not.toBeInTheDocument();
+    unmount();
+
+    render(<Logs />);
     expect(screen.queryByText("bridge-line-alpha")).not.toBeInTheDocument();
     expect(screen.getByText("xray-line-beta")).toBeInTheDocument();
   });

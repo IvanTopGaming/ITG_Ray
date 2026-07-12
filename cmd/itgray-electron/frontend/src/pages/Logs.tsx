@@ -13,6 +13,22 @@ import {
 
 const SOURCES: LogSource[] = ["bridge", "sing-box", "xray"];
 const LEVELS: LogLevel[] = ["DEBUG", "INFO", "WARN", "ERROR"];
+
+const SOURCES_STORAGE_KEY = "itg.logs.sources";
+
+function loadSources(): Set<string> {
+  try {
+    const raw = localStorage.getItem(SOURCES_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed))
+        return new Set(parsed.filter((s) => SOURCES.includes(s as LogSource)));
+    }
+  } catch {
+    // malformed / unavailable storage → fall back to all sources
+  }
+  return new Set(SOURCES);
+}
 const levelClass: Record<LogLevel, string> = {
   DEBUG: "text-white/40",
   INFO: "text-accent-start",
@@ -28,7 +44,7 @@ const sourceClass: Record<LogSource, string> = {
 export function Logs() {
   const { t } = useTranslation();
   const all = useLogEntries();
-  const [sources, setSources] = useState<Set<string>>(new Set(SOURCES));
+  const [sources, setSources] = useState<Set<string>>(loadSources);
   const [minLevel, setMinLevel] = useState<LogLevel>("INFO");
   const [search, setSearch] = useState("");
   const [wrap, setWrap] = useState(true);
@@ -40,6 +56,14 @@ export function Logs() {
     void startLogs();
     return () => stopLogs();
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SOURCES_STORAGE_KEY, JSON.stringify([...sources]));
+    } catch {
+      // storage unavailable → filter simply won't persist
+    }
+  }, [sources]);
 
   const rows = useMemo(
     () => filterLogs(all, { sources, minLevel, search }),
