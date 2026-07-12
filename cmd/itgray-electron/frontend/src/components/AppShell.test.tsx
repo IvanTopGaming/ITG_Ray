@@ -38,7 +38,7 @@ import {
   snapshotFromConnectedPayload,
   clearConnectSnapshot,
   markActiveServerEdited,
-  markRulesDirty,
+  setCurrentRulesSignature,
   setDesiredServer,
   getDesiredServer,
   __resetForTests,
@@ -198,14 +198,17 @@ describe('AppShell reconnect pill', () => {
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
   });
 
-  it('dismiss hides toast armed by a rules edit (rulesDirtyAfterConnect)', async () => {
-    markRulesDirty();
+  it('dismiss hides a toast armed by a rules edit (signature diff)', async () => {
+    setCurrentRulesSignature('sig-1');
+    snapshotFromConnectedPayload({
+      serverId: 'A', mode: 'tun',
+      network: { tunCidr: '198.18.0.1/15', tunMtu: 1500, socksPort: 1080, httpPort: 8888, allowLan: false, ipv6Mode: 'prefer-v4', dns: { mode: 'auto' } },
+    });
+    setCurrentRulesSignature('sig-2');
     const user = userEvent.setup();
     await renderShell();
     expect(screen.getByRole('status')).toBeInTheDocument();
-    await act(async () => {
-      await user.click(screen.getByRole('button', { name: /dismiss/i }));
-    });
+    await act(async () => { await user.click(screen.getByRole('button', { name: /dismiss/i })); });
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
   });
 

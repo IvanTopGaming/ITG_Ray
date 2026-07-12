@@ -9,7 +9,7 @@ import {
   getConnectSnapshot,
   clearActiveServerEdited,
   dismissNetworkDiff,
-  clearRulesDirty,
+  setRulesDismissed,
   getDesiredServer,
   clearDesiredServer,
 } from "@/lib/settings";
@@ -38,7 +38,7 @@ export function AppShell() {
     // rebuilds the snapshot and re-derives the diff, so this can only
     // under-report.
     clearActiveServerEdited();
-    clearRulesDirty();
+    setRulesDismissed();
     dismissNetworkDiff();
     clearDesiredServer();
     try {
@@ -57,7 +57,7 @@ export function AppShell() {
     // a future edit, which clears networkDiffDismissed in useSettings
     // .update() and re-arms the toast.
     clearActiveServerEdited();
-    clearRulesDirty();
+    setRulesDismissed();
     dismissNetworkDiff();
     clearDesiredServer();
   };

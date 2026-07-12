@@ -5,14 +5,12 @@ const {
   listMock,
   addGroupMock,
   getDashStateMock,
-  markRulesDirtyMock,
   setCurrentRulesSignatureMock,
 } = vi.hoisted(() => ({
   eventHandlers: {} as Record<string, (...args: any[]) => void>,
   listMock: vi.fn(),
   addGroupMock: vi.fn(),
   getDashStateMock: vi.fn(),
-  markRulesDirtyMock: vi.fn(),
   setCurrentRulesSignatureMock: vi.fn(),
 }));
 
@@ -43,7 +41,6 @@ vi.mock("@/lib/dashStore", () => ({
 }));
 
 vi.mock("@/lib/settings", () => ({
-  markRulesDirty: () => markRulesDirtyMock(),
   setCurrentRulesSignature: (sig: string) => setCurrentRulesSignatureMock(sig),
 }));
 
@@ -60,7 +57,6 @@ beforeEach(() => {
   listMock.mockReset();
   addGroupMock.mockReset();
   getDashStateMock.mockReset();
-  markRulesDirtyMock.mockReset();
   setCurrentRulesSignatureMock.mockReset();
   // Default: chain is idle so mutations do NOT arm the toast unless a
   // test opts in by overriding the dash status.
@@ -117,23 +113,16 @@ describe("rulesStore", () => {
     expect(addGroupMock).toHaveBeenCalledWith({ name: "Streaming" });
   });
 
-  it("rulesAddGroup arms ReconnectToast when chain is connected", async () => {
+  it("rulesAddGroup republishes the canonical rules signature", async () => {
     listMock.mockResolvedValue(baseView);
     await __bootRulesForTest();
     addGroupMock.mockResolvedValue({ id: "g3" });
     listMock.mockResolvedValue(baseView);
-    getDashStateMock.mockReturnValue({ status: "connected" });
+    setCurrentRulesSignatureMock.mockReset();
     await rulesAddGroup("Streaming");
-    expect(markRulesDirtyMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("rulesAddGroup does NOT arm ReconnectToast when chain is idle", async () => {
-    listMock.mockResolvedValue(baseView);
-    await __bootRulesForTest();
-    addGroupMock.mockResolvedValue({ id: "g3" });
-    listMock.mockResolvedValue(baseView);
-    getDashStateMock.mockReturnValue({ status: "idle" });
-    await rulesAddGroup("Streaming");
-    expect(markRulesDirtyMock).not.toHaveBeenCalled();
+    expect(setCurrentRulesSignatureMock).toHaveBeenCalledTimes(1);
+    expect(setCurrentRulesSignatureMock).toHaveBeenCalledWith(
+      rulesSignature(getRulesState()),
+    );
   });
 });

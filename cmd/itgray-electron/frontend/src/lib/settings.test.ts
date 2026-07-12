@@ -29,8 +29,6 @@ import {
   markActiveServerEdited,
   clearActiveServerEdited,
   dismissNetworkDiff,
-  markRulesDirty,
-  clearRulesDirty,
   setDesiredServer,
   clearDesiredServer,
   getDesiredServer,
@@ -635,98 +633,4 @@ describe('reconnectNeeded union & auto-clear', () => {
     expect(result.current).toBe(false);
   });
 
-  it('markRulesDirty flips useReconnectNeeded to true', async () => {
-    const { result } = renderHook(() => useReconnectNeeded());
-    await act(async () => { await Promise.resolve(); });
-    expect(result.current).toBe(false);
-    act(() => {
-      markRulesDirty();
-    });
-    expect(result.current).toBe(true);
-  });
-
-  it('markRulesDirty is idempotent (second call is no-op)', async () => {
-    const { result } = renderHook(() => useReconnectNeeded());
-    await act(async () => { await Promise.resolve(); });
-    act(() => {
-      markRulesDirty();
-    });
-    expect(result.current).toBe(true);
-    act(() => {
-      markRulesDirty();
-    });
-    expect(result.current).toBe(true);
-  });
-
-  it('clearRulesDirty resets the rules-dirty signal', async () => {
-    const { result } = renderHook(() => useReconnectNeeded());
-    await act(async () => { await Promise.resolve(); });
-    act(() => {
-      markRulesDirty();
-    });
-    expect(result.current).toBe(true);
-    act(() => {
-      clearRulesDirty();
-    });
-    expect(result.current).toBe(false);
-  });
-
-  it('vpn:status=connected event clears rulesDirtyAfterConnect', async () => {
-    // useReconnectNeeded subscribes to the store and bootstraps Get(),
-    // which is what registers the vpn:status EventsOn handler.
-    const { result } = renderHook(() => useReconnectNeeded());
-    await act(async () => { await Promise.resolve(); });
-
-    // calls[0] is 'settings:changed', calls[1] is 'vpn:status'.
-    const vpnStatusCall = eventsOnMock.mock.calls.find(
-      (c) => c[0] === 'vpn:status',
-    );
-    expect(vpnStatusCall).toBeDefined();
-    const vpnStatusHandler = vpnStatusCall![1] as (payload: unknown) => void;
-
-    act(() => {
-      markRulesDirty();
-    });
-    expect(result.current).toBe(true);
-
-    // A successful Connect — vpn:status=connected — clears the rules-
-    // dirty flag (and rebuilds the network snapshot, which doesn't
-    // matter here because we never edited a network field).
-    act(() => {
-      vpnStatusHandler({
-        status: 'connected',
-        serverId: 's1',
-        mode: 'tun',
-        network: {
-          tunCidr: DEFAULTS.tunCidr,
-          tunMtu: DEFAULTS.tunMtu,
-          socksPort: DEFAULTS.socksPort,
-          httpPort: DEFAULTS.httpPort,
-          allowLan: DEFAULTS.allowLan,
-          ipv6Mode: DEFAULTS.ipv6Mode,
-          dns: { mode: 'auto' },
-        },
-      });
-    });
-    expect(result.current).toBe(false);
-  });
-
-  it('vpn:status=idle clears rulesDirtyAfterConnect', async () => {
-    const { result } = renderHook(() => useReconnectNeeded());
-    await act(async () => { await Promise.resolve(); });
-    const vpnStatusCall = eventsOnMock.mock.calls.find(
-      (c) => c[0] === 'vpn:status',
-    );
-    const vpnStatusHandler = vpnStatusCall![1] as (payload: unknown) => void;
-
-    act(() => {
-      markRulesDirty();
-    });
-    expect(result.current).toBe(true);
-
-    act(() => {
-      vpnStatusHandler({ status: 'idle' });
-    });
-    expect(result.current).toBe(false);
-  });
 });

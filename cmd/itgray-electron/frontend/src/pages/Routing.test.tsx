@@ -11,7 +11,7 @@ vi.mock("@/lib/dashStore", () => ({
   getDashState: () => ({ status: "idle" }),
 }));
 vi.mock("@/lib/settings", () => ({
-  markRulesDirty: () => {},
+  setCurrentRulesSignature: () => {},
 }));
 
 const useRulesMock = vi.fn();

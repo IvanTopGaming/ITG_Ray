@@ -2,8 +2,7 @@ import { useSyncExternalStore } from "react";
 
 import * as RulesService from "@/lib/itg/RulesService";
 import { EventsOn } from "@/lib/itg/runtime";
-import { getDashState } from "@/lib/dashStore";
-import { markRulesDirty, setCurrentRulesSignature } from "@/lib/settings";
+import { setCurrentRulesSignature } from "@/lib/settings";
 
 // rulesStore mirrors serversStore: a singleton store backed by
 // useSyncExternalStore, lazy-bootstrapped on first hook mount, with a
@@ -146,18 +145,14 @@ function withSingleFlight<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 // applyMutation wraps every mutation in the single-flight mutex, refetches
-// the authoritative model from the backend, then — if the chain is
-// currently connected — arms the ReconnectToast via markRulesDirty().
-// This is centralized here so each mutation wrapper stays a one-liner
-// and the "arm on connected" contract has a single source of truth.
+// the authoritative model from the backend, then republishes the canonical
+// rules signature so the ReconnectToast diff picks up the change. This is
+// centralized here so each mutation wrapper stays a one-liner.
 async function applyMutation<T>(op: () => Promise<T>): Promise<T> {
   return withSingleFlight(async () => {
     const result = await op();
     await refetch();
     pushRulesSignature();
-    if (getDashState().status === "connected") {
-      markRulesDirty();
-    }
     return result;
   });
 }
