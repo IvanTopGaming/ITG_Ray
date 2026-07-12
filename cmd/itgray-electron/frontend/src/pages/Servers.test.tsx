@@ -43,7 +43,7 @@ vi.mock("@/lib/itg/runtime", () => ({
   EventsOn: () => () => {},
 }));
 
-import { Servers } from "./Servers";
+import { Servers, parseVless, buildVless } from "./Servers";
 
 function makeServer(over: Partial<any> = {}) {
   return {
@@ -354,5 +354,20 @@ describe("Servers page", () => {
     });
     render(<Servers />);
     expect(screen.getByText(/no servers yet/i)).toBeInTheDocument();
+  });
+});
+
+describe("vless round-trip", () => {
+  it("carries xhttp host+mode and grpc serviceName", () => {
+    const uri =
+      "vless://u@ex.com:443?encryption=none&type=xhttp&path=%2Fx&host=front.ex.com&mode=auto&security=tls&sni=a.com";
+    const c = parseVless(uri);
+    expect(c.type).toBe("xhttp");
+    expect(c.hostHeader).toBe("front.ex.com");
+    expect(c.mode).toBe("auto");
+    const back = buildVless(c);
+    expect(back).toContain("type=xhttp");
+    expect(back).toContain("host=front.ex.com");
+    expect(back).toContain("mode=auto");
   });
 });

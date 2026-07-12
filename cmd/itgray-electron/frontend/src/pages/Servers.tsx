@@ -658,6 +658,12 @@ interface VlessConfig {
   publicKey: string;
   shortId: string;
   flow: string; // empty, xtls-rprx-vision
+  mode: string; // xhttp/grpc mode
+  serviceName: string; // grpc
+  seed: string; // mkcp
+  headerType: string; // tcp/mkcp
+  quicSecurity: string; // quic
+  key: string; // quic
 }
 
 const EMPTY_VLESS: VlessConfig = {
@@ -674,9 +680,15 @@ const EMPTY_VLESS: VlessConfig = {
   publicKey: "",
   shortId: "",
   flow: "",
+  mode: "",
+  serviceName: "",
+  seed: "",
+  headerType: "",
+  quicSecurity: "",
+  key: "",
 };
 
-function parseVless(uri: string): VlessConfig {
+export function parseVless(uri: string): VlessConfig {
   const c: VlessConfig = { ...EMPTY_VLESS };
   if (!uri) return c;
   // The WHATWG URL parser treats vless:// as a non-special scheme and does
@@ -704,13 +716,19 @@ function parseVless(uri: string): VlessConfig {
     c.publicKey = p.get("pbk") || "";
     c.shortId = p.get("sid") || "";
     c.flow = p.get("flow") || "";
+    c.mode = p.get("mode") || "";
+    c.serviceName = p.get("serviceName") || "";
+    c.seed = p.get("seed") || "";
+    c.headerType = p.get("headerType") || "";
+    c.quicSecurity = p.get("quicSecurity") || "";
+    c.key = p.get("key") || "";
   } catch {
     /* malformed encoding — keep empty */
   }
   return c;
 }
 
-function buildVless(c: VlessConfig): string {
+export function buildVless(c: VlessConfig): string {
   if (!c.uuid || !c.host) return "";
   const params = new URLSearchParams();
   params.set("encryption", "none");
@@ -718,6 +736,12 @@ function buildVless(c: VlessConfig): string {
   if (c.type) params.set("type", c.type);
   if (c.path) params.set("path", c.path);
   if (c.hostHeader) params.set("host", c.hostHeader);
+  if (c.mode) params.set("mode", c.mode);
+  if (c.serviceName) params.set("serviceName", c.serviceName);
+  if (c.seed) params.set("seed", c.seed);
+  if (c.headerType) params.set("headerType", c.headerType);
+  if (c.quicSecurity) params.set("quicSecurity", c.quicSecurity);
+  if (c.key) params.set("key", c.key);
   if (c.security) params.set("security", c.security);
   if (c.sni) params.set("sni", c.sni);
   if (c.fingerprint) params.set("fp", c.fingerprint);
@@ -732,8 +756,9 @@ const TRANSPORT_TYPES = [
   { value: "tcp", label: "TCP" },
   { value: "ws", label: "WebSocket" },
   { value: "grpc", label: "gRPC" },
-  { value: "http", label: "HTTP/2" },
-  { value: "kcp", label: "mKCP" },
+  { value: "httpupgrade", label: "HTTPUpgrade" },
+  { value: "xhttp", label: "XHTTP" },
+  { value: "mkcp", label: "mKCP" },
   { value: "quic", label: "QUIC" },
 ];
 
