@@ -236,6 +236,7 @@
     "thenAction": "Then action",
     "addCondition": "Add condition",
     "removeCard": "Remove {{label}} card",
+    "editCard": "Edit {{label}}",
     "remove": "Remove",
     "discardTitle": "Discard changes?",
     "discardDescription": "You have unsaved changes. Leave anyway?",

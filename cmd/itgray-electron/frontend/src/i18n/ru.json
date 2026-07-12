@@ -237,6 +237,7 @@
     "thenAction": "Тогда действие",
     "addCondition": "Добавить условие",
     "removeCard": "Удалить карточку «{{label}}»",
+    "editCard": "Изменить {{label}}",
     "remove": "Удалить",
     "discardTitle": "Отменить изменения?",
     "discardDescription": "Есть несохранённые изменения. Всё равно выйти?",
