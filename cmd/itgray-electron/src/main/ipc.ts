@@ -10,6 +10,7 @@ const BRIDGE_TOPICS: Exclude<EventTopic, "bridge.state">[] = [
   "chain.error",
   "geo.progress",
   "helper.state",
+  "log.line",
   "probe.result",
   "servers.changed",
   "sub.synced",

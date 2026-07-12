@@ -42,6 +42,12 @@ contextBridge.exposeInMainWorld("itg", {
   geo: {
     refresh: () => rpc("geo.refresh"),
   },
+  logs: {
+    start: () => rpc("logs.start"),
+    stop: () => rpc("logs.stop"),
+    openFolder: () => rpc("logs.openFolder"),
+    dirInfo: () => rpc("logs.dirInfo"),
+  },
   helper: {
     status: () => rpc("helper.status"),
     install: () => rpc("helper.install"),

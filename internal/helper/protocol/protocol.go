@@ -12,6 +12,7 @@ type Op string
 const (
 	OpDnsRestore    Op = "DnsRestore"
 	OpDnsSet        Op = "DnsSet"
+	OpReadLogs      Op = "ReadLogs"
 	OpRouteAdd      Op = "RouteAdd"
 	OpRouteRemove   Op = "RouteRemove"
 	OpRouteRestore  Op = "RouteRestore"
@@ -39,6 +40,17 @@ type Response struct {
 	OK     bool            `json:"ok"`
 	Error  string          `json:"error,omitempty"`
 	Result json.RawMessage `json:"result,omitempty"`
+}
+
+type ReadLogsArgs struct {
+	Name   string `json:"name"`
+	Offset int64  `json:"offset"`
+}
+
+type ReadLogsResult struct {
+	Data      []byte `json:"data"`
+	Offset    int64  `json:"offset"`
+	Truncated bool   `json:"truncated"`
 }
 
 // NewOK constructs a successful response.

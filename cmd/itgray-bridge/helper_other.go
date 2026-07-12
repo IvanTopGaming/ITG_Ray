@@ -8,6 +8,11 @@ import (
 	"github.com/itg-team/itg-ray/internal/chainctl"
 )
 
+// logHelperAddr is the transport the log poller dials for OpReadLogs. On
+// Linux this is the privileged daemon's unix socket; on macOS the dial is
+// unsupported and the poller degrades to a no-op.
+const logHelperAddr = "/run/itgray-helper.sock"
+
 // newHelperClient returns the Linux/macOS helper client: a mode-routing
 // adapter that sends SysProxy mode to the in-process core (sing-box + xray
 // run directly in the bridge, no root) and TUN mode to the privileged

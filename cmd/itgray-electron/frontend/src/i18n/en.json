@@ -514,5 +514,22 @@
       "protocols_other": "{{count}} protocols",
       "none": "no conditions"
     }
+  },
+  "logs": {
+    "title": "Logs",
+    "subtitle": "Live stream from the bridge and engine — for diagnosing the connection",
+    "sourceAll": "All",
+    "level": "Level",
+    "search": "Search lines…",
+    "wrap": "Wrap",
+    "folder": "Folder",
+    "export": "Export",
+    "copy": "Copy",
+    "copied": "Copied!",
+    "clear": "Clear",
+    "paused": "Auto-scroll paused",
+    "jump": "Jump to latest",
+    "status": "{{sources}} sources · {{lines}} lines · buffer 2000/source",
+    "empty": "No log lines yet — connect to start the engine"
   }
 }

@@ -47,5 +47,6 @@ func buildDispatcher() *server.Dispatcher {
 	d.Register(protocol.OpServiceStatus, server.NewServiceStatusHandler(Version, time.Now(), server.IsChainActive))
 	d.Register(protocol.OpStartChain, server.NewStartChainHandler())
 	d.Register(protocol.OpStopChain, server.NewStopChainHandler())
+	d.Register(protocol.OpReadLogs, server.NewReadLogsHandler())
 	return d
 }

@@ -116,6 +116,7 @@ func buildDispatcher() *server.Dispatcher {
 	d.Register(protocol.OpRouteSnapshot, server.NewRouteSnapshotHandler())
 	d.Register(protocol.OpStartChain, server.NewStartChainHandler())
 	d.Register(protocol.OpStopChain, server.NewStopChainHandler())
+	d.Register(protocol.OpReadLogs, server.NewReadLogsHandler())
 	return d
 }
 

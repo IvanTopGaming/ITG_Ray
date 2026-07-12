@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { motion, type Variants } from 'framer-motion';
 import { useSettings } from '@/lib/settings';
@@ -66,6 +67,7 @@ function isMtuValid(value: number): boolean {
 
 export function Settings() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [s, update] = useSettings();
   const active = useScrollSpy(SECTION_IDS);
   const SECTIONS = [
@@ -78,7 +80,7 @@ export function Settings() {
     { id: 'logs', label: t('settings.sections.logs') },
     { id: 'about', label: t('settings.sections.about') },
   ];
-  const [logFolderSize, setLogFolderSize] = useState(47); // MB
+  const [logDir, setLogDir] = useState<{ path: string; sizeBytes: number }>({ path: '', sizeBytes: 0 });
   const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'uptodate'>('idle');
   const [stuck, setStuck] = useState(false);
   const [about, setAbout] = useState<hub.AboutSettings | null>(null);
@@ -136,6 +138,12 @@ export function Settings() {
       .catch((err) => console.warn('SettingsService.Get failed', err));
   }, []);
 
+  useEffect(() => {
+    void (window.itg.logs.dirInfo() as Promise<{ path: string; sizeBytes: number }>)
+      .then(setLogDir)
+      .catch(() => {});
+  }, []);
+
   const versionLabel = about?.version || '—';
   const buildLabel = (() => {
     if (!about) return '—';
@@ -163,8 +171,6 @@ export function Settings() {
   const isWindowsHelper = helper.isWindows === true;
   const isLinuxHelper = helper.isLinux === true;
   const isLoadingPlatform = helper.isWindows === null;
-
-  const clearLogs = () => setLogFolderSize(0);
 
   const checkUpdates = async () => {
     setUpdateState('checking');
@@ -707,7 +713,7 @@ export function Settings() {
                 )}
                 <button
                   type="button"
-                  onClick={() => console.log('[mock] view helper log')}
+                  onClick={() => navigate('/logs')}
                   className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] border border-white/[0.10] text-white/[0.92] hover:bg-white/[0.05]"
                 >
                   {t('settings.helper.viewLog')}
@@ -761,17 +767,14 @@ export function Settings() {
             ] as const}
           />
         </SettingRow>
-        <SettingRow label={t('settings.logs.openFolder')} hint={t('settings.logs.folderHint', { mb: logFolderSize })}>
+        <SettingRow label={t('settings.logs.openFolder')} hint={t('settings.logs.folderHint', { mb: (logDir.sizeBytes / 1_000_000).toFixed(1) })}>
           <button
             type="button"
-            onClick={() => console.log('[mock] open log folder')}
+            onClick={() => void window.itg.logs.openFolder()}
             className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] border border-white/[0.10] text-white/[0.92] hover:bg-white/[0.05]"
           >
             {t('settings.logs.openFolderButton')}
           </button>
-        </SettingRow>
-        <SettingRow label={t('settings.logs.clearOldLogs')} hint={t('settings.logs.clearOldLogsHint')}>
-          <ConfirmButton onConfirm={clearLogs} variant="danger">{t('common.clear')}</ConfirmButton>
         </SettingRow>
       </motion.div>
 

@@ -22,8 +22,11 @@ import (
 	"github.com/itg-team/itg-ray/internal/chainctl"
 	"github.com/itg-team/itg-ray/internal/config"
 	"github.com/itg-team/itg-ray/internal/geo"
+	"github.com/itg-team/itg-ray/internal/helper/runtime"
 	"github.com/itg-team/itg-ray/internal/hub"
 	"github.com/itg-team/itg-ray/internal/hwid"
+	"github.com/itg-team/itg-ray/internal/logging"
+	"github.com/itg-team/itg-ray/internal/logstream"
 	"github.com/itg-team/itg-ray/internal/refresh"
 	"github.com/itg-team/itg-ray/internal/rules"
 	"github.com/itg-team/itg-ray/internal/server"
@@ -114,6 +117,10 @@ func main() {
 	// servers.changed / sub.synced events into it; Phase 4 will subscribe
 	// a forwarder that emits them as JSON-RPC notifications over stdout.
 	h := hub.New()
+
+	logBuf := logstream.New(h, 2000)
+	slog.SetDefault(slog.New(logstream.NewTapHandler(
+		logging.NewHandler(os.Stderr, slog.LevelInfo), logBuf)))
 
 	// HWID + DeviceInfo for SubsService HWID-aware sync. Failure is
 	// non-fatal: SubsService treats empty HWID as "HWID disabled".
@@ -231,6 +238,14 @@ func main() {
 		SubStore:     subStore,
 	})
 
+	logPoller := logstream.NewPoller(logBuf, newLogReader(logHelperAddr))
+	logSvc := bindings.NewLogService(bindings.LogDeps{
+		Buffer:      logBuf,
+		StartPoller: func() { logPoller.Start(context.Background()) },
+		StopPoller:  logPoller.Stop,
+		LogDir:      runtime.BasePath(),
+	})
+
 	d := dispatcher.New()
 
 	app := handlers.AppHandlers{Snap: appSvc}
@@ -296,6 +311,12 @@ func main() {
 		ruleStore:  ruleStore,
 	}}
 	d.Register("geo.refresh", geoH.Refresh)
+
+	logsH := handlers.LogsHandlers{Svc: logSvc}
+	d.Register("logs.start", logsH.Start)
+	d.Register("logs.stop", logsH.Stop)
+	d.Register("logs.openFolder", logsH.OpenFolder)
+	d.Register("logs.dirInfo", logsH.DirInfo)
 
 	// Bus serializes outbound JSON-RPC notifications onto stdout.
 	b := bus.New(out)

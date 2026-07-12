@@ -37,3 +37,7 @@ const EventRulesChanged = "rules:changed"
 // EventGeoProgress is published during geo rule-set refresh to surface
 // download progress to the frontend.
 const EventGeoProgress = "geo:progress"
+
+// EventLogLine is published per captured log line (bridge + engine) while
+// the Logs page is open.
+const EventLogLine = "log:line"

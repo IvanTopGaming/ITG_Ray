@@ -67,6 +67,23 @@ export interface KillSwitchSettings {
   alwaysOn: boolean;
 }
 
+export interface LogsDirInfoResult {
+  path: string;
+  sizeBytes: number;
+}
+
+export interface LogsEntry {
+  seq: number;
+  time: string;
+  level: string;
+  source: string;
+  message: string;
+}
+
+export interface LogsStartResult {
+  entries: LogsEntry[];
+}
+
 export interface Model {
   groups: Group[];
   default_action: string;
@@ -331,6 +348,10 @@ export interface RpcMethods {
   "helper.status": { params: Empty; result: HelperStatusResult };
   "helper.stop": { params: Empty; result: Empty };
   "helper.uninstallLinux": { params: Empty; result: Empty };
+  "logs.dirInfo": { params: Empty; result: LogsDirInfoResult };
+  "logs.openFolder": { params: Empty; result: Empty };
+  "logs.start": { params: Empty; result: LogsStartResult };
+  "logs.stop": { params: Empty; result: Empty };
   "onboarding.complete": { params: Empty; result: Empty };
   "onboarding.getState": { params: Empty; result: OnboardingStateResult };
   "onboarding.skip": { params: Empty; result: Empty };
@@ -373,6 +394,7 @@ export type EventTopic =
   | "chain.error"
   | "geo.progress"
   | "helper.state"
+  | "log.line"
   | "probe.result"
   | "rules.changed"
   | "servers.changed"

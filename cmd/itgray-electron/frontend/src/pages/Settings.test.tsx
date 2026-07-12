@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { act, render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 
 // ──────────────────────────────────────────────────────────────────────
@@ -278,7 +279,11 @@ class MockIntersectionObserver {
 }
 
 const renderSettings = async () => {
-  const utils = render(<SettingsPage />);
+  const utils = render(
+    <MemoryRouter>
+      <SettingsPage />
+    </MemoryRouter>,
+  );
   // Drain GetSettings() promise + listener notify so post-mount state
   // (with hwidEnabled=true etc. from the mock) is committed before
   // assertions run. Two microtask drains mirror the AppShell test.
@@ -297,6 +302,12 @@ describe('Settings — Subscription Identity', () => {
     // Wails RPC in pure-Node contexts. In jsdom we set a stub so the
     // mocked GetSettings actually runs.
     (window as unknown as { go: object }).go = {};
+    (window as unknown as { itg: object }).itg = {
+      logs: {
+        dirInfo: vi.fn().mockResolvedValue({ path: '', sizeBytes: 0 }),
+        openFolder: vi.fn().mockResolvedValue(null),
+      },
+    };
     __resetForTests();
     vi.clearAllMocks();
     (SettingsService.Get as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -336,6 +347,7 @@ describe('Settings — Subscription Identity', () => {
   afterEach(() => {
     __resetForTests();
     delete (window as unknown as { go?: object }).go;
+    delete (window as unknown as { itg?: object }).itg;
   });
 
   it('renders all 5 identity controls', async () => {
@@ -412,6 +424,12 @@ describe('Settings — Autostart toggle', () => {
     (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver =
       MockIntersectionObserver as unknown as typeof IntersectionObserver;
     (window as unknown as { go: object }).go = {};
+    (window as unknown as { itg: object }).itg = {
+      logs: {
+        dirInfo: vi.fn().mockResolvedValue({ path: '', sizeBytes: 0 }),
+        openFolder: vi.fn().mockResolvedValue(null),
+      },
+    };
     __resetForTests();
     vi.clearAllMocks();
     (SettingsService.Get as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -451,6 +469,7 @@ describe('Settings — Autostart toggle', () => {
   afterEach(() => {
     __resetForTests();
     delete (window as unknown as { go?: object }).go;
+    delete (window as unknown as { itg?: object }).itg;
   });
 
   it('flipping the autostart toggle calls SetAutostart with the new value', async () => {
