@@ -122,6 +122,7 @@ let eventsRegistered = false;
 // leave it stuck above zero.
 let inFlightUpdates = 0;
 let lastConnectSnapshot: NetworkSnapshot | null = null;
+let desiredServerId: string | null = null;
 let activeServerEdited = false;
 // networkDiffDismissed: user clicked Dismiss on a network-diff toast and
 // has not edited any field since. Cleared on any settings update, on
@@ -202,10 +203,12 @@ function ensureEventsRegistered(): void {
     if (p.status === 'connected') {
       snapshotFromConnectedPayload(payload as Parameters<typeof snapshotFromConnectedPayload>[0]);
       clearRulesDirty();
+      clearDesiredServer();
     } else if (p.status === 'idle' || p.status === 'error') {
       clearConnectSnapshot();
       clearActiveServerEdited();
       clearRulesDirty();
+      clearDesiredServer();
     }
   });
   eventsRegistered = true;
@@ -310,6 +313,27 @@ export function getConnectSnapshot(): NetworkSnapshot | null {
   return lastConnectSnapshot;
 }
 
+export function setDesiredServer(id: string): void {
+  const next = lastConnectSnapshot && id === lastConnectSnapshot.serverId ? null : id;
+  if (desiredServerId === next) return;
+  desiredServerId = next;
+  notifyListeners();
+}
+
+export function clearDesiredServer(): void {
+  if (desiredServerId === null) return;
+  desiredServerId = null;
+  notifyListeners();
+}
+
+export function getDesiredServer(): string | null {
+  return desiredServerId;
+}
+
+export function useDesiredServer(): string | null {
+  return useSyncExternalStore(subscribe, () => desiredServerId, () => desiredServerId);
+}
+
 function networkDiffersFromSnapshot(): boolean {
   if (lastConnectSnapshot === null) return false;
   const s = currentState;
@@ -368,11 +392,20 @@ export function dismissNetworkDiff(): void {
   notifyListeners();
 }
 
+function serverDiffers(): boolean {
+  return (
+    desiredServerId !== null &&
+    lastConnectSnapshot !== null &&
+    desiredServerId !== lastConnectSnapshot.serverId
+  );
+}
+
 function reconnectNeeded(): boolean {
   return (
     (networkDiffersFromSnapshot() && !networkDiffDismissed) ||
     activeServerEdited ||
-    rulesDirtyAfterConnect
+    rulesDirtyAfterConnect ||
+    serverDiffers()
   );
 }
 
@@ -456,6 +489,7 @@ export function __resetForTests(): void {
   backendFetchStarted = false;
   inFlightUpdates = 0;
   lastConnectSnapshot = null;
+  desiredServerId = null;
   activeServerEdited = false;
   networkDiffDismissed = false;
   rulesDirtyAfterConnect = false;

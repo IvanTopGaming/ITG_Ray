@@ -31,6 +31,9 @@ import {
   dismissNetworkDiff,
   markRulesDirty,
   clearRulesDirty,
+  setDesiredServer,
+  clearDesiredServer,
+  getDesiredServer,
 } from './settings';
 
 beforeEach(() => {
@@ -311,6 +314,11 @@ describe('useSettings (mocked SettingsService)', () => {
 
 describe('reconnect snapshot', () => {
   beforeEach(() => {
+    // useReconnectNeeded (rendered by the setDesiredServer cases below)
+    // subscribes to the store, whose first listener triggers
+    // loadFromBackend() -> Get(). Without a resolved mock the .then()
+    // chain throws on undefined.
+    getMock.mockResolvedValue({ general: {}, network: {}, notifications: {}, debug: {} });
     clearConnectSnapshot();
   });
 
@@ -412,6 +420,38 @@ describe('reconnect snapshot', () => {
     });
     seedConnectSnapshotFromSnapshot(connectedPull);
     expect(getConnectSnapshot()?.serverId).toBe('live');
+  });
+
+  const serverDimNetwork = {
+    tunCidr: DEFAULTS.tunCidr,
+    tunMtu: DEFAULTS.tunMtu,
+    socksPort: DEFAULTS.socksPort,
+    httpPort: DEFAULTS.httpPort,
+    allowLan: DEFAULTS.allowLan,
+    ipv6Mode: DEFAULTS.ipv6Mode,
+    dns: { mode: 'auto' },
+  };
+
+  it('setDesiredServer arms the toast when it differs from the connected server', () => {
+    snapshotFromConnectedPayload({ serverId: 'A', mode: 'tun', network: serverDimNetwork });
+    setDesiredServer('B');
+    expect(getDesiredServer()).toBe('B');
+    expect(renderHook(() => useReconnectNeeded()).result.current).toBe(true);
+  });
+
+  it('setDesiredServer(connected id) clears the pending pick (revert)', () => {
+    snapshotFromConnectedPayload({ serverId: 'A', mode: 'tun', network: serverDimNetwork });
+    setDesiredServer('B');
+    setDesiredServer('A');
+    expect(getDesiredServer()).toBeNull();
+    expect(renderHook(() => useReconnectNeeded()).result.current).toBe(false);
+  });
+
+  it('clearDesiredServer removes the pending pick', () => {
+    snapshotFromConnectedPayload({ serverId: 'A', mode: 'tun', network: serverDimNetwork });
+    setDesiredServer('B');
+    clearDesiredServer();
+    expect(getDesiredServer()).toBeNull();
   });
 });
 
