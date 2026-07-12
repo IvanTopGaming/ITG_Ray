@@ -566,14 +566,18 @@ func stopActiveChainLocked() []string {
 		}
 	}
 
-	// 2b. Remove the NRPT rule we installed at chain start. Idempotent —
-	// RemoveNrptRule succeeds silently if the rule is gone (e.g. user
-	// already cleared it manually), so a partially-rolled-back state
-	// can't block this teardown.
-	if s.nrptName != "" {
-		if err := dns.RemoveNrptRule(s.nrptName); err != nil {
-			errs = append(errs, "dns.RemoveNrptRule: "+err.Error())
-		}
+	// 2b. Remove the NRPT rule we installed at chain start, in the
+	// background. The PowerShell Remove-DnsClientNrptRule pipeline costs
+	// ~1s and the chain is already down by this point, so blocking the
+	// teardown RPC on it just makes Disconnect feel slow. It's idempotent
+	// and best-effort (a stray rule points at the transit IP and is
+	// cleared on the next connect/disconnect), so fire-and-forget is safe.
+	if name := s.nrptName; name != "" {
+		go func() {
+			if err := dns.RemoveNrptRule(name); err != nil {
+				slog.Warn("background NRPT removal failed", "rule", name, "err", err)
+			}
+		}()
 	}
 
 	// 3. Remove the peer-route.
