@@ -519,6 +519,7 @@
     "export": "Export",
     "copy": "Copy",
     "copied": "Copied!",
+    "clear": "Clear",
     "paused": "Auto-scroll paused",
     "jump": "Jump to latest",
     "status": "{{sources}} sources · {{lines}} lines · buffer 2000/source",

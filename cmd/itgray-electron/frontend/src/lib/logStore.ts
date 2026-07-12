@@ -41,6 +41,11 @@ export function stopLogs(): void {
   void Logs.Stop();
 }
 
+export function clearLogs(): void {
+  entries = [];
+  notify();
+}
+
 export function filterLogs(
   list: LogEntry[],
   opts: { sources: Set<string>; minLevel: LogLevel; search: string },

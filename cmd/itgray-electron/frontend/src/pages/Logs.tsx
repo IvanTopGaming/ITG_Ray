@@ -5,6 +5,7 @@ import {
   useLogEntries,
   startLogs,
   stopLogs,
+  clearLogs,
   filterLogs,
   type LogLevel,
   type LogSource,
@@ -139,6 +140,12 @@ export function Logs() {
           className="rounded-[10px] glass-dim px-2.5 py-1.5 text-[12px] text-white/80"
         >
           {t("logs.export")}
+        </button>
+        <button
+          onClick={() => clearLogs()}
+          className="rounded-[10px] glass-dim px-2.5 py-1.5 text-[12px] text-white/80 hover:text-danger"
+        >
+          {t("logs.clear")}
         </button>
       </div>
 
