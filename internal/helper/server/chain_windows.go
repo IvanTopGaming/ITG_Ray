@@ -245,21 +245,13 @@ func NewStartChainHandler() Handler {
 			// by netip.ParsePrefix. Resolution uses the host's DNS (the same one sing-box
 			// will inherit on spawn) and runs BEFORE sing-box spawns, so it goes through
 			// the original network path rather than sing-box's auto_route + DNS hijack.
-			serverIPs, err := net.LookupIP(a.ServerHost)
+			// Retry with backoff: on a reconnect the previous chain's DNS hijack/NRPT was
+			// just torn down, so the first lookup can transiently return "no such host"
+			// until the system resolver settles back to the physical adapter.
+			serverV4, err := resolveServerIPv4(net.LookupIP, a.ServerHost, 6, 500*time.Millisecond)
 			if err != nil {
 				rollback()
-				return nil, fmt.Errorf("resolve server host %q: %w", a.ServerHost, err)
-			}
-			var serverV4 net.IP
-			for _, ip := range serverIPs {
-				if v4 := ip.To4(); v4 != nil {
-					serverV4 = v4
-					break
-				}
-			}
-			if serverV4 == nil {
-				rollback()
-				return nil, fmt.Errorf("no IPv4 for server host %q", a.ServerHost)
+				return nil, err
 			}
 
 			state.peerRoute = route.Entry{
