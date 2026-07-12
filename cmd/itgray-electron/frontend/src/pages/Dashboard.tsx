@@ -143,9 +143,14 @@ export function Dashboard() {
         className="flex items-center justify-between"
         variants={itemVariants}
       >
-        <h1 className="text-[22px] font-semibold tracking-tight">
-          {t("dashboard.title")}
-        </h1>
+        <div>
+          <h1 className="text-[22px] font-semibold tracking-tight">
+            {t("dashboard.title")}
+          </h1>
+          <p className="mt-1 text-[13px] text-white/50">
+            {t("dashboard.description")}
+          </p>
+        </div>
         <ModeToggle
           value={dash.mode}
           onChange={handleModeChange}

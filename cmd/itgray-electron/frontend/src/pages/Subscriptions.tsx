@@ -57,9 +57,14 @@ export function Subscriptions() {
           variants={itemVariants}
           className="flex items-center justify-between gap-4"
         >
-          <h1 className="text-[22px] font-semibold tracking-tight">
-            {t("subscriptions.title")}
-          </h1>
+          <div>
+            <h1 className="text-[22px] font-semibold tracking-tight">
+              {t("subscriptions.title")}
+            </h1>
+            <p className="mt-1 text-[13px] text-white/50">
+              {t("subscriptions.description")}
+            </p>
+          </div>
           <div className="flex items-center gap-2">
             <SyncAllButton
               onClick={() => void actions.syncAll()}

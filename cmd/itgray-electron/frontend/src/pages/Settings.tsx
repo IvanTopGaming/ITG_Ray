@@ -215,6 +215,11 @@ export function Settings() {
         >
           {t('settings.title')}
         </h1>
+        {!stuck && (
+          <p className="-mt-2 mb-3 text-[13px] text-white/50">
+            {t('settings.description')}
+          </p>
+        )}
         <ScrollSpy sections={SECTIONS} active={active} onSelect={scrollToSection} />
       </div>
 

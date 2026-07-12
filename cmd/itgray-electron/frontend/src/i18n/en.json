@@ -35,6 +35,7 @@
   },
   "dashboard": {
     "title": "Dashboard",
+    "description": "Connect, switch servers, and watch live traffic.",
     "errorFallback": "error",
     "orb": {
       "connect": "Connect",
@@ -111,6 +112,7 @@
   },
   "servers": {
     "title": "Servers",
+    "description": "Your servers — probe latency and pick the active one.",
     "searchPlaceholder": "Search city or code",
     "emptyState": "No servers yet — add one or sync a subscription.",
     "noMatches": "Nothing matches “{{query}}”.",
@@ -290,6 +292,7 @@
   },
   "settings": {
     "title": "Settings",
+    "description": "App, network, and privacy preferences.",
     "sections": {
       "general": "General",
       "connection": "Connection",
@@ -442,6 +445,7 @@
   },
   "subscriptions": {
     "title": "Subscriptions",
+    "description": "Subscription links that keep your server list current.",
     "syncAll": "Sync all",
     "addSubscription": "Add subscription",
     "failedToLoad": "Failed to load subscriptions",
