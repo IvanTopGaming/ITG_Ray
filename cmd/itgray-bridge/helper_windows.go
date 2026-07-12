@@ -15,6 +15,9 @@ import (
 // build graph.
 const helperPipe = `\\.\pipe\ITGRay.Helper.v1`
 
+// logHelperAddr is the transport the log poller dials for OpReadLogs.
+const logHelperAddr = helperPipe
+
 // newHelperClient returns a lazily-connecting helper client. The helper
 // named pipe is dialed ON DEMAND (first helper call) rather than once at
 // startup, so the first-run flow works: the app launches before the user

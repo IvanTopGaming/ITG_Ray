@@ -224,6 +224,31 @@ type GeoService interface {
 	Refresh(p Empty) (Empty, error)
 }
 
+// LogsService — methods under "logs." namespace.
+type LogsService interface {
+	Start(p Empty) (LogsStartResult, error)
+	Stop(p Empty) (Empty, error)
+	OpenFolder(p Empty) (Empty, error)
+	DirInfo(p Empty) (LogsDirInfoResult, error)
+}
+
+type LogsEntry struct {
+	Seq     uint64 `json:"seq"`
+	Time    string `json:"time"`
+	Level   string `json:"level"`
+	Source  string `json:"source"`
+	Message string `json:"message"`
+}
+
+type LogsStartResult struct {
+	Entries []LogsEntry `json:"entries"`
+}
+
+type LogsDirInfoResult struct {
+	Path      string `json:"path"`
+	SizeBytes int64  `json:"sizeBytes"`
+}
+
 // EventTopics enumerates the bridge → main notification topics. The
 // codegen tool emits these as a TS string-union type.
 type EventTopic string
