@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/itg-team/itg-ray/internal/helper/protocol"
-	"github.com/itg-team/itg-ray/internal/helper/runtime"
 )
 
 var readLogsAllow = map[string]bool{"sing-box.log": true, "xray.log": true}
@@ -22,7 +22,7 @@ func NewReadLogsHandler() Handler {
 		if !readLogsAllow[args.Name] {
 			return nil, fmt.Errorf("read logs: name %q not allowed", args.Name)
 		}
-		f, err := os.Open(runtime.LogPath(args.Name))
+		f, err := os.Open(filepath.Join(engineLogDir(), args.Name))
 		if err != nil {
 			if os.IsNotExist(err) {
 				return json.Marshal(protocol.ReadLogsResult{Offset: 0})
