@@ -1,10 +1,25 @@
 package vless
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestXHTTPHostRoundTrip(t *testing.T) {
+	raw := "vless://uuid@example.com:443?type=xhttp&security=tls&sni=a.com&path=%2Fx&mode=auto&host=front.example.com"
+	c, err := ParseURL(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.WSHost != "front.example.com" {
+		t.Fatalf("xhttp host not parsed: %q", c.WSHost)
+	}
+	if got := c.URL(); !strings.Contains(got, "host=front.example.com") {
+		t.Fatalf("xhttp host not serialized: %s", got)
+	}
+}
 
 func TestParseURL_RealityXHTTP(t *testing.T) {
 	u := "vless://550e8400-e29b-41d4-a716-446655440000@example.com:443" +

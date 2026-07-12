@@ -112,6 +112,7 @@ func ParseURL(raw string) (Config, error) {
 	case TransportXHTTP:
 		c.Path = q.Get("path")
 		c.XHTTPMode = q.Get("mode")
+		c.WSHost = q.Get("host")
 	case TransportTCP:
 		c.HeaderType = q.Get("headerType")
 	case TransportMKCP:
@@ -180,6 +181,9 @@ func (c Config) URL() string { //nolint:gocritic // Config is a value type; call
 		}
 		if c.XHTTPMode != "" {
 			q.Set("mode", c.XHTTPMode)
+		}
+		if c.WSHost != "" {
+			q.Set("host", c.WSHost)
 		}
 	case TransportTCP:
 		if c.HeaderType != "" {

@@ -151,10 +151,11 @@ func buildStream(c *vless.Config) map[string]any {
 			"host": c.WSHost,
 		}
 	case vless.TransportXHTTP:
-		ss["xhttpSettings"] = map[string]any{
-			"path": c.Path,
-			"mode": c.XHTTPMode,
+		xs := map[string]any{"path": c.Path, "mode": c.XHTTPMode}
+		if c.WSHost != "" {
+			xs["host"] = c.WSHost
 		}
+		ss["xhttpSettings"] = xs
 	case vless.TransportMKCP:
 		ss["kcpSettings"] = map[string]any{
 			"header": map[string]any{"type": orDefaultStr(c.HeaderType, "none")},

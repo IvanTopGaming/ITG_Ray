@@ -2,11 +2,31 @@ package configgen
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/itg-team/itg-ray/internal/vless"
 	"github.com/stretchr/testify/require"
 )
+
+func TestBuildXrayXHTTPHost(t *testing.T) {
+	in := &XrayInput{
+		Server: vless.Config{
+			Address: "example.com", Port: 443, UUID: "u",
+			Security: vless.SecurityTLS, SNI: "a.com",
+			Transport: vless.TransportXHTTP, Path: "/x", XHTTPMode: "auto", WSHost: "front.example.com",
+		},
+		ServerIP: "1.2.3.4", SocksPort: 10800,
+	}
+	raw, err := BuildXray(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"host":"front.example.com"`) &&
+		!strings.Contains(string(raw), `"host": "front.example.com"`) {
+		t.Fatalf("xhttp host not in config: %s", raw)
+	}
+}
 
 func TestBuildXray_Reality_XHTTP(t *testing.T) {
 	srv := vless.Config{

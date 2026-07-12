@@ -111,6 +111,7 @@ func ParseSingbox(s string) (ParseResult, error) {
 				c.GRPCServiceName = o.Transport.ServiceName
 			case vless.TransportXHTTP:
 				c.Path = o.Transport.Path
+				c.WSHost = o.Transport.Headers["Host"]
 			}
 		}
 		if c.Address == "" || c.UUID == "" {
