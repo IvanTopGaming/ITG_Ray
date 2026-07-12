@@ -103,6 +103,36 @@ func TestForwarderTranslatesAllEightTopics(t *testing.T) {
 	}
 }
 
+func TestForwarderTranslatesLogLine(t *testing.T) {
+	h := hub.New()
+	em := &recordingEmitter{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go (Forwarder{Hub: h, Bus: em}).Run(ctx)
+	time.Sleep(10 * time.Millisecond)
+
+	payload := map[string]any{"seq": 1.0, "level": "info", "source": "bridge", "message": "hi"}
+	h.Publish(hub.Event{Name: hub.EventLogLine, Payload: payload})
+
+	got := waitForEvents(t, em, 1)
+	if len(got) != 1 {
+		t.Fatalf("expected exactly 1 event, got %d", len(got))
+	}
+	if got[0].Topic != "log.line" {
+		t.Fatalf("expected topic log.line, got %q", got[0].Topic)
+	}
+	pm, ok := got[0].Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("payload type: got %T, want map[string]any", got[0].Payload)
+	}
+	for k, v := range payload {
+		if pm[k] != v {
+			t.Errorf("payload[%q]: got %v, want %v", k, pm[k], v)
+		}
+	}
+}
+
 func TestForwarderDropsUnknownTopic(t *testing.T) {
 	h := hub.New()
 	em := &recordingEmitter{}

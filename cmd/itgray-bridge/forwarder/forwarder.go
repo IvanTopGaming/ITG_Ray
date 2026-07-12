@@ -38,6 +38,7 @@ var hubToProtocol = map[string]string{
 	hub.EventServersChanged: "servers.changed",
 	hub.EventRulesChanged:   "rules.changed",
 	hub.EventGeoProgress:    "geo.progress",
+	hub.EventLogLine:        "log.line",
 }
 
 // Run subscribes to the hub and forwards events until ctx is cancelled

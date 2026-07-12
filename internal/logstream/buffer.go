@@ -46,7 +46,7 @@ func (b *Buffer) Add(source, level, message string, t time.Time) {
 	b.mu.Unlock()
 
 	if publish && b.hub != nil {
-		b.hub.Publish(hub.Event{Name: "log:line", Payload: e.toMap()})
+		b.hub.Publish(hub.Event{Name: hub.EventLogLine, Payload: e.toMap()})
 	}
 }
 
