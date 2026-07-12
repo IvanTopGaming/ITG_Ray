@@ -246,6 +246,24 @@ func TestServersService_Add_NameFallback(t *testing.T) {
 	require.Equal(t, "FromRemark", view.Name, "empty name should fall back to remark")
 }
 
+func TestValidateServerURIRejectsIncompatible(t *testing.T) {
+	uri := "vless://u@example.com:443?type=ws&security=reality&pbk=k&sni=a.com"
+	if _, err := validateServerURI(uri); err == nil {
+		t.Fatal("expected rejection of reality+ws")
+	}
+}
+
+func TestValidateServerURISanitizesFlow(t *testing.T) {
+	uri := "vless://u@example.com:443?type=ws&security=tls&sni=a.com&flow=xtls-rprx-vision"
+	cfg, err := validateServerURI(uri)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if cfg.Flow != "" {
+		t.Fatalf("flow should be dropped, got %q", cfg.Flow)
+	}
+}
+
 // fakeActiveProbe is a minimal ActiveServerProbe used in Remove tests.
 type fakeActiveProbe struct{ id string }
 

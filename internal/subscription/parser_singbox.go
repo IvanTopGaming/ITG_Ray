@@ -118,6 +118,10 @@ func ParseSingbox(s string) (ParseResult, error) {
 			r.Invalid++
 			continue
 		}
+		if _, nerr := c.Normalize(); nerr != nil {
+			r.Invalid++
+			continue
+		}
 		r.Configs = append(r.Configs, c)
 	}
 	return r, nil

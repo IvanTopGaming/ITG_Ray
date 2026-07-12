@@ -39,6 +39,10 @@ func ParsePlaintext(s string) (ParseResult, error) {
 			r.Invalid++
 			continue
 		}
+		if _, nerr := c.Normalize(); nerr != nil {
+			r.Invalid++
+			continue
+		}
 		r.Configs = append(r.Configs, c)
 	}
 	if err := sc.Err(); err != nil {

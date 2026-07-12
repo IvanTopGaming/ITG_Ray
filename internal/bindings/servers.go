@@ -202,6 +202,9 @@ func validateServerURI(rawURI string) (vless.Config, error) {
 	if err != nil {
 		return vless.Config{}, fmt.Errorf("invalid VLESS URI: %w", err)
 	}
+	if _, nerr := cfg.Normalize(); nerr != nil {
+		return vless.Config{}, fmt.Errorf("invalid VLESS URI: %w", nerr)
+	}
 	return cfg, nil
 }
 

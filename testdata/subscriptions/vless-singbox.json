@@ -21,9 +21,7 @@
         }
       },
       "transport": {
-        "type": "ws",
-        "path": "/ws",
-        "headers": { "Host": "cdn.example.com" }
+        "type": "tcp"
       }
     },
     {

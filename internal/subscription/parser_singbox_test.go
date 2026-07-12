@@ -27,9 +27,7 @@ func TestParseSingboxJSON_Basic(t *testing.T) {
 	require.Equal(t, "PUBKEY", c.RealityPublicKey)
 	require.Equal(t, "0011", c.RealityShortID)
 	require.Equal(t, "chrome", c.Fingerprint)
-	require.Equal(t, vless.TransportWS, c.Transport)
-	require.Equal(t, "/ws", c.Path)
-	require.Equal(t, "cdn.example.com", c.WSHost)
+	require.Equal(t, vless.TransportTCP, c.Transport)
 	require.Equal(t, "NL-AMS-1", c.Remark)
 }
 
