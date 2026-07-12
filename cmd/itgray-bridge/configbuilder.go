@@ -130,8 +130,12 @@ func buildConfigs(dataDir, configPath string, store *rules.Store, geoMgr *geo.Ma
 		if err != nil {
 			return nil, nil, fmt.Errorf("BuildSingbox: %w", err)
 		}
+		vc := srv.Vless
+		if _, nerr := vc.Normalize(); nerr != nil {
+			return nil, nil, fmt.Errorf("server %q has an incompatible config: %w", srv.Name, nerr)
+		}
 		xr, err := configgen.BuildXray(&configgen.XrayInput{
-			Server:    srv.Vless,
+			Server:    vc,
 			ServerIP:  serverIP,
 			SocksPort: defaultXrayPort,
 		})
