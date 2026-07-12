@@ -35,8 +35,12 @@ vi.mock("@/lib/itg/ServersService", () => ({
 }));
 
 const markActiveServerEditedMock = vi.fn();
+const setDesiredServerMock = vi.fn();
+const useDesiredServerMock = vi.fn();
 vi.mock("@/lib/settings", () => ({
   markActiveServerEdited: () => markActiveServerEditedMock(),
+  setDesiredServer: (...args: any[]) => setDesiredServerMock(...args),
+  useDesiredServer: () => useDesiredServerMock(),
 }));
 
 vi.mock("@/lib/itg/runtime", () => ({
@@ -92,6 +96,8 @@ beforeEach(() => {
   clearLastErrorMock.mockReset();
   toggleFavoriteMock.mockReset().mockResolvedValue(undefined);
   markActiveServerEditedMock.mockReset();
+  setDesiredServerMock.mockReset();
+  useDesiredServerMock.mockReset().mockReturnValue(null);
   dashConnectMock.mockReset().mockResolvedValue(undefined);
   dashProbeOneMock.mockReset().mockResolvedValue(undefined);
   dashProbeAllMock.mockReset().mockResolvedValue(undefined);
@@ -321,6 +327,55 @@ describe("Servers page", () => {
     render(<Servers />);
     await user.click(screen.getByText("A"));
     expect(dashConnectMock).not.toHaveBeenCalled();
+  });
+
+  it("clicking a server while CONNECTED sets a pending pick, does not reconnect", async () => {
+    const a = makeServer({ id: "a", name: "Server A" });
+    const b = makeServer({ id: "b", name: "Server B" });
+    useDashMock.mockReturnValue({
+      ...baseDash,
+      status: "connected",
+      currentServer: a,
+      allServers: [a, b],
+      bootstrapped: true,
+    });
+    render(<Servers />);
+    await userEvent.click(screen.getByText("Server B"));
+    expect(setDesiredServerMock).toHaveBeenCalledWith("b");
+    expect(dashConnectMock).not.toHaveBeenCalled();
+  });
+
+  it("clicking the connected row while a pending pick exists reverts it", async () => {
+    const a = makeServer({ id: "a", name: "Server A" });
+    const b = makeServer({ id: "b", name: "Server B" });
+    useDesiredServerMock.mockReturnValue("b");
+    useDashMock.mockReturnValue({
+      ...baseDash,
+      status: "connected",
+      currentServer: a,
+      allServers: [a, b],
+      bootstrapped: true,
+    });
+    render(<Servers />);
+    await userEvent.click(screen.getByText("Server A"));
+    expect(setDesiredServerMock).toHaveBeenCalledWith("a");
+    expect(dashConnectMock).not.toHaveBeenCalled();
+  });
+
+  it("clicking a server while IDLE connects immediately", async () => {
+    const a = makeServer({ id: "a", name: "Server A" });
+    const b = makeServer({ id: "b", name: "Server B" });
+    useDashMock.mockReturnValue({
+      ...baseDash,
+      status: "idle",
+      currentServer: null,
+      allServers: [a, b],
+      bootstrapped: true,
+    });
+    render(<Servers />);
+    await userEvent.click(screen.getByText("Server B"));
+    expect(dashConnectMock).toHaveBeenCalledWith("b");
+    expect(setDesiredServerMock).not.toHaveBeenCalled();
   });
 
   it("row click is suppressed when clicking inner buttons", async () => {

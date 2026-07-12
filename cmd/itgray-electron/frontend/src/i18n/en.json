@@ -126,6 +126,7 @@
     "unfavourite": "Unfavourite",
     "viewDetails": "View details",
     "active": "Active",
+    "pending": "pending",
     "probing": "probing…",
     "reprobe": "Re-probe latency",
     "dismissError": "Dismiss error",

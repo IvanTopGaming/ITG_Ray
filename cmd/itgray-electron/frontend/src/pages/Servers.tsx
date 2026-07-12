@@ -31,7 +31,11 @@ import {
   dashProbeOne,
   dashProbeAll,
 } from "@/lib/dashStore";
-import { markActiveServerEdited } from "@/lib/settings";
+import {
+  markActiveServerEdited,
+  setDesiredServer,
+  useDesiredServer,
+} from "@/lib/settings";
 import { ToggleFavorite } from "@/lib/itg/ServersService";
 import type { hub } from "@/lib/itg/models";
 
@@ -80,6 +84,7 @@ export function Servers() {
 
   const servers = dash.allServers;
   const activeServerId = dash.currentServer?.id ?? null;
+  const desiredServerId = useDesiredServer();
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -290,7 +295,12 @@ export function Servers() {
                 className="glass-regular flex flex-col overflow-hidden rounded-2xl"
               >
                 <AnimatePresence mode="popLayout" initial={false}>
-                  {group.rows.map((server, idx) => (
+                  {group.rows.map((server, idx) => {
+                  const active = server.id === activeServerId;
+                  const hasPending =
+                    desiredServerId != null &&
+                    desiredServerId !== activeServerId;
+                  return (
                     <motion.div
                       key={server.id}
                       layout
@@ -301,7 +311,9 @@ export function Servers() {
                     >
                       <ServerRow
                         server={server}
-                        active={server.id === activeServerId}
+                        active={active}
+                        pending={server.id === desiredServerId && !active}
+                        revertable={active && hasPending}
                         probing={dash.probeState.get(server.id) === "probing"}
                         isLast={idx === group.rows.length - 1}
                         onToggleFavorite={() => void toggleFavorite(server.id)}
@@ -315,13 +327,18 @@ export function Servers() {
                         }
                         onSelectActive={() => {
                           if (status === "connecting" || status === "disconnecting") return;
-                          void dashConnect(server.id).catch(() => {
-                            /* dashStore sets lastError; banner shows it */
-                          });
+                          if (status === "connected") {
+                            setDesiredServer(server.id);
+                          } else {
+                            void dashConnect(server.id).catch(() => {
+                              /* dashStore sets lastError; banner shows it */
+                            });
+                          }
                         }}
                       />
                     </motion.div>
-                  ))}
+                  );
+                })}
                 </AnimatePresence>
               </motion.div>
             </motion.div>
@@ -495,6 +512,8 @@ function ProbeAllButton({ onClick }: { onClick: () => void }) {
 function ServerRow({
   server,
   active,
+  pending,
+  revertable,
   probing,
   isLast,
   onToggleFavorite,
@@ -504,6 +523,8 @@ function ServerRow({
 }: {
   server: Server;
   active: boolean;
+  pending: boolean;
+  revertable: boolean;
   probing: boolean;
   isLast: boolean;
   onToggleFavorite: () => void;
@@ -531,20 +552,29 @@ function ServerRow({
   return (
     <div
       onClick={() => {
-        if (!active) onSelectActive();
+        if (!active || revertable) onSelectActive();
       }}
       className={cn(
         "group relative flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-instant ease-snap",
         !isLast && "border-b border-white/[0.05]",
-        active
+        active && !revertable
           ? "cursor-default bg-success/[0.06]"
-          : "cursor-pointer hover:bg-white/[0.03]",
+          : active
+            ? "cursor-pointer bg-success/[0.06]"
+            : "cursor-pointer hover:bg-white/[0.03]",
       )}
     >
       {active && (
         <motion.div
           layoutId="servers-active-ring"
           className="pointer-events-none absolute inset-0 border-y-2 border-success/55 bg-success/[0.02]"
+          transition={{ type: "spring", stiffness: 380, damping: 32 }}
+        />
+      )}
+      {pending && !active && (
+        <motion.div
+          layoutId="servers-pending-ring"
+          className="pointer-events-none absolute inset-0 border-y-2 border-accent/55 bg-accent/[0.04]"
           transition={{ type: "spring", stiffness: 380, damping: 32 }}
         />
       )}
@@ -555,7 +585,9 @@ function ServerRow({
             "h-2 w-2 rounded-full",
             active
               ? "bg-success shadow-[0_0_6px_rgba(0,230,118,0.7)]"
-              : "bg-white/20",
+              : pending
+                ? "bg-accent shadow-[0_0_6px_rgba(52,120,224,0.7)]"
+                : "bg-white/20",
           )}
         />
       </span>
@@ -593,6 +625,12 @@ function ServerRow({
             <span className="h-1 w-1 rounded-full bg-success shadow-[0_0_4px_rgba(0,230,118,0.8)]" />
             {t("servers.active")}
           </motion.span>
+        )}
+        {pending && !active && (
+          <span className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-accent">
+            <span className="h-1 w-1 rounded-full bg-accent shadow-[0_0_4px_rgba(52,120,224,0.8)]" />
+            {t("servers.pending")}
+          </span>
         )}
       </div>
 
