@@ -21,7 +21,6 @@ type logFile struct {
 	offset int64
 	rest   string
 	warned bool
-	seeded bool
 }
 
 type Poller struct {
@@ -52,8 +51,6 @@ func (p *Poller) Start(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	p.cancel = cancel
 	p.mu.Unlock()
-
-	slog.Info("logstream: engine-log poller started")
 
 	go func() {
 		t := time.NewTicker(time.Second)
@@ -98,10 +95,6 @@ func (p *Poller) pollOnce(ctx context.Context) {
 		if json.Unmarshal(raw, &res) != nil {
 			continue
 		}
-		if len(res.Data) > 0 && !lf.seeded {
-			lf.seeded = true
-			slog.Info("logstream: engine log streaming", "file", lf.name, "bytes", len(res.Data))
-		}
 		if res.Truncated {
 			lf.rest = ""
 		}
@@ -112,7 +105,7 @@ func (p *Poller) pollOnce(ctx context.Context) {
 			if nl < 0 {
 				break
 			}
-			line := strings.TrimRight(lf.rest[:nl], "\r")
+			line := stripANSI(strings.TrimRight(lf.rest[:nl], "\r"))
 			lf.rest = lf.rest[nl+1:]
 			if line == "" {
 				continue
