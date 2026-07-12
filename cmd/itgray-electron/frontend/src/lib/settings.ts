@@ -34,6 +34,7 @@ export type NetworkSnapshot = {
     dnsMode: DnsMode;
     dnsCustom: string;
   };
+  rulesSignature: string;
 };
 
 export type Settings = {
@@ -123,6 +124,8 @@ let eventsRegistered = false;
 let inFlightUpdates = 0;
 let lastConnectSnapshot: NetworkSnapshot | null = null;
 let desiredServerId: string | null = null;
+let currentRulesSignature = '';
+let rulesDismissed = false;
 let activeServerEdited = false;
 // networkDiffDismissed: user clicked Dismiss on a network-diff toast and
 // has not edited any field since. Cleared on any settings update, on
@@ -204,11 +207,13 @@ function ensureEventsRegistered(): void {
       snapshotFromConnectedPayload(payload as Parameters<typeof snapshotFromConnectedPayload>[0]);
       clearRulesDirty();
       clearDesiredServer();
+      rulesDismissed = false;
     } else if (p.status === 'idle' || p.status === 'error') {
       clearConnectSnapshot();
       clearActiveServerEdited();
       clearRulesDirty();
       clearDesiredServer();
+      rulesDismissed = false;
     }
   });
   eventsRegistered = true;
@@ -250,6 +255,7 @@ export function snapshotFromConnectedPayload(payload: {
       dnsMode,
       dnsCustom: (n.dns?.servers ?? []).join(', '),
     },
+    rulesSignature: currentRulesSignature,
   };
   // Fresh snapshot — any prior dismiss is no longer relevant.
   networkDiffDismissed = false;
@@ -400,11 +406,32 @@ function serverDiffers(): boolean {
   );
 }
 
+export function setCurrentRulesSignature(sig: string): void {
+  if (currentRulesSignature === sig) return;
+  currentRulesSignature = sig;
+  rulesDismissed = false;
+  notifyListeners();
+}
+
+export function setRulesDismissed(): void {
+  if (rulesDismissed) return;
+  rulesDismissed = true;
+  notifyListeners();
+}
+
+function rulesDiffer(): boolean {
+  return (
+    lastConnectSnapshot !== null &&
+    currentRulesSignature !== lastConnectSnapshot.rulesSignature
+  );
+}
+
 function reconnectNeeded(): boolean {
   return (
     (networkDiffersFromSnapshot() && !networkDiffDismissed) ||
     activeServerEdited ||
     rulesDirtyAfterConnect ||
+    (rulesDiffer() && !rulesDismissed) ||
     serverDiffers()
   );
 }
@@ -493,6 +520,8 @@ export function __resetForTests(): void {
   activeServerEdited = false;
   networkDiffDismissed = false;
   rulesDirtyAfterConnect = false;
+  currentRulesSignature = '';
+  rulesDismissed = false;
   if (eventsRegistered) {
     EventsOff(HUB_EVENT_SETTINGS);
     EventsOff('vpn:status');

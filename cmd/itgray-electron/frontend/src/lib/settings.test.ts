@@ -34,6 +34,8 @@ import {
   setDesiredServer,
   clearDesiredServer,
   getDesiredServer,
+  setCurrentRulesSignature,
+  setRulesDismissed,
 } from './settings';
 
 beforeEach(() => {
@@ -452,6 +454,32 @@ describe('reconnect snapshot', () => {
     setDesiredServer('B');
     clearDesiredServer();
     expect(getDesiredServer()).toBeNull();
+  });
+
+  it('rules diff arms toast after connect when signature changes', () => {
+    setCurrentRulesSignature('sig-1');
+    snapshotFromConnectedPayload({ serverId: 'A', mode: 'tun', network: serverDimNetwork });
+    expect(renderHook(() => useReconnectNeeded()).result.current).toBe(false);
+    setCurrentRulesSignature('sig-2');
+    expect(renderHook(() => useReconnectNeeded()).result.current).toBe(true);
+  });
+
+  it('reverting rules to the connected signature hides the toast', () => {
+    setCurrentRulesSignature('sig-1');
+    snapshotFromConnectedPayload({ serverId: 'A', mode: 'tun', network: serverDimNetwork });
+    setCurrentRulesSignature('sig-2');
+    setCurrentRulesSignature('sig-1');
+    expect(renderHook(() => useReconnectNeeded()).result.current).toBe(false);
+  });
+
+  it('setRulesDismissed hides a rules diff until the next change re-arms', () => {
+    setCurrentRulesSignature('sig-1');
+    snapshotFromConnectedPayload({ serverId: 'A', mode: 'tun', network: serverDimNetwork });
+    setCurrentRulesSignature('sig-2');
+    setRulesDismissed();
+    expect(renderHook(() => useReconnectNeeded()).result.current).toBe(false);
+    setCurrentRulesSignature('sig-3');
+    expect(renderHook(() => useReconnectNeeded()).result.current).toBe(true);
   });
 });
 
