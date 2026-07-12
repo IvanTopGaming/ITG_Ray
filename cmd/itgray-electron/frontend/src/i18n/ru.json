@@ -1,20 +1,21 @@
 {
   "nav": {
     "main": "Основное",
-    "soon": "Скоро",
     "dashboard": "Панель",
     "servers": "Серверы",
     "subscriptions": "Подписки",
     "routing": "Маршрутизация",
     "logs": "Логи",
-    "killSwitch": "Аварийное отключение",
     "settings": "Настройки"
   },
   "status": {
     "running": "работает",
     "stopped": "остановлено",
     "missing": "отсутствует",
-    "pending": "ожидание",
+    "connected": "подключено",
+    "connecting": "подключение",
+    "disconnecting": "отключение",
+    "idle": "отключено",
     "error": "ошибка"
   },
   "statusPill": {

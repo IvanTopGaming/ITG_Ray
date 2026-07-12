@@ -6,17 +6,19 @@ import {
   Settings as SettingsIcon,
   Route,
   ScrollText,
-  ShieldOff,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import clsx from "clsx";
+import { useEffect, useState } from "react";
+import { useDash, effectiveStatus, type ChainStatus } from "@/lib/dashStore";
+import { Get as GetSettings } from "@/lib/itg/SettingsService";
+import type { hub } from "@/lib/itg/models";
 
 interface NavItem {
   to: string;
   labelKey: string;
   icon: typeof LayoutDashboard;
-  disabled?: boolean;
 }
 
 const main: NavItem[] = [
@@ -27,19 +29,33 @@ const main: NavItem[] = [
   { to: "/logs", labelKey: "nav.logs", icon: ScrollText },
 ];
 
-const soon: NavItem[] = [
-  {
-    to: "/kill-switch",
-    labelKey: "nav.killSwitch",
-    icon: ShieldOff,
-    disabled: true,
-  },
-];
-
 const settingsItem: NavItem = {
   to: "/settings",
   labelKey: "nav.settings",
   icon: SettingsIcon,
+};
+
+const statusMeta: Record<
+  ChainStatus | "error",
+  { labelKey: string; dot: string }
+> = {
+  connected: {
+    labelKey: "status.connected",
+    dot: "bg-success shadow-[0_0_6px_rgba(0,230,118,0.7)]",
+  },
+  connecting: {
+    labelKey: "status.connecting",
+    dot: "bg-warn shadow-[0_0_6px_rgba(255,177,60,0.7)]",
+  },
+  disconnecting: {
+    labelKey: "status.disconnecting",
+    dot: "bg-warn shadow-[0_0_6px_rgba(255,177,60,0.7)]",
+  },
+  idle: { labelKey: "status.idle", dot: "bg-white/30" },
+  error: {
+    labelKey: "status.error",
+    dot: "bg-danger shadow-[0_0_6px_rgba(255,94,94,0.7)]",
+  },
 };
 
 export function Sidebar() {
@@ -56,22 +72,32 @@ export function Sidebar() {
         <Item key={it.to} {...it} />
       ))}
 
-      <SectionLabel className="mt-2 opacity-70">{t("nav.soon")}</SectionLabel>
-      {soon.map((it) => (
-        <Item key={it.to} {...it} />
-      ))}
-
       <div className="mt-auto flex flex-col gap-1 pt-3">
         <Item {...settingsItem} />
-        <div className="mt-1 flex justify-between border-t border-white/5 px-3 pt-2.5 font-mono text-[10px] text-white/40">
-          <span className="flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-success shadow-[0_0_6px_rgba(0,230,118,0.7)]" />
-            {t("status.running")}
-          </span>
-          <span>v0.0.0</span>
-        </div>
+        <StatusFooter />
       </div>
     </aside>
+  );
+}
+
+function StatusFooter() {
+  const { t } = useTranslation();
+  const status = effectiveStatus(useDash());
+  const meta = statusMeta[status];
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    GetSettings()
+      .then((view) => setVersion((view as hub.SettingsView).about?.version ?? null))
+      .catch(() => {});
+  }, []);
+  return (
+    <div className="mt-1 flex justify-between border-t border-white/5 px-3 pt-2.5 font-mono text-[10px] text-white/40">
+      <span className="flex items-center gap-1.5">
+        <span className={clsx("h-1.5 w-1.5 rounded-full", meta.dot)} />
+        {t(meta.labelKey)}
+      </span>
+      {version && <span>v{version}</span>}
+    </div>
   );
 }
 
@@ -94,20 +120,9 @@ function SectionLabel({
   );
 }
 
-function Item({ to, labelKey, icon: Icon, disabled }: NavItem) {
+function Item({ to, labelKey, icon: Icon }: NavItem) {
   const { t } = useTranslation();
   const label = t(labelKey);
-  if (disabled) {
-    return (
-      <div
-        aria-disabled="true"
-        className="flex cursor-not-allowed items-center gap-2.5 rounded-lg px-3 py-2 text-[12px] text-white/30"
-      >
-        <Icon className="h-3.5 w-3.5" />
-        {label}
-      </div>
-    );
-  }
   return (
     <NavLink
       to={to}

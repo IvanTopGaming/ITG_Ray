@@ -9,6 +9,8 @@ const { dashReconnectMock } = vi.hoisted(() => ({
 
 vi.mock('@/lib/dashStore', () => ({
   dashReconnect: (id: string, mode: string) => dashReconnectMock(id, mode),
+  useDash: () => ({ status: 'idle', lastError: null }),
+  effectiveStatus: () => 'idle',
 }));
 
 vi.mock('@/lib/itg/SettingsService', () => ({
