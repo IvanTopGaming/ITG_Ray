@@ -470,6 +470,15 @@ describe('reconnect snapshot', () => {
     expect(renderHook(() => useReconnectNeeded()).result.current).toBe(false);
   });
 
+  it('does not arm on the first rules-signature push after a snapshot with the empty (unbooted) signature; a later real change still arms', () => {
+    snapshotFromConnectedPayload({ serverId: 'A', mode: 'tun', network: serverDimNetwork });
+    expect(getConnectSnapshot()?.rulesSignature).toBe('');
+    setCurrentRulesSignature('{"defaultAction":"proxy","groups":[]}');
+    expect(renderHook(() => useReconnectNeeded()).result.current).toBe(false);
+    setCurrentRulesSignature('{"defaultAction":"direct","groups":[]}');
+    expect(renderHook(() => useReconnectNeeded()).result.current).toBe(true);
+  });
+
   it('setRulesDismissed hides a rules diff until the next change re-arms', () => {
     setCurrentRulesSignature('sig-1');
     snapshotFromConnectedPayload({ serverId: 'A', mode: 'tun', network: serverDimNetwork });

@@ -386,6 +386,18 @@ export function setCurrentRulesSignature(sig: string): void {
   if (currentRulesSignature === sig) return;
   currentRulesSignature = sig;
   rulesDismissed = false;
+  // '' is the not-yet-booted sentinel: a snapshot captured before
+  // rulesStore's lazy boot stored an empty baseline. The first real
+  // signature to land is the connect-time baseline (rules can't change
+  // without opening Routing, whose boot push emits the unchanged
+  // signature first), so adopt it instead of reporting a phantom diff.
+  if (
+    lastConnectSnapshot !== null &&
+    lastConnectSnapshot.rulesSignature === '' &&
+    sig !== ''
+  ) {
+    lastConnectSnapshot = { ...lastConnectSnapshot, rulesSignature: sig };
+  }
   notifyListeners();
 }
 
