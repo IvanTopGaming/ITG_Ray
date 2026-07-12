@@ -4,6 +4,7 @@ export interface AboutSettings {
   version: string;
   gitRev: string;
   buildDate: string;
+  backend: string;
 }
 
 export interface Conditions {

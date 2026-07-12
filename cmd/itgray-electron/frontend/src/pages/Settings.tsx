@@ -784,8 +784,8 @@ export function Settings() {
         <dl className="grid grid-cols-[110px_1fr] gap-y-2 gap-x-4 text-[13px] py-1">
           <dt className="text-white/[0.45]">{t('settings.about.version')}</dt><dd className="text-white/[0.92] tabular-nums">{versionLabel}</dd>
           <dt className="text-white/[0.45]">{t('settings.about.build')}</dt><dd className="text-white/[0.92] tabular-nums">{buildLabel}</dd>
-          <dt className="text-white/[0.45]">{t('settings.about.backend')}</dt><dd className="text-white/[0.92] tabular-nums">xray-core 25.3.6</dd>
-          <dt className="text-white/[0.45]">{t('settings.about.helper')}</dt><dd className="text-white/[0.92] tabular-nums">1.4.2</dd>
+          <dt className="text-white/[0.45]">{t('settings.about.backend')}</dt><dd className="text-white/[0.92] tabular-nums">{about?.backend || '—'}</dd>
+          <dt className="text-white/[0.45]">{t('settings.about.helper')}</dt><dd className="text-white/[0.92] tabular-nums">{versionLabel}</dd>
           <dt className="text-white/[0.45]">{t('settings.about.license')}</dt><dd className="text-white/[0.92]">MIT</dd>
         </dl>
         <SettingRow

@@ -143,6 +143,7 @@ type AboutSettings struct {
 	Version   string `json:"version"`
 	GitRev    string `json:"gitRev"`
 	BuildDate string `json:"buildDate"`
+	Backend   string `json:"backend"`
 }
 
 // SecuritySettings is the read-only secret-protection summary.

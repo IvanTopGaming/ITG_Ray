@@ -23,15 +23,7 @@ const targetArch = process.env.TARGET_ARCH || "amd64";
 const ext = targetOS === "windows" ? ".exe" : "";
 
 function resolveVersion() {
-  if (process.env.GIT_VERSION) return process.env.GIT_VERSION;
-  try {
-    return execFileSync("git", ["describe", "--always", "--tags", "--dirty"], {
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-  } catch {
-    return "dev";
-  }
+  return process.env.APP_VERSION || process.env.GIT_VERSION || "0.1.0-beta";
 }
 
 const version = resolveVersion();
