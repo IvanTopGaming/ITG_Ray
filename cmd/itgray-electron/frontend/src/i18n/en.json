@@ -419,7 +419,7 @@
       "levelDebug": "Debug",
       "levelTrace": "Trace",
       "openFolder": "Open log folder",
-      "folderHint": "%LOCALAPPDATA%\\ITG Ray\\logs ({{mb}} MB)",
+      "folderHint": "sing-box, xray and bridge logs ({{mb}} MB)",
       "openFolderButton": "Open folder",
       "clearOldLogs": "Clear old logs",
       "clearOldLogsHint": "Delete log files older than 7 days."
