@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import { GetSnapshot } from "@/lib/itg/AppService";
 import { Connect, Disconnect } from "@/lib/itg/RunService";
 import { Update as UpdateSettings } from "@/lib/itg/SettingsService";
+import { seedConnectSnapshotFromSnapshot } from "@/lib/settings";
 import { TestLatency } from "@/lib/itg/ServersService";
 import { EventsOn } from "@/lib/itg/runtime";
 import type { hub } from "@/lib/itg/models";
@@ -132,6 +133,11 @@ async function doBootstrap(): Promise<void> {
     const snap: Snapshot = await GetSnapshot();
     const servers = snap.servers ?? [];
     const nextStatus = (snap.status as ChainStatus) || "idle";
+    // Adopt path: if the bridge reconciled a still-live chain at boot, the
+    // vpn:status "connected" event that seeds the reconnect snapshot fired
+    // before this renderer subscribed. Seed it from the pull so the Reconnect
+    // toast works after an app reopen.
+    seedConnectSnapshotFromSnapshot(snap);
     // Preserve optimistic currentServer (set by dashConnect) when the chain
     // is not actually connected — bootstrap is also triggered by mutation
     // events (servers:changed from probes / favourites), and overwriting

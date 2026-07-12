@@ -253,6 +253,52 @@ export function snapshotFromConnectedPayload(payload: {
   notifyListeners();
 }
 
+// seedConnectSnapshotFromSnapshot rebuilds the reconnect snapshot from the
+// bootstrap GetSnapshot() pull instead of the transient vpn:status event.
+//
+// The event that normally seeds lastConnectSnapshot is emitted by the
+// bridge's Reconcile() at boot — when it adopts a chain that outlived the
+// previous GUI session — which fires BEFORE the renderer has subscribed to
+// vpn:status. So on an app close+reopen the event is missed and the snapshot
+// stays null: the Reconnect toast button becomes a no-op (handleReconnect
+// bails on a null snapshot) and networkDiffersFromSnapshot() can't arm.
+// dashStore already pulls GetSnapshot() on bootstrap; feeding it here closes
+// the gap. No-op unless connected; never clobbers a live event-sourced snapshot.
+export function seedConnectSnapshotFromSnapshot(snap: {
+  status?: string;
+  currentServer?: { id?: string } | null;
+  mode?: string;
+  settings?: {
+    network?: {
+      tunCidr?: string;
+      tunMtu?: number;
+      socksPort?: number;
+      httpPort?: number;
+      allowLan?: boolean;
+      ipv6Mode?: string;
+      dns?: { mode?: string; servers?: string[] };
+    };
+  };
+}): void {
+  if (snap.status !== 'connected') return;
+  if (lastConnectSnapshot !== null) return;
+  const net = snap.settings?.network;
+  if (!net) return;
+  snapshotFromConnectedPayload({
+    serverId: snap.currentServer?.id,
+    mode: snap.mode,
+    network: {
+      tunCidr: net.tunCidr,
+      tunMtu: net.tunMtu,
+      socksPort: net.socksPort,
+      httpPort: net.httpPort,
+      allowLan: net.allowLan,
+      ipv6Mode: net.ipv6Mode,
+      dns: { mode: net.dns?.mode, servers: net.dns?.servers },
+    },
+  });
+}
+
 export function clearConnectSnapshot(): void {
   if (lastConnectSnapshot === null && !networkDiffDismissed) return;
   lastConnectSnapshot = null;

@@ -23,6 +23,7 @@ import {
   __resetForTests,
   DEFAULTS,
   snapshotFromConnectedPayload,
+  seedConnectSnapshotFromSnapshot,
   clearConnectSnapshot,
   getConnectSnapshot,
   markActiveServerEdited,
@@ -361,6 +362,56 @@ describe('reconnect snapshot', () => {
   it('snapshotFromConnectedPayload(undefined network) is a no-op', () => {
     snapshotFromConnectedPayload({ serverId: 's1', mode: 'tun' });
     expect(getConnectSnapshot()).toBeNull();
+  });
+
+  const connectedPull = {
+    status: 'connected',
+    currentServer: { id: 's7' },
+    mode: 'tun',
+    settings: {
+      network: {
+        tunCidr: '198.18.0.1/15',
+        tunMtu: 1500,
+        socksPort: 1080,
+        httpPort: 8888,
+        allowLan: true,
+        ipv6Mode: 'prefer-v4',
+        dns: { mode: 'auto', servers: [] },
+      },
+    },
+  };
+
+  it('seedConnectSnapshotFromSnapshot rebuilds the snapshot from a connected pull (adopt/reopen path)', () => {
+    seedConnectSnapshotFromSnapshot(connectedPull);
+    const snap = getConnectSnapshot();
+    expect(snap).not.toBeNull();
+    expect(snap?.serverId).toBe('s7');
+    expect(snap?.mode).toBe('tun');
+    expect(snap?.network.allowLan).toBe(true);
+    expect(snap?.network.socksPort).toBe(1080);
+  });
+
+  it('seedConnectSnapshotFromSnapshot is a no-op when not connected', () => {
+    seedConnectSnapshotFromSnapshot({ ...connectedPull, status: 'idle' });
+    expect(getConnectSnapshot()).toBeNull();
+  });
+
+  it('seedConnectSnapshotFromSnapshot never clobbers a live event-sourced snapshot', () => {
+    snapshotFromConnectedPayload({
+      serverId: 'live',
+      mode: 'sysproxy',
+      network: {
+        tunCidr: '198.18.0.1/15',
+        tunMtu: 1500,
+        socksPort: 1090,
+        httpPort: 8889,
+        allowLan: false,
+        ipv6Mode: 'prefer-v4',
+        dns: { mode: 'auto' },
+      },
+    });
+    seedConnectSnapshotFromSnapshot(connectedPull);
+    expect(getConnectSnapshot()?.serverId).toBe('live');
   });
 });
 
