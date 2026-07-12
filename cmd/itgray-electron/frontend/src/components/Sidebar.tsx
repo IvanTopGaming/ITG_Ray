@@ -24,10 +24,10 @@ const main: NavItem[] = [
   { to: "/servers", labelKey: "nav.servers", icon: Server },
   { to: "/subscriptions", labelKey: "nav.subscriptions", icon: Globe },
   { to: "/routing", labelKey: "nav.routing", icon: Route },
+  { to: "/logs", labelKey: "nav.logs", icon: ScrollText },
 ];
 
 const soon: NavItem[] = [
-  { to: "/logs", labelKey: "nav.logs", icon: ScrollText, disabled: true },
   {
     to: "/kill-switch",
     labelKey: "nav.killSwitch",
