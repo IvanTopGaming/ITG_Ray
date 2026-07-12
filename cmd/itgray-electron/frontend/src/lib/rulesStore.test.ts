@@ -6,12 +6,14 @@ const {
   addGroupMock,
   getDashStateMock,
   markRulesDirtyMock,
+  setCurrentRulesSignatureMock,
 } = vi.hoisted(() => ({
   eventHandlers: {} as Record<string, (...args: any[]) => void>,
   listMock: vi.fn(),
   addGroupMock: vi.fn(),
   getDashStateMock: vi.fn(),
   markRulesDirtyMock: vi.fn(),
+  setCurrentRulesSignatureMock: vi.fn(),
 }));
 
 vi.mock("@/lib/itg/runtime", () => ({
@@ -42,6 +44,7 @@ vi.mock("@/lib/dashStore", () => ({
 
 vi.mock("@/lib/settings", () => ({
   markRulesDirty: () => markRulesDirtyMock(),
+  setCurrentRulesSignature: (sig: string) => setCurrentRulesSignatureMock(sig),
 }));
 
 import {
@@ -49,6 +52,7 @@ import {
   __resetRulesForTest,
   getRulesState,
   rulesAddGroup,
+  rulesSignature,
 } from "./rulesStore";
 
 beforeEach(() => {
@@ -57,6 +61,7 @@ beforeEach(() => {
   addGroupMock.mockReset();
   getDashStateMock.mockReset();
   markRulesDirtyMock.mockReset();
+  setCurrentRulesSignatureMock.mockReset();
   // Default: chain is idle so mutations do NOT arm the toast unless a
   // test opts in by overriding the dash status.
   getDashStateMock.mockReturnValue({ status: "idle" });
@@ -74,6 +79,14 @@ const baseView = {
 };
 
 describe("rulesStore", () => {
+  it("rulesSignature is stable and reflects defaultAction + groups", () => {
+    const a = rulesSignature({ defaultAction: "proxy", groups: [], loading: false, lastError: null, bootstrapped: true });
+    const b = rulesSignature({ defaultAction: "proxy", groups: [], loading: false, lastError: null, bootstrapped: true });
+    const c = rulesSignature({ defaultAction: "direct", groups: [], loading: false, lastError: null, bootstrapped: true });
+    expect(a).toBe(b);
+    expect(a).not.toBe(c);
+  });
+
   it("bootstraps from RulesService.List on first read", async () => {
     listMock.mockResolvedValue(baseView);
     await __bootRulesForTest();

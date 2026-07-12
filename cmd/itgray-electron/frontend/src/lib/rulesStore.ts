@@ -3,7 +3,7 @@ import { useSyncExternalStore } from "react";
 import * as RulesService from "@/lib/itg/RulesService";
 import { EventsOn } from "@/lib/itg/runtime";
 import { getDashState } from "@/lib/dashStore";
-import { markRulesDirty } from "@/lib/settings";
+import { markRulesDirty, setCurrentRulesSignature } from "@/lib/settings";
 
 // rulesStore mirrors serversStore: a singleton store backed by
 // useSyncExternalStore, lazy-bootstrapped on first hook mount, with a
@@ -77,6 +77,14 @@ function subscribe(cb: () => void) {
   };
 }
 
+export function rulesSignature(s: RulesState): string {
+  return JSON.stringify({ defaultAction: s.defaultAction, groups: s.groups });
+}
+
+function pushRulesSignature(): void {
+  setCurrentRulesSignature(rulesSignature(state));
+}
+
 let bootInFlight: Promise<void> | null = null;
 let mutationInFlight: Promise<void> | null = null;
 let unsubscribeEvent: (() => void) | null = null;
@@ -114,9 +122,13 @@ function ensureBoot(): Promise<void> {
         void refetch();
       });
     }
-    bootInFlight = refetch().finally(() => {
-      bootInFlight = null;
-    });
+    bootInFlight = refetch()
+      .then(() => {
+        pushRulesSignature();
+      })
+      .finally(() => {
+        bootInFlight = null;
+      });
   }
   return bootInFlight;
 }
@@ -142,6 +154,7 @@ async function applyMutation<T>(op: () => Promise<T>): Promise<T> {
   return withSingleFlight(async () => {
     const result = await op();
     await refetch();
+    pushRulesSignature();
     if (getDashState().status === "connected") {
       markRulesDirty();
     }
