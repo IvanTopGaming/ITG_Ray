@@ -6,8 +6,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/itg-team/itg-ray/internal/hub"
+	"github.com/itg-team/itg-ray/internal/buildinfo"
 	"github.com/itg-team/itg-ray/internal/config"
+	"github.com/itg-team/itg-ray/internal/hub"
 )
 
 // ConfigStore is the on-disk settings backing for SettingsService. It owns
@@ -121,7 +122,9 @@ func (s *ConfigStore) toView(c *config.Config) hub.SettingsView {
 		Debug: hub.DebugSettings{LogLevel: c.Debug.LogLevel},
 		About: hub.AboutSettings{
 			Version:   s.version,
-			BuildDate: s.buildDate,
+			GitRev:    buildinfo.GitRev(),
+			BuildDate: firstNonEmpty(s.buildDate, buildinfo.BuildDate()),
+			Backend:   buildinfo.Engines(),
 		},
 		Security: hub.SecuritySettings{
 			// internal/secret does not exist yet (v0.2 follow-up).

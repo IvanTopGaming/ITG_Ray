@@ -11,7 +11,7 @@ import (
 )
 
 // Version is overridden at build time via -ldflags "-X .../handlers.Version=...".
-var Version = "dev"
+var Version = "0.1.0-beta"
 
 // Snapshotter is the surface AppHandlers needs from bindings.AppService.
 // bindings.AppService.GetSnapshot() satisfies it directly.
