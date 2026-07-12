@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
@@ -649,7 +649,7 @@ interface VlessConfig {
   uuid: string;
   host: string;
   port: string; // string for input ergonomics; validated on save
-  type: string; // tcp, ws, grpc, http, h2, kcp, quic
+  type: string;
   path: string;
   hostHeader: string;
   security: string; // none, tls, reality
@@ -836,6 +836,11 @@ function ServerModal({
   function update<K extends keyof VlessConfig>(key: K, value: VlessConfig[K]) {
     setConfig((prev) => ({ ...prev, [key]: value }));
   }
+
+  const flowOk = config.type === "tcp" && config.security !== "none";
+  useEffect(() => {
+    if (!flowOk && config.flow) update("flow", "");
+  }, [flowOk]);
 
   function parsePaste() {
     const trimmed = pasteText.trim();
@@ -1028,32 +1033,59 @@ function ServerModal({
                 <Dropdown
                   value={config.flow}
                   onChange={(v) => update("flow", v)}
-                  disabled={!editable}
+                  disabled={!editable || !flowOk}
                   options={FLOW_OPTIONS}
                 />
+                {!flowOk && (
+                  <p className="mt-1 text-[11px] text-white/40">
+                    {t("servers.flowIncompatible")}
+                  </p>
+                )}
               </Field>
             </div>
             <AnimatePresence initial={false}>
               {(config.type === "ws" ||
-                config.type === "grpc" ||
-                config.type === "http") && (
+                config.type === "httpupgrade" ||
+                config.type === "xhttp") && (
                 <Reveal key="path">
-                  <Field
-                    label={config.type === "grpc" ? t("servers.serviceName") : t("servers.path")}
-                  >
+                  <Field label={t("servers.path")}>
                     <TextInput
                       value={config.path}
                       onChange={(v) => update("path", v)}
                       disabled={!editable}
-                      placeholder={
-                        config.type === "grpc" ? t("servers.serviceNamePlaceholder") : t("servers.pathPlaceholder")
-                      }
+                      placeholder={t("servers.pathPlaceholder")}
                       mono
                     />
                   </Field>
                 </Reveal>
               )}
-              {(config.type === "ws" || config.type === "http") && (
+              {config.type === "grpc" && (
+                <Reveal key="serviceName">
+                  <Field label={t("servers.serviceName")}>
+                    <TextInput
+                      value={config.serviceName}
+                      onChange={(v) => update("serviceName", v)}
+                      disabled={!editable}
+                      placeholder={t("servers.serviceNamePlaceholder")}
+                      mono
+                    />
+                  </Field>
+                </Reveal>
+              )}
+              {(config.type === "xhttp" || config.type === "grpc") && (
+                <Reveal key="mode">
+                  <Field label={t("servers.mode")}>
+                    <TextInput
+                      value={config.mode}
+                      onChange={(v) => update("mode", v)}
+                      disabled={!editable}
+                    />
+                  </Field>
+                </Reveal>
+              )}
+              {(config.type === "ws" ||
+                config.type === "httpupgrade" ||
+                config.type === "xhttp") && (
                 <Reveal key="hostHeader">
                   <Field label={t("servers.hostHeader")}>
                     <TextInput
@@ -1063,6 +1095,47 @@ function ServerModal({
                       placeholder={t("servers.hostHeaderPlaceholder")}
                     />
                   </Field>
+                </Reveal>
+              )}
+              {config.type === "mkcp" && (
+                <Reveal key="mkcp">
+                  <div className="flex flex-col gap-3">
+                    <Field label={t("servers.seed")}>
+                      <TextInput
+                        value={config.seed}
+                        onChange={(v) => update("seed", v)}
+                        disabled={!editable}
+                      />
+                    </Field>
+                    <Field label={t("servers.headerType")}>
+                      <TextInput
+                        value={config.headerType}
+                        onChange={(v) => update("headerType", v)}
+                        disabled={!editable}
+                      />
+                    </Field>
+                  </div>
+                </Reveal>
+              )}
+              {config.type === "quic" && (
+                <Reveal key="quic">
+                  <div className="flex flex-col gap-3">
+                    <Field label={t("servers.quicSecurity")}>
+                      <TextInput
+                        value={config.quicSecurity}
+                        onChange={(v) => update("quicSecurity", v)}
+                        disabled={!editable}
+                      />
+                    </Field>
+                    <Field label={t("servers.quicKey")}>
+                      <TextInput
+                        value={config.key}
+                        onChange={(v) => update("key", v)}
+                        disabled={!editable}
+                        mono
+                      />
+                    </Field>
+                  </div>
                 </Reveal>
               )}
             </AnimatePresence>

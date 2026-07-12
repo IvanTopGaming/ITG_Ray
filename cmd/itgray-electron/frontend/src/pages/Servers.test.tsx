@@ -336,6 +336,23 @@ describe("Servers page", () => {
     expect(toggleFavoriteMock).toHaveBeenCalledWith("s1");
   });
 
+  it("disables flow with an incompatible hint on non-tcp transport", async () => {
+    const user = userEvent.setup();
+    render(<Servers />);
+    await user.click(screen.getByRole("button", { name: /Add server/i }));
+
+    const paste = screen.getByPlaceholderText(/vless:\/\/…/);
+    await user.type(
+      paste,
+      "vless://00000000-0000-0000-0000-000000000000@host.example.com:443?type=ws&security=tls#WS",
+    );
+    await user.click(screen.getByRole("button", { name: /^Parse$/ }));
+
+    expect(
+      screen.getByText(/flow needs TCP \+ TLS\/Reality/i),
+    ).toBeInTheDocument();
+  });
+
   it("does not render empty-state copy before bootstrap completes", () => {
     useDashMock.mockReturnValue({
       ...baseDash,
