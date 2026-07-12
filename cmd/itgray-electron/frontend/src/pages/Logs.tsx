@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Dropdown } from "@/components/controls/Dropdown";
 import {
   useLogEntries,
   startLogs,
@@ -31,6 +32,7 @@ export function Logs() {
   const [search, setSearch] = useState("");
   const [wrap, setWrap] = useState(true);
   const [pinned, setPinned] = useState(true);
+  const [copied, setCopied] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -62,8 +64,11 @@ export function Logs() {
       return next;
     });
 
-  const copyVisible = () =>
+  const copyVisible = () => {
     void navigator.clipboard.writeText(rows.map(fmtLine).join("\n"));
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1400);
+  };
   const exportVisible = () => {
     const blob = new Blob([rows.map(fmtLine).join("\n")], {
       type: "text/plain",
@@ -99,18 +104,12 @@ export function Logs() {
             </button>
           ))}
         </div>
-        <select
+        <Dropdown
           value={minLevel}
-          onChange={(e) => setMinLevel(e.target.value as LogLevel)}
-          className="rounded-[10px] glass-dim px-2.5 py-1.5 text-[12px]"
-          aria-label={t("logs.level")}
-        >
-          {LEVELS.map((l) => (
-            <option key={l} value={l}>
-              {l}+
-            </option>
-          ))}
-        </select>
+          onChange={(v) => setMinLevel(v as LogLevel)}
+          options={LEVELS.map((l) => ({ value: l, label: `${l}+` }))}
+          ariaLabel={t("logs.level")}
+        />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -131,9 +130,9 @@ export function Logs() {
         </button>
         <button
           onClick={copyVisible}
-          className="rounded-[10px] glass-dim px-2.5 py-1.5 text-[12px] text-white/80"
+          className={`rounded-[10px] px-2.5 py-1.5 text-[12px] transition-colors duration-instant ${copied ? "bg-success/20 text-success" : "glass-dim text-white/80"}`}
         >
-          {t("logs.copy")}
+          {copied ? t("logs.copied") : t("logs.copy")}
         </button>
         <button
           onClick={exportVisible}

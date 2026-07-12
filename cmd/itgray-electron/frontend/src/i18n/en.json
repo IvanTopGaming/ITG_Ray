@@ -518,6 +518,7 @@
     "folder": "Folder",
     "export": "Export",
     "copy": "Copy",
+    "copied": "Copied!",
     "paused": "Auto-scroll paused",
     "jump": "Jump to latest",
     "status": "{{sources}} sources · {{lines}} lines · buffer 2000/source",
