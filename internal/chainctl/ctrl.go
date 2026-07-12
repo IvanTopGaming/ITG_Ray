@@ -11,11 +11,12 @@ package chainctl
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
-	"github.com/itg-team/itg-ray/internal/hub"
 	"github.com/itg-team/itg-ray/internal/config"
+	"github.com/itg-team/itg-ray/internal/hub"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/sysproxy"
 )
@@ -306,15 +307,20 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 	httpAddr := fmt.Sprintf("127.0.0.1:%d", net.SysProxy.HTTPPort)
 	dnsServers := ResolveDNS(net.DNS)
 
+	bringUpStart := time.Now()
+
 	var singboxJSON, xrayJSON []byte
 	if c.d.BuildConfigs != nil {
+		tBuild := time.Now()
 		singboxJSON, xrayJSON, err = c.d.BuildConfigs(srv, mode, net)
+		slog.Info("chain timing", "step", "buildConfigs", "ms", time.Since(tBuild).Milliseconds(), "ok", err == nil)
 		if err != nil {
 			return mode, config.Network{}, fmt.Errorf("configgen: %w", err)
 		}
 	}
 
 	if mode == ModeTUN {
+		tTun := time.Now()
 		if err := c.d.Helper.RouteSnapshot(ctx); err != nil {
 			return mode, config.Network{}, fmt.Errorf("RouteSnapshot: %w", err)
 		}
@@ -322,8 +328,10 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 			_ = c.d.Helper.RouteRestore(ctx)
 			return mode, config.Network{}, fmt.Errorf("TunCreate: %w", err)
 		}
+		slog.Info("chain timing", "step", "routeSnapshot+tunCreate", "ms", time.Since(tTun).Milliseconds())
 	}
 
+	tStart := time.Now()
 	if err := c.d.Helper.StartChain(ctx, singboxJSON, xrayJSON, mode); err != nil {
 		if mode == ModeTUN {
 			_ = c.d.Helper.TunDestroy(ctx)
@@ -331,7 +339,9 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 		}
 		return mode, config.Network{}, fmt.Errorf("StartChain: %w", err)
 	}
+	slog.Info("chain timing", "step", "startChain", "ms", time.Since(tStart).Milliseconds())
 
+	tPost := time.Now()
 	if mode == ModeTUN {
 		if err := c.d.Helper.RouteAdd(ctx, srv.Vless.Address); err != nil {
 			_ = c.d.Helper.StopChain(ctx)
@@ -351,26 +361,36 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 			return mode, config.Network{}, fmt.Errorf("sysproxy.Set: %w", err)
 		}
 	}
+	slog.Info("chain timing", "step", "routeAdd+dnsSet/sysproxy", "ms", time.Since(tPost).Milliseconds())
 	c.mu.Lock()
 	c.mode = mode
 	c.mu.Unlock()
+	slog.Info("chain timing", "step", "bringUp TOTAL", "ms", time.Since(bringUpStart).Milliseconds(), "mode", string(mode))
 	return mode, net, nil
 }
 
 // tearDown is best-effort: every step is independent and errors are
 // swallowed so a partial bringup can still be unwound.
 func (c *Controller) tearDown(ctx context.Context, mode Mode) {
+	tearStart := time.Now()
 	if mode == ModeSysProxy {
 		_ = c.d.Sysproxy.Clear()
 	}
 	if mode == ModeTUN {
+		tDns := time.Now()
 		_ = c.d.Helper.DnsRestore(ctx)
 		_ = c.d.Helper.RouteRestore(ctx)
+		slog.Info("chain timing", "step", "dnsRestore+routeRestore", "ms", time.Since(tDns).Milliseconds())
 	}
+	tStop := time.Now()
 	_ = c.d.Helper.StopChain(ctx)
+	slog.Info("chain timing", "step", "stopChain", "ms", time.Since(tStop).Milliseconds())
 	if mode == ModeTUN {
+		tDestroy := time.Now()
 		_ = c.d.Helper.TunDestroy(ctx)
+		slog.Info("chain timing", "step", "tunDestroy", "ms", time.Since(tDestroy).Milliseconds())
 	}
+	slog.Info("chain timing", "step", "tearDown TOTAL", "ms", time.Since(tearStart).Milliseconds(), "mode", string(mode))
 }
 
 // Reconcile is called at app boot. It rebinds Controller state to a

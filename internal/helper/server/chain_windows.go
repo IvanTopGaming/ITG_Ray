@@ -333,7 +333,7 @@ func NewStartChainHandler() Handler {
 						break
 					}
 				}
-				time.Sleep(250 * time.Millisecond)
+				time.Sleep(50 * time.Millisecond)
 			}
 			if tunAdapter == nil {
 				rollback()

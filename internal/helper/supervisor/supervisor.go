@@ -94,12 +94,16 @@ func (c *Child) Stop(grace time.Duration) error {
 	}
 	c.mu.Unlock()
 
-	// Best-effort graceful: os.Interrupt on Unix; on Windows
-	// the os/exec API treats this as Kill (windows has no SIGINT).
-	// The Windows-specific WM_CLOSE / taskkill /T path lives in the
-	// caller (chain_windows.go) for this v0.1 — supervisor's job is
-	// just to ensure the process is gone after `grace`.
-	_ = c.cmd.Process.Signal(os.Interrupt)
+	// Best-effort graceful shutdown via os.Interrupt. It works on Unix,
+	// but on Windows Process.Signal(os.Interrupt) is unsupported: it
+	// returns an error and leaves the process running. Waiting the full
+	// `grace` before Kill would then add that delay to every teardown for
+	// no benefit, so when the graceful signal isn't delivered, kill now.
+	if err := c.cmd.Process.Signal(os.Interrupt); err != nil {
+		_ = c.cmd.Process.Kill()
+		<-c.exitDone
+		return nil
+	}
 
 	select {
 	case <-c.exitDone:
