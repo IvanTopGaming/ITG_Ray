@@ -639,3 +639,58 @@ func TestBuildSingbox_TunMode_HijackDNS(t *testing.T) {
 	cidrs := third["ip_cidr"].([]any)
 	require.Contains(t, cidrs, "192.168.0.0/16")
 }
+
+func TestBuildSingbox_Fakeip_Inet6Range(t *testing.T) {
+	in := SingboxInput{
+		Mode:          ModeTun,
+		FakeIP:        true,
+		TunName:       "ITGRay-TUN",
+		TunIPv4:       "198.18.0.1/15",
+		TunIPv6:       "fdfe:dcba:9876::1/126",
+		FakeIPv6Range: "fc00::/18",
+		XraySOCKSHost: "127.0.0.1",
+		XraySOCKSPort: 1081,
+		Rules:         rules.Model{DefaultAction: rules.ActionProxy},
+	}
+	b, err := BuildSingbox(&in)
+	require.NoError(t, err)
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(b, &doc))
+
+	servers := doc["dns"].(map[string]any)["servers"].([]any)
+	var fakeip map[string]any
+	for _, s := range servers {
+		m := s.(map[string]any)
+		if m["type"] == "fakeip" {
+			fakeip = m
+		}
+	}
+	require.NotNil(t, fakeip)
+	require.Equal(t, "198.18.0.0/15", fakeip["inet4_range"])
+	require.Equal(t, "fc00::/18", fakeip["inet6_range"])
+}
+
+func TestBuildSingbox_Fakeip_NoInet6RangeWhenUnset(t *testing.T) {
+	in := SingboxInput{
+		Mode:          ModeTun,
+		FakeIP:        true,
+		TunName:       "ITGRay-TUN",
+		TunIPv4:       "198.18.0.1/15",
+		XraySOCKSHost: "127.0.0.1",
+		XraySOCKSPort: 1081,
+		Rules:         rules.Model{DefaultAction: rules.ActionProxy},
+	}
+	b, err := BuildSingbox(&in)
+	require.NoError(t, err)
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(b, &doc))
+
+	servers := doc["dns"].(map[string]any)["servers"].([]any)
+	for _, s := range servers {
+		m := s.(map[string]any)
+		if m["type"] == "fakeip" {
+			_, has := m["inet6_range"]
+			require.False(t, has, "inet6_range must be absent when FakeIPv6Range is empty")
+		}
+	}
+}

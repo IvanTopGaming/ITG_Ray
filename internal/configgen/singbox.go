@@ -39,6 +39,14 @@ type SingboxInput struct {
 	DNSUpstreams     []string
 	AllowLAN         bool   // Tier 2b: prepend LAN-bypass rule
 	IPv6Strategy     string // Tier 2b: dns.strategy override
+	// TunIPv6, when non-empty and Mode==ModeTun, is appended to the TUN
+	// inbound "address" so auto_route captures ::/0. Empty ⇒ v4-only TUN
+	// (byte-identical to pre-IPv6 output).
+	TunIPv6 string
+	// FakeIPv6Range, when non-empty and Mode==ModeTun with FakeIP, is the
+	// fakeip server "inet6_range" so AAAA queries get synthetic v6. Empty ⇒
+	// no v6 fake-IP (the "disabled" mode: v6 is captured but not tunnelled).
+	FakeIPv6Range string
 	// FakeIP, when true and Mode==ModeTun, enables sing-box's FakeIP DNS
 	// module. A/AAAA queries return synthetic IPs in 198.18.0.0/15 (which
 	// the TunIPv4 prefix covers), so DNS round-trips don't traverse the
@@ -101,10 +109,14 @@ func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
 		strategy = "prefer_ipv4"
 	}
 	if in.Mode == ModeTun && in.FakeIP {
+		fakeipServer := map[string]any{"tag": "fakeip", "type": "fakeip", "inet4_range": "198.18.0.0/15"}
+		if in.FakeIPv6Range != "" {
+			fakeipServer["inet6_range"] = in.FakeIPv6Range
+		}
 		return map[string]any{
 			"servers": []map[string]any{
 				{"tag": "remote", "type": "tls", "server": upstreams[0], "detour": "proxy"},
-				{"tag": "fakeip", "type": "fakeip", "inet4_range": "198.18.0.0/15"},
+				fakeipServer,
 			},
 			"rules": []map[string]any{
 				{"query_type": []string{"A", "AAAA"}, "server": "fakeip"},
@@ -433,13 +445,17 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 	var inbound map[string]any
 	switch in.Mode {
 	case ModeTun:
+		address := []string{in.TunIPv4}
+		if in.TunIPv6 != "" {
+			address = append(address, in.TunIPv6)
+		}
 		// Sniffing is configured via the route-rule action prepended above
 		// (sing-box 1.13 removed legacy per-inbound sniff fields).
 		inbound = map[string]any{
 			"type":           "tun",
 			"tag":            "in-tun",
 			"interface_name": in.TunName,
-			"address":        []string{in.TunIPv4},
+			"address":        address,
 			"auto_route":     true,
 			"strict_route":   false,
 		}
