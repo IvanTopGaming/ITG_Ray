@@ -17,6 +17,7 @@ type General struct {
 // TUN holds the TUN-mode adapter parameters.
 type TUN struct {
 	IPv4CIDR string `json:"ipv4_cidr"`
+	IPv6CIDR string `json:"ipv6_cidr"`
 	MTU      int    `json:"mtu"`
 }
 
@@ -109,7 +110,7 @@ func defaults() Config {
 		General: General{Language: "en"},
 		Network: Network{
 			Mode:      "tun",
-			TUN:       TUN{IPv4CIDR: "198.18.0.1/15", MTU: 1500},
+			TUN:       TUN{IPv4CIDR: "198.18.0.1/15", IPv6CIDR: "fdfe:dcba:9876::1/126", MTU: 1500},
 			SysProxy:  SysProxy{HTTPPort: 8888, SOCKSPort: 1080},
 			AllowLAN:  false,
 			IPv6Mode:  "prefer-v4",

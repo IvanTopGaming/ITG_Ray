@@ -19,6 +19,7 @@ func TestDefaults_AllRequiredFieldsPopulated(t *testing.T) {
 	require.NotEmpty(t, c.Network.IPv6Mode)
 	require.NotEmpty(t, c.Network.DNS.Mode)
 	require.NotZero(t, c.Network.TUN.IPv4CIDR)
+	require.Equal(t, "fdfe:dcba:9876::1/126", c.Network.TUN.IPv6CIDR)
 	require.NotZero(t, c.Network.TUN.MTU)
 	require.NotZero(t, c.Network.SysProxy.HTTPPort)
 	require.NotZero(t, c.Network.SysProxy.SOCKSPort)
