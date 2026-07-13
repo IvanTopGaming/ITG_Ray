@@ -309,7 +309,7 @@ func hasEquivalentLanBypass(routeRules any) bool {
 // slices that can arise from JSON round-tripping. Note: sing-box's route
 // schema names this key "final" (not "default_outbound"); we keep that
 // nomenclature so library validation accepts the document.
-func applyTunModeKillswitch(route map[string]any, lanBypassPrepended bool) {
+func applyTunModeKillswitch(route map[string]any, lanBypassPrepended bool, blockIPv6 bool) {
 	route["final"] = "block"
 	if !lanBypassPrepended && hasEquivalentLanBypass(route["rules"]) {
 		lanBypassPrepended = true
@@ -370,12 +370,24 @@ func applyTunModeKillswitch(route map[string]any, lanBypassPrepended bool) {
 	// final="block" stays as defense-in-depth for malformed configs;
 	// killswitch behavior on proxy outbound failure is preserved by
 	// sing-box's drop-on-outbound-failure semantics.
-	catchAllProxy := map[string]any{"outbound": "proxy"}
+	//
+	// When blockIPv6 is set ("disabled" mode: v6 is captured by the TUN but
+	// must not be tunnelled), a ::/0 → block rule is inserted just before the
+	// catch-all. LAN v6 (fc00::/7, fe80::/10) already matched the LAN-bypass
+	// rule earlier, so only global v6 reaches this block.
+	tail := make([]map[string]any, 0, 2)
+	if blockIPv6 {
+		tail = append(tail, map[string]any{"ip_cidr": []any{"::/0"}, "outbound": "block"})
+	}
+	tail = append(tail, map[string]any{"outbound": "proxy"})
 	switch existing := route["rules"].(type) {
 	case []map[string]any:
-		route["rules"] = append(existing, catchAllProxy)
+		route["rules"] = append(existing, tail...)
 	case []any:
-		route["rules"] = append(existing, catchAllProxy)
+		for _, r := range tail {
+			existing = append(existing, r)
+		}
+		route["rules"] = existing
 	}
 }
 
@@ -422,7 +434,8 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 		}
 	}
 	if in.Mode == ModeTun {
-		applyTunModeKillswitch(route, lanBypassPrepended)
+		blockIPv6 := in.TunIPv6 != "" && in.FakeIPv6Range == ""
+		applyTunModeKillswitch(route, lanBypassPrepended, blockIPv6)
 		// Bind outbound connections to the auto-detected default interface so
 		// direct-routed traffic egresses the physical NIC instead of looping
 		// back into the TUN (auto_route captures all destinations, including

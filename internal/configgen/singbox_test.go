@@ -694,3 +694,64 @@ func TestBuildSingbox_Fakeip_NoInet6RangeWhenUnset(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildSingbox_DisabledMode_BlocksIPv6(t *testing.T) {
+	in := SingboxInput{
+		Mode:          ModeTun,
+		FakeIP:        true,
+		TunName:       "ITGRay-TUN",
+		TunIPv4:       "198.18.0.1/15",
+		TunIPv6:       "fdfe:dcba:9876::1/126",
+		FakeIPv6Range: "", // disabled: capture but do not tunnel
+		XraySOCKSHost: "127.0.0.1",
+		XraySOCKSPort: 1081,
+		Rules:         rules.Model{DefaultAction: rules.ActionProxy},
+	}
+	b, err := BuildSingbox(&in)
+	require.NoError(t, err)
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(b, &doc))
+
+	routeRules := doc["route"].(map[string]any)["rules"].([]any)
+	blockIdx, proxyIdx := -1, -1
+	for i, r := range routeRules {
+		m := r.(map[string]any)
+		if m["outbound"] == "block" {
+			cidr, _ := json.Marshal(m["ip_cidr"])
+			require.Equal(t, `["::/0"]`, string(cidr))
+			blockIdx = i
+		}
+		if m["outbound"] == "proxy" {
+			if _, hasCidr := m["ip_cidr"]; !hasCidr {
+				proxyIdx = i // the catch-all
+			}
+		}
+	}
+	require.NotEqual(t, -1, blockIdx, "expected a ::/0 → block rule in disabled mode")
+	require.NotEqual(t, -1, proxyIdx, "expected the proxy catch-all rule")
+	require.Less(t, blockIdx, proxyIdx, "block rule must precede the proxy catch-all")
+}
+
+func TestBuildSingbox_TunnelMode_NoIPv6Block(t *testing.T) {
+	in := SingboxInput{
+		Mode:          ModeTun,
+		FakeIP:        true,
+		TunName:       "ITGRay-TUN",
+		TunIPv4:       "198.18.0.1/15",
+		TunIPv6:       "fdfe:dcba:9876::1/126",
+		FakeIPv6Range: "fc00::/18", // tunnelling mode
+		XraySOCKSHost: "127.0.0.1",
+		XraySOCKSPort: 1081,
+		Rules:         rules.Model{DefaultAction: rules.ActionProxy},
+	}
+	b, err := BuildSingbox(&in)
+	require.NoError(t, err)
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(b, &doc))
+
+	routeRules := doc["route"].(map[string]any)["rules"].([]any)
+	for _, r := range routeRules {
+		require.NotEqual(t, "block", r.(map[string]any)["outbound"],
+			"tunnelling modes must not emit a ::/0 → block rule")
+	}
+}
