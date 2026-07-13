@@ -118,9 +118,16 @@ func main() {
 	// a forwarder that emits them as JSON-RPC notifications over stdout.
 	h := hub.New()
 
+	logLevelString := "info"
+	if cfg, cerr := config.Load(configPath); cerr == nil && cfg.Debug.LogLevel != "" {
+		logLevelString = cfg.Debug.LogLevel
+	}
+	logPath := filepath.Join(dataDir, "logs", "app.log")
+	logWriter := io.MultiWriter(os.Stderr, logging.NewRotatingWriter(logPath, 5*1024*1024, 3))
+	logLevel := logging.LevelFromString(logLevelString)
 	logBuf := logstream.New(h, 2000)
 	slog.SetDefault(slog.New(logstream.NewTapHandler(
-		logging.NewHandler(os.Stderr, slog.LevelInfo), logBuf)))
+		logging.NewHandler(logWriter, logLevel), logBuf)))
 
 	// HWID + DeviceInfo for SubsService HWID-aware sync. Failure is
 	// non-fatal: SubsService treats empty HWID as "HWID disabled".
