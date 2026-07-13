@@ -36,6 +36,7 @@ var (
 type publicIPCache struct {
 	mu        sync.Mutex
 	value     string
+	serverID  string
 	expiresAt time.Time
 }
 
@@ -45,21 +46,25 @@ type publicIPCache struct {
 // in mode==tun the request goes direct (TUN intercepts it). Any other
 // status returns ErrNotConnected. Result cached for publicIPCacheTTL.
 func (a *AppService) GetPublicIP() (string, error) {
+	if a.d.Chain == nil {
+		return "", ErrNotConnected
+	}
+	st, srv, _ := a.d.Chain.Status()
+	if st != hub.StatusConnected {
+		return "", ErrNotConnected
+	}
+	curID := ""
+	if srv != nil {
+		curID = srv.ID
+	}
+
 	a.ipCache.mu.Lock()
-	if !a.ipCache.expiresAt.IsZero() && time.Now().Before(a.ipCache.expiresAt) {
+	if a.ipCache.serverID == curID && !a.ipCache.expiresAt.IsZero() && time.Now().Before(a.ipCache.expiresAt) {
 		v := a.ipCache.value
 		a.ipCache.mu.Unlock()
 		return v, nil
 	}
 	a.ipCache.mu.Unlock()
-
-	if a.d.Chain == nil {
-		return "", ErrNotConnected
-	}
-	st, _, _ := a.d.Chain.Status()
-	if st != hub.StatusConnected {
-		return "", ErrNotConnected
-	}
 
 	client, err := publicIPClient(a.d)
 	if err != nil {
@@ -87,6 +92,7 @@ func (a *AppService) GetPublicIP() (string, error) {
 
 	a.ipCache.mu.Lock()
 	a.ipCache.value = ip
+	a.ipCache.serverID = curID
 	a.ipCache.expiresAt = time.Now().Add(publicIPCacheTTL)
 	a.ipCache.mu.Unlock()
 	return ip, nil

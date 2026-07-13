@@ -8,6 +8,7 @@ import (
 
 	"github.com/itg-team/itg-ray/internal/chainctl"
 	"github.com/itg-team/itg-ray/internal/hub"
+	"github.com/itg-team/itg-ray/internal/server"
 
 	"github.com/stretchr/testify/require"
 )
@@ -168,5 +169,31 @@ func TestGetPublicIP_CacheExpiry(t *testing.T) {
 	ip2, err := app.GetPublicIP()
 	require.NoError(t, err)
 	require.NotEqual(t, ip1, ip2)
+	require.Equal(t, 2, hits)
+}
+
+func TestGetPublicIP_ServerSwitch_Refetches(t *testing.T) {
+	hits := 0
+	ips := []string{"203.0.113.1", "203.0.113.2"}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, ips[hits])
+		hits++
+	}))
+	defer srv.Close()
+	withPublicIPEndpoint(t, srv.URL)
+	withBarePublicIPClient(t)
+
+	app := newAppWithChain(t,
+		fakeChain{status: hub.StatusConnected, srv: &server.Server{ID: "srv-a"}, mode: chainctl.ModeTUN},
+		1081,
+	)
+	ipA, err := app.GetPublicIP()
+	require.NoError(t, err)
+	require.Equal(t, "203.0.113.1", ipA)
+
+	app.d.Chain = fakeChain{status: hub.StatusConnected, srv: &server.Server{ID: "srv-b"}, mode: chainctl.ModeTUN}
+	ipB, err := app.GetPublicIP()
+	require.NoError(t, err)
+	require.Equal(t, "203.0.113.2", ipB)
 	require.Equal(t, 2, hits)
 }
