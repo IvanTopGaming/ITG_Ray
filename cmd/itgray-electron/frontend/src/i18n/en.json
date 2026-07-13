@@ -235,6 +235,8 @@
     "noConditionsHint": "Add rules to define what traffic should be routed.",
     "thenAction": "Then action",
     "addCondition": "Add condition",
+    "and": "AND",
+    "then": "THEN",
     "removeCard": "Remove {{label}} card",
     "editCard": "Edit {{label}}",
     "remove": "Remove",
