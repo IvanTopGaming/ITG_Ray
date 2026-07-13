@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"time"
 )
 
 // Handler implements one JSON-RPC method. Receives parsed params; returns
@@ -21,6 +22,7 @@ type Handler func(ctx context.Context, params json.RawMessage) (any, error)
 type Dispatcher struct {
 	mu       sync.RWMutex
 	handlers map[string]Handler
+	Observer func(method string, params json.RawMessage, err error, dur time.Duration)
 }
 
 // New returns a Dispatcher with an empty handler map.
@@ -95,7 +97,11 @@ func (d *Dispatcher) handle(ctx context.Context, line []byte) *Response {
 			Error:   &Error{Code: CodeMethodNotFound, Message: "method not found: " + req.Method},
 		}
 	}
+	start := time.Now()
 	result, err := h(ctx, req.Params)
+	if d.Observer != nil {
+		d.Observer(req.Method, req.Params, err, time.Since(start))
+	}
 	if err != nil {
 		var jerr *Error
 		if errors.As(err, &jerr) {

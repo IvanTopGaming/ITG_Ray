@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/itg-team/itg-ray/cmd/itgray-bridge/bus"
 	"github.com/itg-team/itg-ray/cmd/itgray-bridge/dispatcher"
@@ -254,6 +256,40 @@ func main() {
 	})
 
 	d := dispatcher.New()
+
+	quietMethods := map[string]bool{
+		"app.getPublicIP": true,
+		"app.getSnapshot": true,
+		"helper.status":   true,
+	}
+	d.Observer = func(method string, params json.RawMessage, err error, dur time.Duration) {
+		st, srv, mode := chainCtrl.Status()
+		serverID := ""
+		if srv != nil {
+			serverID = srv.ID
+		}
+		args := logging.Redact(string(params))
+		if len(args) > 200 {
+			args = args[:200] + "…"
+		}
+		attrs := []any{
+			slog.String("scope", "rpc"),
+			slog.String("method", method),
+			slog.String("state", string(st)),
+			slog.String("server", serverID),
+			slog.String("mode", string(mode)),
+			slog.String("args", args),
+			slog.Duration("dur", dur),
+		}
+		switch {
+		case err != nil:
+			slog.Error("rpc call failed", append(attrs, slog.String("err", err.Error()))...)
+		case quietMethods[method]:
+			slog.Debug("rpc call", attrs...)
+		default:
+			slog.Info("rpc call", attrs...)
+		}
+	}
 
 	app := handlers.AppHandlers{Snap: appSvc}
 	d.Register("app.ping", app.Ping)

@@ -4,8 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestDispatcherRoutesRegisteredMethod(t *testing.T) {
@@ -53,4 +57,30 @@ func TestDispatcherMalformedJSON(t *testing.T) {
 	if !strings.Contains(out.String(), `"code":-32700`) {
 		t.Fatalf("expected parse-error, got: %s", out.String())
 	}
+}
+
+func TestDispatcher_ObserverInvoked(t *testing.T) {
+	d := New()
+	d.Register("ping", func(_ context.Context, _ json.RawMessage) (any, error) {
+		return "pong", nil
+	})
+	d.Register("boom", func(_ context.Context, _ json.RawMessage) (any, error) {
+		return nil, errors.New("kaboom")
+	})
+	var gotMethod string
+	var gotErr error
+	var calls int
+	d.Observer = func(method string, _ json.RawMessage, err error, _ time.Duration) {
+		calls++
+		gotMethod = method
+		gotErr = err
+	}
+	in := strings.NewReader(
+		`{"jsonrpc":"2.0","id":1,"method":"ping"}` + "\n" +
+			`{"jsonrpc":"2.0","id":2,"method":"boom"}` + "\n")
+	var out strings.Builder
+	require.NoError(t, d.Serve(context.Background(), in, &out))
+	require.Equal(t, 2, calls)
+	require.Equal(t, "boom", gotMethod)
+	require.Error(t, gotErr)
 }
