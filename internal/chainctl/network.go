@@ -59,6 +59,28 @@ func MapIPv6Strategy(mode string) string {
 	}
 }
 
+// FakeIPv6Range returns the sing-box fakeip "inet6_range" for the given
+// IPv6Mode: a synthetic ULA range for the tunnelling modes ("prefer-v4",
+// "prefer-v6", or any unknown value), or "" for "disabled" — where v6 is
+// captured by the TUN and dropped rather than assigned a synthetic address.
+func FakeIPv6Range(mode string) string {
+	if mode == "disabled" {
+		return ""
+	}
+	return "fc00::/18"
+}
+
+// TunIPv6OrDefault returns cidr when non-empty, else the built-in default
+// (config.Defaults().Network.TUN.IPv6CIDR). A pre-IPv6 config.json has no
+// "ipv6_cidr" key, so this substitution gives existing installs v6 capture
+// without a config migration.
+func TunIPv6OrDefault(cidr string) string {
+	if cidr != "" {
+		return cidr
+	}
+	return config.Defaults().Network.TUN.IPv6CIDR
+}
+
 // DefaultNetworkLoader returns a Network accessor that always returns
 // config.Defaults().Network with no error. Used by chainctl.New when
 // Deps.Network is nil so existing tests / code paths that don't supply

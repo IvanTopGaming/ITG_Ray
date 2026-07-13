@@ -64,3 +64,38 @@ func TestBuildConfigs_SysProxy_NoExclude(t *testing.T) {
 		t.Fatal("route_exclude_address must be absent for ModeSysProxy (no tun inbound)")
 	}
 }
+
+func TestBuildConfigs_TUN_DualStackAddress(t *testing.T) {
+	srv := server.New(vless.Config{
+		Address: "203.0.113.7",
+		Port:    443,
+		UUID:    "00000000-0000-0000-0000-000000000000",
+	}, server.OriginManual, "")
+	net := config.Network{
+		Mode:     string(chainctl.ModeTUN),
+		TUN:      config.TUN{IPv4CIDR: "198.18.0.1/15", IPv6CIDR: "fdfe:dcba:9876::1/126", MTU: 1500},
+		SysProxy: config.SysProxy{HTTPPort: 8888, SOCKSPort: 1080},
+		IPv6Mode: "prefer-v4",
+	}
+	build := buildConfigs(t.TempDir(), "", nil, nil)
+	sbJSON, _, err := build(&srv, chainctl.ModeTUN, net)
+	if err != nil {
+		t.Fatalf("buildConfigs: %v", err)
+	}
+	var doc struct {
+		Inbounds []map[string]any `json:"inbounds"`
+	}
+	if err := json.Unmarshal(sbJSON, &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	for _, ib := range doc.Inbounds {
+		if ib["type"] == "tun" {
+			addr, _ := json.Marshal(ib["address"])
+			if string(addr) != `["198.18.0.1/15","fdfe:dcba:9876::1/126"]` {
+				t.Fatalf("tun address = %s, want dual-stack", addr)
+			}
+			return
+		}
+	}
+	t.Fatal("no tun inbound found")
+}

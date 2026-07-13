@@ -103,6 +103,8 @@ func buildConfigs(dataDir, configPath string, store *rules.Store, geoMgr *geo.Ma
 				DNSUpstreams:        chainctl.ResolveDNS(net.DNS),
 				AllowLAN:            net.AllowLAN,
 				IPv6Strategy:        chainctl.MapIPv6Strategy(net.IPv6Mode),
+				TunIPv6:             chainctl.TunIPv6OrDefault(net.TUN.IPv6CIDR),
+				FakeIPv6Range:       chainctl.FakeIPv6Range(net.IPv6Mode),
 				GeoRuleSets:         geoSets,
 				Rules:               model,
 				LogLevel:            logLevel,

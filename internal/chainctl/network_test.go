@@ -83,6 +83,29 @@ func TestMapIPv6Strategy(t *testing.T) {
 	}
 }
 
+func TestFakeIPv6Range(t *testing.T) {
+	cases := map[string]string{
+		"prefer-v4": "fc00::/18",
+		"prefer-v6": "fc00::/18",
+		"disabled":  "",
+		"":          "fc00::/18",
+	}
+	for mode, want := range cases {
+		if got := FakeIPv6Range(mode); got != want {
+			t.Errorf("FakeIPv6Range(%q) = %q, want %q", mode, got, want)
+		}
+	}
+}
+
+func TestTunIPv6OrDefault(t *testing.T) {
+	if got := TunIPv6OrDefault("fd00::1/64"); got != "fd00::1/64" {
+		t.Errorf("TunIPv6OrDefault(non-empty) = %q, want passthrough", got)
+	}
+	if got := TunIPv6OrDefault(""); got != "fdfe:dcba:9876::1/126" {
+		t.Errorf("TunIPv6OrDefault(\"\") = %q, want built-in default", got)
+	}
+}
+
 func TestDefaultNetworkLoader(t *testing.T) {
 	loader := DefaultNetworkLoader()
 	net, err := loader()
