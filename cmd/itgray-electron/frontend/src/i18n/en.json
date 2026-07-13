@@ -237,6 +237,8 @@
     "addCondition": "Add condition",
     "and": "AND",
     "then": "THEN",
+    "orHint": "in this group, any matching rule fires",
+    "matchAllHeader": "Match when ALL of these are true",
     "removeCard": "Remove {{label}} card",
     "editCard": "Edit {{label}}",
     "remove": "Remove",
