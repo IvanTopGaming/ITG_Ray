@@ -38,6 +38,7 @@ func NewPoller(buf *Buffer, r LogReader) *Poller {
 		files: []*logFile{
 			{name: "sing-box.log", source: "sing-box"},
 			{name: "xray.log", source: "xray"},
+			{name: "helper.log", source: "helper"},
 		},
 	}
 }

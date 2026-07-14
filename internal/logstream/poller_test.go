@@ -55,3 +55,22 @@ func TestPollerParsesAndTagsSources(t *testing.T) {
 		t.Fatalf("offset not advanced; got %d entries", len(buf.Snapshot()))
 	}
 }
+
+func TestPollerTailsHelperLog(t *testing.T) {
+	buf := New(hub.New(), 100)
+	r := fakeReader{payloads: map[string][]byte{
+		"helper.log": []byte("2026 INFO chain spawned\n2026 ERROR firewall seal failed\n"),
+	}}
+	p := NewPoller(buf, r)
+	p.pollOnce(context.Background())
+
+	var sawHelper bool
+	for _, e := range buf.Snapshot() {
+		if e.Source == "helper" {
+			sawHelper = true
+		}
+	}
+	if !sawHelper {
+		t.Fatalf("helper.log lines not tagged source %q: %+v", "helper", buf.Snapshot())
+	}
+}

@@ -5,9 +5,12 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 
+	"github.com/itg-team/itg-ray/internal/helper/server"
 	"github.com/itg-team/itg-ray/internal/logging"
 	"github.com/spf13/cobra"
 )
@@ -29,7 +32,15 @@ func main() {
 		Short:   "ITG Ray helper service (privileged TUN/route/DNS operations)",
 		Version: Version,
 		RunE: func(*cobra.Command, []string) error {
-			slog.SetDefault(slog.New(logging.NewHandler(os.Stderr, slog.LevelInfo)))
+			var w io.Writer = os.Stderr
+			logPath := filepath.Join(server.RuntimeDir(), "helper.log")
+			if err := os.MkdirAll(filepath.Dir(logPath), 0o750); err == nil {
+				if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o640); err == nil {
+					_ = f.Close()
+					w = io.MultiWriter(os.Stderr, logging.NewRotatingWriter(logPath, 5*1024*1024, 3))
+				}
+			}
+			slog.SetDefault(slog.New(logging.NewHandler(w, slog.LevelInfo)))
 			return runService()
 		},
 	}

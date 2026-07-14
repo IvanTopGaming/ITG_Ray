@@ -11,7 +11,12 @@ import (
 	"github.com/itg-team/itg-ray/internal/helper/protocol"
 )
 
-var readLogsAllow = map[string]bool{"sing-box.log": true, "xray.log": true}
+var readLogsAllow = map[string]bool{"sing-box.log": true, "xray.log": true, "helper.log": true}
+
+// RuntimeDir returns the directory where the privileged helper persists its
+// session log files (sing-box.log/xray.log/helper.log). It resolves to the
+// same per-platform location the ReadLogs handler serves from.
+func RuntimeDir() string { return engineLogDir() }
 
 func NewReadLogsHandler() Handler {
 	return func(_ context.Context, raw json.RawMessage) (json.RawMessage, error) {
