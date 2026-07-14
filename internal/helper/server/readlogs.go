@@ -13,6 +13,11 @@ import (
 
 var readLogsAllow = map[string]bool{"sing-box.log": true, "xray.log": true, "helper.log": true}
 
+// maxLogChunk caps the bytes returned by a single ReadLogs call so the
+// JSON-encoded (base64) response stays well under protocol.MaxFrame (1 MiB).
+// The poller advances Offset and drains the remainder over subsequent polls.
+var maxLogChunk = 512 * 1024
+
 // RuntimeDir returns the directory where the privileged helper persists its
 // session log files (sing-box.log/xray.log/helper.log). It resolves to the
 // same per-platform location the ReadLogs handler serves from.
@@ -47,7 +52,7 @@ func NewReadLogsHandler() Handler {
 		if _, err := f.Seek(offset, io.SeekStart); err != nil {
 			return nil, err
 		}
-		data, err := io.ReadAll(f)
+		data, err := io.ReadAll(io.LimitReader(f, int64(maxLogChunk)))
 		if err != nil {
 			return nil, err
 		}
