@@ -15,3 +15,15 @@ export function OpenFolder(): Promise<unknown> {
 export function DirInfo(): Promise<unknown> {
   return svc().dirInfo?.() ?? Promise.resolve(null);
 }
+
+export function ExportLogs(): Promise<{ text: string }> {
+  return (svc().export?.() ?? Promise.resolve({ text: "" })) as Promise<{
+    text: string;
+  }>;
+}
+
+export function SaveLogs(text: string): Promise<string | null> {
+  return (svc().save?.(text) ?? Promise.resolve(null)) as Promise<
+    string | null
+  >;
+}

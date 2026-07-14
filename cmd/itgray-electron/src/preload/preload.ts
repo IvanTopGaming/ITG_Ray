@@ -47,6 +47,9 @@ contextBridge.exposeInMainWorld("itg", {
     stop: () => rpc("logs.stop"),
     openFolder: () => rpc("logs.openFolder"),
     dirInfo: () => rpc("logs.dirInfo"),
+    export: () => rpc("logs.export"),
+    save: (text: string) =>
+      ipcRenderer.invoke("logs.save", text) as Promise<string | null>,
   },
   helper: {
     status: () => rpc("helper.status"),

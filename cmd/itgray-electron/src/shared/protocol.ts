@@ -81,6 +81,10 @@ export interface LogsEntry {
   message: string;
 }
 
+export interface LogsExportResult {
+  text: string;
+}
+
 export interface LogsStartResult {
   entries: LogsEntry[];
 }
@@ -350,6 +354,7 @@ export interface RpcMethods {
   "helper.stop": { params: Empty; result: Empty };
   "helper.uninstallLinux": { params: Empty; result: Empty };
   "logs.dirInfo": { params: Empty; result: LogsDirInfoResult };
+  "logs.export": { params: Empty; result: LogsExportResult };
   "logs.openFolder": { params: Empty; result: Empty };
   "logs.start": { params: Empty; result: LogsStartResult };
   "logs.stop": { params: Empty; result: Empty };

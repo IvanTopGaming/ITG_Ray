@@ -230,6 +230,7 @@ type LogsService interface {
 	Stop(p Empty) (Empty, error)
 	OpenFolder(p Empty) (Empty, error)
 	DirInfo(p Empty) (LogsDirInfoResult, error)
+	Export(p Empty) (LogsExportResult, error)
 }
 
 type LogsEntry struct {
@@ -247,6 +248,10 @@ type LogsStartResult struct {
 type LogsDirInfoResult struct {
 	Path      string `json:"path"`
 	SizeBytes int64  `json:"sizeBytes"`
+}
+
+type LogsExportResult struct {
+	Text string `json:"text"`
 }
 
 // EventTopics enumerates the bridge → main notification topics. The

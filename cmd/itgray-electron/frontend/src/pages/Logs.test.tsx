@@ -46,6 +46,8 @@ beforeEach(() => {
       start: vi.fn().mockResolvedValue({ entries: [] }),
       stop: vi.fn().mockResolvedValue(null),
       openFolder: vi.fn().mockResolvedValue(null),
+      export: vi.fn().mockResolvedValue({ text: "combined-log-text" }),
+      save: vi.fn().mockResolvedValue("/tmp/itgray-logs.txt"),
     },
   };
 });
@@ -68,6 +70,15 @@ describe("Logs page", () => {
 
     expect(screen.queryByText("bridge-line-alpha")).not.toBeInTheDocument();
     expect(screen.getByText("xray-line-beta")).toBeInTheDocument();
+  });
+
+  it("Export fetches combined logs then hands them to the save dialog", async () => {
+    const user = userEvent.setup();
+    render(<Logs />);
+    await user.click(screen.getByRole("button", { name: /Export/i }));
+    const itg = (window as any).itg.logs;
+    expect(itg.export).toHaveBeenCalledTimes(1);
+    expect(itg.save).toHaveBeenCalledWith("combined-log-text");
   });
 
   it("persists the source filter across a remount (tab switch)", async () => {

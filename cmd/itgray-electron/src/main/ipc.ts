@@ -1,5 +1,6 @@
 // cmd/itgray-electron/src/main/ipc.ts
-import { app, ipcMain, BrowserWindow } from "electron";
+import { app, ipcMain, dialog, BrowserWindow } from "electron";
+import { writeFile } from "node:fs/promises";
 import type { BridgeSupervisor } from "./bridge";
 import type { RpcMethod, EventTopic } from "../shared/protocol";
 import { defaultAutostart } from "./autostart";
@@ -67,6 +68,21 @@ export function wireIPC(
   ipcMain.handle("app.setAutostart", async (_e, enabled: boolean) => {
     await defaultAutostart().set(enabled);
     return true;
+  });
+
+  // logs.save — Electron-native. Prompts for a destination and writes the
+  // combined log text (fetched by the renderer via the logs.export RPC).
+  ipcMain.handle("logs.save", async (_e, text: string) => {
+    const opts = {
+      defaultPath: `itgray-logs-${new Date().toISOString().slice(0, 10)}.txt`,
+    };
+    const win = getWindow();
+    const { canceled, filePath } = win
+      ? await dialog.showSaveDialog(win, opts)
+      : await dialog.showSaveDialog(opts);
+    if (canceled || !filePath) return null;
+    await writeFile(filePath, text, "utf8");
+    return filePath;
   });
 
   // Supervisor lifecycle → renderer (only path for bridge.state).

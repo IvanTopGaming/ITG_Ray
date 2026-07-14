@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Dropdown } from "@/components/controls/Dropdown";
+import { ExportLogs, SaveLogs } from "@/lib/itg/LogsService";
 import {
   useLogEntries,
   startLogs,
@@ -94,15 +95,9 @@ export function Logs() {
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1400);
   };
-  const exportVisible = () => {
-    const blob = new Blob([rows.map(fmtLine).join("\n")], {
-      type: "text/plain",
-    });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "itgray-logs.log";
-    a.click();
-    URL.revokeObjectURL(a.href);
+  const onExport = async () => {
+    const { text } = await ExportLogs();
+    await SaveLogs(text);
   };
 
   const errors = rows.filter((r) => r.level === "ERROR").length;
@@ -160,7 +155,7 @@ export function Logs() {
           {copied ? t("logs.copied") : t("logs.copy")}
         </button>
         <button
-          onClick={exportVisible}
+          onClick={() => void onExport()}
           className="rounded-[10px] glass-dim px-2.5 py-1.5 text-[12px] text-white/80"
         >
           {t("logs.export")}
