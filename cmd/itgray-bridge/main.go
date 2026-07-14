@@ -361,7 +361,7 @@ func main() {
 	d.Register("logs.openFolder", logsH.OpenFolder)
 	d.Register("logs.dirInfo", logsH.DirInfo)
 	d.Register("logs.export", func(_ context.Context, _ json.RawMessage) (any, error) {
-		return map[string]string{"text": readCombinedLogs(logPath, 3)}, nil
+		return map[string]string{"text": combinedExport(logPath, 3, logBuf.Snapshot())}, nil
 	})
 
 	// Bus serializes outbound JSON-RPC notifications onto stdout.

@@ -51,6 +51,7 @@ export function Logs() {
   const [wrap, setWrap] = useState(true);
   const [pinned, setPinned] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [exportFailed, setExportFailed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -96,8 +97,13 @@ export function Logs() {
     window.setTimeout(() => setCopied(false), 1400);
   };
   const onExport = async () => {
-    const { text } = await ExportLogs();
-    await SaveLogs(text);
+    try {
+      const { text } = await ExportLogs();
+      await SaveLogs(text);
+    } catch {
+      setExportFailed(true);
+      window.setTimeout(() => setExportFailed(false), 1800);
+    }
   };
 
   const errors = rows.filter((r) => r.level === "ERROR").length;
@@ -156,9 +162,9 @@ export function Logs() {
         </button>
         <button
           onClick={() => void onExport()}
-          className="rounded-[10px] glass-dim px-2.5 py-1.5 text-[12px] text-white/80"
+          className={`rounded-[10px] px-2.5 py-1.5 text-[12px] transition-colors duration-instant ${exportFailed ? "bg-danger/20 text-danger" : "glass-dim text-white/80"}`}
         >
-          {t("logs.export")}
+          {exportFailed ? t("logs.exportFailed") : t("logs.export")}
         </button>
         <button
           onClick={() => clearLogs()}

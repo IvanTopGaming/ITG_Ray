@@ -535,6 +535,7 @@
     "wrap": "Wrap",
     "folder": "Folder",
     "export": "Export",
+    "exportFailed": "Export failed",
     "copy": "Copy",
     "copied": "Copied!",
     "clear": "Clear",

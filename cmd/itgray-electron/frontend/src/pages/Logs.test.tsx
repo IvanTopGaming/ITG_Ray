@@ -81,6 +81,18 @@ describe("Logs page", () => {
     expect(itg.save).toHaveBeenCalledWith("combined-log-text");
   });
 
+  it("Export surfaces feedback when it rejects", async () => {
+    const user = userEvent.setup();
+    (window as any).itg.logs.export = vi
+      .fn()
+      .mockRejectedValue(new Error("boom"));
+    render(<Logs />);
+    await user.click(screen.getByRole("button", { name: /^Export$/i }));
+    expect(
+      await screen.findByRole("button", { name: /Export failed/i }),
+    ).toBeInTheDocument();
+  });
+
   it("persists the source filter across a remount (tab switch)", async () => {
     const user = userEvent.setup();
     const { unmount } = render(<Logs />);

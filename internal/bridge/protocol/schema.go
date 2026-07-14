@@ -224,7 +224,10 @@ type GeoService interface {
 	Refresh(p Empty) (Empty, error)
 }
 
-// LogsService — methods under "logs." namespace.
+// LogsService — methods under "logs." namespace. Start/Stop/OpenFolder/DirInfo
+// are served by bindings.LogService; Export is served by an inline closure in
+// the bridge main (it needs the main-scope in-memory buffer and log path to
+// merge on-disk bridge history with helper/engine lines).
 type LogsService interface {
 	Start(p Empty) (LogsStartResult, error)
 	Stop(p Empty) (Empty, error)
