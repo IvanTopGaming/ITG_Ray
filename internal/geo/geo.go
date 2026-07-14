@@ -25,6 +25,16 @@ const (
 	fetchTimeout = 3 * time.Minute
 )
 
+// BaseTags is the default geo rule-set collection "Update Databases" always
+// fetches, independent of the user's routing rules. RU-focused to match the
+// censorship-bypass use case.
+var BaseTags = []string{
+	"geosite-ru",
+	"geoip-ru",
+	"geosite-category-ru-blocked",
+	"geosite-category-ads-all",
+}
+
 type Manager struct {
 	DataDir        string
 	Client         *http.Client
