@@ -103,3 +103,40 @@ func TestResolve_Direct_CategoryFallback(t *testing.T) {
 		t.Fatalf("fallback bytes = %q", b)
 	}
 }
+
+func TestResolve_Direct_BestEffort_SkipsMissing(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/geoip-ru.srs") {
+			_, _ = w.Write([]byte("GEOIP"))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	m := NewManager(t.TempDir(), nil)
+	src := Source{Preset: PresetCustom, CustomURL: srv.URL}
+	got, err := m.Resolve(context.Background(), src, []string{"geoip-ru", "geosite-nope"})
+	if err != nil {
+		t.Fatalf("best-effort should not error when one tag succeeds: %v", err)
+	}
+	if got["geoip-ru"] == "" {
+		t.Fatal("geoip-ru should have been cached")
+	}
+	if _, ok := got["geosite-nope"]; ok {
+		t.Fatal("missing tag must be skipped, not present")
+	}
+}
+
+func TestResolve_Direct_BestEffort_AllMissingErrors(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	m := NewManager(t.TempDir(), nil)
+	src := Source{Preset: PresetCustom, CustomURL: srv.URL}
+	if _, err := m.Resolve(context.Background(), src, []string{"geosite-a", "geosite-b"}); err == nil {
+		t.Fatal("expected error when every tag is unavailable")
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 )
@@ -20,26 +21,36 @@ func (m *Manager) fetchDirect(ctx context.Context, preset, base string, tags []s
 	out := make(map[string]string, len(tags))
 	total := int64(len(tags))
 	var done int64
+	var skipped []string
 	for _, tag := range tags {
 		if !force {
 			if p, ok := m.cached(preset, tag); ok {
 				out[tag] = p
 				done++
 				m.report(done, total)
+				slog.Debug("geo: tag cached", slog.String("scope", "geo"), slog.String("tag", tag))
 				continue
 			}
 		}
 		data, err := m.downloadFirst(ctx, base, sourceNames(tag))
 		if err != nil {
-			return nil, fmt.Errorf("geo: fetch %q from %s: %w", tag, preset, err)
+			skipped = append(skipped, tag)
+			slog.Warn("geo: tag unavailable", slog.String("scope", "geo"), slog.String("tag", tag), slog.String("err", err.Error()))
+			continue
 		}
 		p, err := m.writeCache(preset, tag, data)
 		if err != nil {
-			return nil, fmt.Errorf("geo: cache %q: %w", tag, err)
+			skipped = append(skipped, tag)
+			slog.Warn("geo: tag cache write failed", slog.String("scope", "geo"), slog.String("tag", tag), slog.String("err", err.Error()))
+			continue
 		}
 		out[tag] = p
 		done++
 		m.report(done, total)
+		slog.Debug("geo: tag downloaded", slog.String("scope", "geo"), slog.String("tag", tag))
+	}
+	if len(out) == 0 && len(tags) > 0 {
+		return nil, fmt.Errorf("geo: no tags available from %s (skipped %v)", preset, skipped)
 	}
 	return out, nil
 }
