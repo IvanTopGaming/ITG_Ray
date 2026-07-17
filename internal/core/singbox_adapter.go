@@ -13,10 +13,13 @@ package core
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	sb "github.com/sagernet/sing-box"
 	sbinclude "github.com/sagernet/sing-box/include"
 	sbopt "github.com/sagernet/sing-box/option"
+
+	"github.com/itg-team/itg-ray/internal/logging"
 )
 
 // SingboxAdapter wraps the embedded sing-box instance lifecycle.
@@ -43,6 +46,9 @@ func (a *SingboxAdapter) Start(ctx context.Context, configJSON []byte) error {
 	// UnmarshalJSONContext is required: it uses sing-box's context-aware JSON
 	// decoder that resolves type-tagged fields (inbounds, outbounds, …).
 	if err := opts.UnmarshalJSONContext(ctx, configJSON); err != nil {
+		slog.Error("sing-box start failed", slog.String("scope", "core"),
+			slog.String("engine", "singbox"), slog.String("stage", "unmarshal"),
+			slog.String("err", logging.RedactError(err)))
 		return fmt.Errorf("sing-box options unmarshal: %w", err)
 	}
 
@@ -51,10 +57,16 @@ func (a *SingboxAdapter) Start(ctx context.Context, configJSON []byte) error {
 		Options: opts,
 	})
 	if err != nil {
+		slog.Error("sing-box start failed", slog.String("scope", "core"),
+			slog.String("engine", "singbox"), slog.String("stage", "new"),
+			slog.String("err", logging.RedactError(err)))
 		return fmt.Errorf("sing-box new: %w", err)
 	}
 
 	if err := box.Start(); err != nil {
+		slog.Error("sing-box start failed", slog.String("scope", "core"),
+			slog.String("engine", "singbox"), slog.String("stage", "start"),
+			slog.String("err", logging.RedactError(err)))
 		return fmt.Errorf("sing-box start: %w", err)
 	}
 
@@ -70,5 +82,9 @@ func (a *SingboxAdapter) Close() error {
 	}
 	err := a.inst.Close()
 	a.inst = nil
+	if err != nil {
+		slog.Error("sing-box close failed", slog.String("scope", "core"),
+			slog.String("engine", "singbox"), slog.String("err", logging.RedactError(err)))
+	}
 	return err
 }

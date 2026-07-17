@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 
 	sbinclude "github.com/sagernet/sing-box/include"
 	sbopt "github.com/sagernet/sing-box/option"
 	xserial "github.com/xtls/xray-core/infra/conf/serial"
+
+	"github.com/itg-team/itg-ray/internal/logging"
 )
 
 // Manager coordinates the lifecycle of the embedded sing-box and xray-core instances.
@@ -28,9 +31,13 @@ func (m *Manager) DryValidate(ctx context.Context, sbJSON, xrJSON []byte) error 
 	sbCtx := sbinclude.Context(ctx)
 	var sbOpts sbopt.Options
 	if err := sbOpts.UnmarshalJSONContext(sbCtx, sbJSON); err != nil {
+		slog.Error("config validation failed", slog.String("scope", "core"),
+			slog.String("engine", "singbox"), slog.String("err", logging.RedactError(err)))
 		return fmt.Errorf("singbox: %w", err)
 	}
 	if _, err := xserial.LoadJSONConfig(bytes.NewReader(xrJSON)); err != nil {
+		slog.Error("config validation failed", slog.String("scope", "core"),
+			slog.String("engine", "xray"), slog.String("err", logging.RedactError(err)))
 		return fmt.Errorf("xray: %w", err)
 	}
 	return nil
@@ -40,12 +47,17 @@ func (m *Manager) DryValidate(ctx context.Context, sbJSON, xrJSON []byte) error 
 // On any error, both are torn down.
 func (m *Manager) Start(ctx context.Context, sbJSON, xrJSON []byte) error {
 	if err := m.xry.Start(ctx, xrJSON); err != nil {
+		slog.Error("core start failed", slog.String("scope", "core"),
+			slog.String("engine", "xray"), slog.String("err", logging.RedactError(err)))
 		return err
 	}
 	if err := m.sbx.Start(ctx, sbJSON); err != nil {
+		slog.Error("core start failed", slog.String("scope", "core"),
+			slog.String("engine", "singbox"), slog.String("err", logging.RedactError(err)))
 		_ = m.xry.Close()
 		return err
 	}
+	slog.Info("core started", slog.String("scope", "core"))
 	return nil
 }
 
@@ -53,9 +65,21 @@ func (m *Manager) Start(ctx context.Context, sbJSON, xrJSON []byte) error {
 // other instance is still attempted.
 func (m *Manager) Stop() error {
 	errSB := m.sbx.Close()
+	if errSB != nil {
+		slog.Error("core stop failed", slog.String("scope", "core"),
+			slog.String("engine", "singbox"), slog.String("err", logging.RedactError(errSB)))
+	}
 	errX := m.xry.Close()
+	if errX != nil {
+		slog.Error("core stop failed", slog.String("scope", "core"),
+			slog.String("engine", "xray"), slog.String("err", logging.RedactError(errX)))
+	}
 	if errSB != nil {
 		return errSB
 	}
-	return errX
+	if errX != nil {
+		return errX
+	}
+	slog.Info("core stopped", slog.String("scope", "core"))
+	return nil
 }

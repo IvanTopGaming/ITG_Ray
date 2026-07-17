@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 
 	xcore "github.com/xtls/xray-core/core"
 	xserial "github.com/xtls/xray-core/infra/conf/serial"
@@ -23,6 +24,8 @@ import (
 	// register every proxy/transport/feature handler. Without this,
 	// xcore.New() fails with "*proxyman.InboundConfig is not registered".
 	_ "github.com/xtls/xray-core/main/distro/all"
+
+	"github.com/itg-team/itg-ray/internal/logging"
 )
 
 // XrayAdapter wraps an embedded xray-core instance.
@@ -41,13 +44,22 @@ func (a *XrayAdapter) Start(_ context.Context, configJSON []byte) error {
 	}
 	cfg, err := xserial.LoadJSONConfig(bytes.NewReader(configJSON))
 	if err != nil {
+		slog.Error("xray start failed", slog.String("scope", "core"),
+			slog.String("engine", "xray"), slog.String("stage", "load-json"),
+			slog.String("err", logging.RedactError(err)))
 		return fmt.Errorf("xray load json: %w", err)
 	}
 	inst, err := xcore.New(cfg)
 	if err != nil {
+		slog.Error("xray start failed", slog.String("scope", "core"),
+			slog.String("engine", "xray"), slog.String("stage", "new"),
+			slog.String("err", logging.RedactError(err)))
 		return fmt.Errorf("xray new: %w", err)
 	}
 	if err := inst.Start(); err != nil {
+		slog.Error("xray start failed", slog.String("scope", "core"),
+			slog.String("engine", "xray"), slog.String("stage", "start"),
+			slog.String("err", logging.RedactError(err)))
 		return fmt.Errorf("xray start: %w", err)
 	}
 	a.inst = inst
@@ -62,5 +74,9 @@ func (a *XrayAdapter) Close() error {
 	}
 	err := a.inst.Close()
 	a.inst = nil
+	if err != nil {
+		slog.Error("xray close failed", slog.String("scope", "core"),
+			slog.String("engine", "xray"), slog.String("err", logging.RedactError(err)))
+	}
 	return err
 }
