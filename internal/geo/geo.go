@@ -32,7 +32,7 @@ const (
 var BaseTags = []string{
 	"geosite-ru",
 	"geoip-ru",
-	"geosite-category-ru-blocked",
+	"geosite-ru-blocked",
 	"geosite-category-ads-all",
 }
 

@@ -132,6 +132,48 @@ func TestResolve_Runetfreedom_BestEffort_SkipsMissing(t *testing.T) {
 	}
 }
 
+func TestResolve_Runetfreedom_AllBaseTagsResolve(t *testing.T) {
+	// Filenames exactly as they appear in the runetfreedom sing-box.zip.
+	// Every entry in geo.BaseTags must map to one of these (directly or via
+	// sourceNames), otherwise it is a phantom tag that always skips with a warning.
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	entries := []string{
+		"rule-set-geosite/geosite-category-ru.srs",
+		"rule-set-geoip/geoip-ru.srs",
+		"rule-set-geosite/geosite-ru-blocked.srs",
+		"rule-set-geosite/geosite-category-ads-all.srs",
+	}
+	for _, n := range entries {
+		w, err := zw.Create(n)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte("X")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(buf.Bytes())
+	}))
+	defer srv.Close()
+
+	m := NewManager(t.TempDir(), nil)
+	m.zipURLOverride = srv.URL
+	got, err := m.Resolve(context.Background(), Source{Preset: PresetRunetfreedom}, BaseTags)
+	if err != nil {
+		t.Fatalf("Resolve(BaseTags): %v", err)
+	}
+	for _, tag := range BaseTags {
+		if got[tag] == "" {
+			t.Errorf("BaseTag %q did not resolve against runetfreedom naming (phantom tag?)", tag)
+		}
+	}
+}
+
 func TestResolve_Runetfreedom_BestEffort_AllMissingErrors(t *testing.T) {
 	zipBytes := buildFixtureZip(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
