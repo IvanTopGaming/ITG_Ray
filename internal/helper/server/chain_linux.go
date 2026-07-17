@@ -378,17 +378,17 @@ func stopActiveChainLocked() []string {
 	// exits, so there is no host-level restore to run afterwards on Linux.
 	xrayErr, sbErr := stopBoth(2*time.Second, asStopper(s.xray), asStopper(s.singbox))
 	if xrayErr != nil {
-		errs = append(errs, "xray.Stop: "+logging.RedactError(xrayErr))
+		errs = append(errs, "xray.Stop: "+xrayErr.Error())
 	}
 	if sbErr != nil {
-		errs = append(errs, "singbox.Stop: "+logging.RedactError(sbErr))
+		errs = append(errs, "singbox.Stop: "+sbErr.Error())
 	}
 
 	// Close xray API client (best-effort; the conn may already be unusable
 	// because xray itself just exited).
 	if s.xrayAPI != nil {
 		if err := s.xrayAPI.Close(); err != nil {
-			errs = append(errs, "xrayAPI.Close: "+logging.RedactError(err))
+			errs = append(errs, "xrayAPI.Close: "+err.Error())
 		}
 	}
 

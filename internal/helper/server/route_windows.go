@@ -20,10 +20,14 @@ type RouteSnapshotResult struct {
 // NewRouteSnapshotHandler reads the current route table.
 func NewRouteSnapshotHandler() Handler {
 	return func(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		slog.Info("route snapshot", slog.String("scope", "helper"))
 		entries, err := route.Snapshot()
 		if err != nil {
+			slog.Error("route snapshot failed", slog.String("scope", "helper"),
+				slog.String("err", logging.RedactError(err)))
 			return nil, err
 		}
+		slog.Debug("route snapshot ok", slog.String("scope", "helper"), slog.Int("count", len(entries)))
 		return json.Marshal(RouteSnapshotResult{Routes: entries})
 	}
 }
@@ -77,8 +81,11 @@ func NewRouteRestoreHandler() Handler {
 		if err := json.Unmarshal(args, &payload); err != nil {
 			return nil, fmt.Errorf("decode args: %w", err)
 		}
+		slog.Info("route restore", slog.String("scope", "helper"), slog.Int("snapshot_count", len(payload.Snapshot)))
 		current, err := route.Snapshot()
 		if err != nil {
+			slog.Error("route restore failed", slog.String("scope", "helper"),
+				slog.String("stage", "route-snapshot"), slog.String("err", logging.RedactError(err)))
 			return nil, err
 		}
 		want := indexEntries(payload.Snapshot)
@@ -87,15 +94,22 @@ func NewRouteRestoreHandler() Handler {
 		// Remove routes in have but not in want.
 		for k, e := range have {
 			if _, keep := want[k]; !keep {
-				_ = route.Remove(e) // best-effort; transient mismatches are OK
+				if err := route.Remove(e); err != nil { // best-effort; transient mismatches are OK
+					slog.Warn("route restore: remove failed", slog.String("scope", "helper"),
+						slog.String("dest", e.DestCIDR), slog.String("err", logging.RedactError(err)))
+				}
 			}
 		}
 		// Add routes in want but not in have.
 		for k, e := range want {
 			if _, exists := have[k]; !exists {
-				_ = route.Add(e)
+				if err := route.Add(e); err != nil {
+					slog.Warn("route restore: add failed", slog.String("scope", "helper"),
+						slog.String("dest", e.DestCIDR), slog.String("err", logging.RedactError(err)))
+				}
 			}
 		}
+		slog.Debug("route restore ok", slog.String("scope", "helper"))
 		return json.RawMessage(`{}`), nil
 	}
 }

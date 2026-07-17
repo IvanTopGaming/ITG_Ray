@@ -210,6 +210,8 @@ func NewStartChainHandler() Handler {
 
 		// Step 1: prepare runtime dir.
 		if err := runtime.EnsureClean(); err != nil {
+			slog.Error("chain start failed", slog.String("scope", "helper"),
+				slog.String("stage", "runtime-ensure-clean"), slog.String("err", logging.RedactError(err)))
 			return nil, fmt.Errorf("runtime.EnsureClean: %w", err)
 		}
 		doneRuntime = true
@@ -218,11 +220,15 @@ func NewStartChainHandler() Handler {
 		sbPath := runtime.ConfigPath("sing-box.json")
 		if err := os.WriteFile(sbPath, a.SingboxConfig, 0o640); err != nil { //nolint:gosec // %ProgramData%, admin-only
 			rollback()
+			slog.Error("chain start failed", slog.String("scope", "helper"),
+				slog.String("stage", "write-sing-box-config"), slog.String("err", logging.RedactError(err)))
 			return nil, fmt.Errorf("write sing-box config: %w", err)
 		}
 		xrPath := runtime.ConfigPath("xray.json")
 		if err := os.WriteFile(xrPath, a.XrayConfig, 0o640); err != nil { //nolint:gosec // %ProgramData%, admin-only
 			rollback()
+			slog.Error("chain start failed", slog.String("scope", "helper"),
+				slog.String("stage", "write-xray-config"), slog.String("err", logging.RedactError(err)))
 			return nil, fmt.Errorf("write xray config: %w", err)
 		}
 
@@ -231,6 +237,8 @@ func NewStartChainHandler() Handler {
 			snap, err := route.Snapshot()
 			if err != nil {
 				rollback()
+				slog.Error("chain start failed", slog.String("scope", "helper"),
+					slog.String("stage", "route-snapshot"), slog.String("err", logging.RedactError(err)))
 				return nil, fmt.Errorf("route.Snapshot: %w", err)
 			}
 			state.snapshot = snap
@@ -242,6 +250,8 @@ func NewStartChainHandler() Handler {
 			gw, err := gateway.Default()
 			if err != nil {
 				rollback()
+				slog.Error("chain start failed", slog.String("scope", "helper"),
+					slog.String("stage", "gateway-default"), slog.String("err", logging.RedactError(err)))
 				return nil, fmt.Errorf("gateway.Default: %w", err)
 			}
 
@@ -255,6 +265,8 @@ func NewStartChainHandler() Handler {
 			serverV4, err := resolveServerIPv4(net.LookupIP, a.ServerHost, 6, 500*time.Millisecond)
 			if err != nil {
 				rollback()
+				slog.Error("chain start failed", slog.String("scope", "helper"),
+					slog.String("stage", "resolve-server-ipv4"), slog.String("err", logging.RedactError(err)))
 				return nil, err
 			}
 
@@ -266,6 +278,8 @@ func NewStartChainHandler() Handler {
 			}
 			if err := route.Add(state.peerRoute); err != nil {
 				rollback()
+				slog.Error("chain start failed", slog.String("scope", "helper"),
+					slog.String("stage", "route-add-peer"), slog.String("err", logging.RedactError(err)))
 				return nil, fmt.Errorf("route.Add(peer): %w", err)
 			}
 			donePeerRoute = true
@@ -276,10 +290,14 @@ func NewStartChainHandler() Handler {
 			prior, err := dns.Snapshot(a.DnsAlias)
 			if err != nil {
 				rollback()
+				slog.Error("chain start failed", slog.String("scope", "helper"),
+					slog.String("stage", "dns-snapshot"), slog.String("err", logging.RedactError(err)))
 				return nil, fmt.Errorf("dns.Snapshot: %w", err)
 			}
 			if err := dns.Set(dns.Settings{InterfaceAlias: a.DnsAlias, Addresses: a.DnsServers}); err != nil {
 				rollback()
+				slog.Error("chain start failed", slog.String("scope", "helper"),
+					slog.String("stage", "dns-set"), slog.String("err", logging.RedactError(err)))
 				return nil, fmt.Errorf("dns.Set: %w", err)
 			}
 			state.dnsPrior = &prior
@@ -293,6 +311,8 @@ func NewStartChainHandler() Handler {
 			before, err = adapter.Snapshot()
 			if err != nil {
 				rollback()
+				slog.Error("chain start failed", slog.String("scope", "helper"),
+					slog.String("stage", "adapter-snapshot"), slog.String("err", logging.RedactError(err)))
 				return nil, fmt.Errorf("adapter.Snapshot(before): %w", err)
 			}
 		}
@@ -301,11 +321,15 @@ func NewStartChainHandler() Handler {
 		sbExe, err := binaryPath("sing-box.exe")
 		if err != nil {
 			rollback()
+			slog.Error("chain start failed", slog.String("scope", "helper"),
+				slog.String("stage", "binary-path-sing-box"), slog.String("err", logging.RedactError(err)))
 			return nil, fmt.Errorf("binary path: %w", err)
 		}
 		sbLog := runtime.LogPath("sing-box.log")
 		if err := runtime.RotateLog(sbLog); err != nil {
 			rollback()
+			slog.Error("chain start failed", slog.String("scope", "helper"),
+				slog.String("stage", "rotate-sing-box-log"), slog.String("err", logging.RedactError(err)))
 			return nil, fmt.Errorf("rotate sing-box log: %w", err)
 		}
 		state.singbox, err = supervisor.Spawn("sing-box", sbExe,
@@ -343,6 +367,9 @@ func NewStartChainHandler() Handler {
 			}
 			if tunAdapter == nil {
 				rollback()
+				slog.Error("chain start failed", slog.String("scope", "helper"),
+					slog.String("stage", "adapter-poll-timeout"),
+					slog.String("err", "sing-box did not create a TUN adapter within 10s"))
 				return nil, errors.New("sing-box did not create a TUN adapter within 10s")
 			}
 			state.tunLUID = tunAdapter.LUID
@@ -353,11 +380,15 @@ func NewStartChainHandler() Handler {
 		xrExe, err := binaryPath("xray.exe")
 		if err != nil {
 			rollback()
+			slog.Error("chain start failed", slog.String("scope", "helper"),
+				slog.String("stage", "binary-path-xray"), slog.String("err", logging.RedactError(err)))
 			return nil, fmt.Errorf("binary path xray: %w", err)
 		}
 		xrLog := runtime.LogPath("xray.log")
 		if err := runtime.RotateLog(xrLog); err != nil {
 			rollback()
+			slog.Error("chain start failed", slog.String("scope", "helper"),
+				slog.String("stage", "rotate-xray-log"), slog.String("err", logging.RedactError(err)))
 			return nil, fmt.Errorf("rotate xray log: %w", err)
 		}
 		state.xray, err = supervisor.Spawn("xray", xrExe,
@@ -404,6 +435,8 @@ func NewStartChainHandler() Handler {
 			DNSPrior: dnsPriorAsList(state.dnsPrior),
 		}); err != nil {
 			rollback()
+			slog.Error("chain start failed", slog.String("scope", "helper"),
+				slog.String("stage", "undo-save"), slog.String("err", logging.RedactError(err)))
 			return nil, fmt.Errorf("undo.Save: %w", err)
 		}
 
@@ -566,17 +599,17 @@ func stopActiveChainLocked() []string {
 	// 1. Stop cores in parallel (worst case 2s — kill if not graceful by then).
 	xrayErr, sbErr := stopBoth(2*time.Second, asStopper(s.xray), asStopper(s.singbox))
 	if xrayErr != nil {
-		errs = append(errs, "xray.Stop: "+logging.RedactError(xrayErr))
+		errs = append(errs, "xray.Stop: "+xrayErr.Error())
 	}
 	if sbErr != nil {
-		errs = append(errs, "singbox.Stop: "+logging.RedactError(sbErr))
+		errs = append(errs, "singbox.Stop: "+sbErr.Error())
 	}
 
 	// 2. Restore DNS if we changed it (legacy dns_alias single-adapter path
 	// only; sing-box auto_route teardown handles its own DNS hijack restore).
 	if s.dnsPrior != nil {
 		if err := dns.Restore(*s.dnsPrior); err != nil {
-			errs = append(errs, "dns.Restore: "+logging.RedactError(err))
+			errs = append(errs, "dns.Restore: "+err.Error())
 		}
 	}
 
@@ -610,12 +643,12 @@ func stopActiveChainLocked() []string {
 			}
 		}
 	} else {
-		errs = append(errs, "route.Snapshot(post): "+logging.RedactError(err))
+		errs = append(errs, "route.Snapshot(post): "+err.Error())
 	}
 
 	// 5. Clear undo journal.
 	if err := undo.Clear(undoPath()); err != nil {
-		errs = append(errs, "undo.Clear: "+logging.RedactError(err))
+		errs = append(errs, "undo.Clear: "+err.Error())
 	}
 
 	// Note: do NOT wipe runtime.BasePath() here. Next session's OpStartChain
@@ -626,7 +659,7 @@ func stopActiveChainLocked() []string {
 	// because xray itself just exited).
 	if s.xrayAPI != nil {
 		if err := s.xrayAPI.Close(); err != nil {
-			errs = append(errs, "xrayAPI.Close: "+logging.RedactError(err))
+			errs = append(errs, "xrayAPI.Close: "+err.Error())
 		}
 	}
 
