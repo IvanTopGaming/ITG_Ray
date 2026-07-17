@@ -23,6 +23,8 @@ func (c *Controller) runPoller(ctx context.Context) {
 		case now := <-t.C:
 			state, err := c.d.Helper.ServiceStatus(ctx)
 			if err != nil {
+				slog.Warn("chainctl poll error",
+					slog.String("scope", "chainctl"), slog.String("err", err.Error()))
 				continue
 			}
 			if !state.Running {

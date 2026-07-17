@@ -411,18 +411,36 @@ func (c *Controller) tearDown(ctx context.Context, mode Mode) {
 //     UX, but does NOT claim ownership and emits no event — the user
 //     reconnects explicitly.
 func (c *Controller) Reconcile(ctx context.Context) {
+	slog.Info("chainctl reconcile start", slog.String("scope", "chainctl"))
+
 	rec, err := loadSession(c.d.DataDir)
 	if err != nil || rec.ServerID == "" {
+		slog.Info("chainctl reconcile: nothing to recover", slog.String("scope", "chainctl"))
 		return
 	}
 	srv, err := c.d.ServerStore.Get(rec.ServerID)
 	if err != nil || srv == nil {
+		if err == nil {
+			err = fmt.Errorf("chainctl: server %q not found", rec.ServerID)
+		}
+		slog.Error("chainctl reconcile failed",
+			slog.String("scope", "chainctl"), slog.String("err", err.Error()))
 		_ = clearSession(c.d.DataDir)
 		return
 	}
 
 	state, statusErr := c.d.Helper.ServiceStatus(ctx)
-	if statusErr != nil || !state.Running {
+	if statusErr != nil {
+		slog.Error("chainctl reconcile failed",
+			slog.String("scope", "chainctl"), slog.String("err", statusErr.Error()))
+		c.mu.Lock()
+		c.current = srv
+		c.mode = Mode(rec.Mode)
+		c.mu.Unlock()
+		return
+	}
+	if !state.Running {
+		slog.Info("chainctl reconcile: nothing to recover", slog.String("scope", "chainctl"))
 		c.mu.Lock()
 		c.current = srv
 		c.mode = Mode(rec.Mode)
@@ -454,6 +472,9 @@ func (c *Controller) Reconcile(ctx context.Context) {
 		Name:    hub.EventVPNStatus,
 		Payload: payload,
 	})
+
+	slog.Info("chainctl reconcile: adopted running chain", slog.String("scope", "chainctl"),
+		slog.String("server", srv.ID), slog.String("mode", string(mode)))
 
 	go c.runPoller(pollCtx)
 }

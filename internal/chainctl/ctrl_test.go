@@ -206,25 +206,37 @@ func TestController_Start_StartChainFails_Rollback(t *testing.T) {
 	require.False(t, fh.running, "chain should not be running after rollback")
 }
 
+// newReconcileTestController builds a Controller wired to a fake helper
+// that reports an already-running chain, with a last-session.json on disk
+// pointing at server "a" in TUN mode from 2h ago. Reconcile called against
+// it takes the "adopted running chain" branch. Shared by
+// TestController_Reconcile_AfterCrash and TestReconcile_LogsRecoveryOutcome.
+func newReconcileTestController(t *testing.T) *Controller {
+	t.Helper()
+	c, fh, _, _ := setup(t)
+	fh.mu.Lock()
+	fh.running = true
+	fh.mu.Unlock()
+	require.NoError(t, saveSession(c.d.DataDir, sessionRecord{
+		ServerID: "a",
+		Mode:     string(ModeTUN),
+		At:       time.Now().Add(-2 * time.Hour),
+	}))
+	return c
+}
+
 func TestController_Reconcile_AfterCrash(t *testing.T) {
-	c, fh, h, _ := setup(t)
 	// Helper survived a GUI crash and reports an active chain. Reconcile
 	// must adopt: rebind picker, emit a connected vpn:status (including
 	// the original session start time so the duration counter resumes
 	// from when the chain *actually* started, not from now), claim
 	// ownership, and start the poller.
-	fh.mu.Lock()
-	fh.running = true
-	fh.mu.Unlock()
-	sessionStart := time.Now().Add(-2 * time.Hour)
-	require.NoError(t, saveSession(c.d.DataDir, sessionRecord{
-		ServerID: "a",
-		Mode:     string(ModeTUN),
-		At:       sessionStart,
-	}))
+	c := newReconcileTestController(t)
+	rec, err := loadSession(c.d.DataDir)
+	require.NoError(t, err)
 
-	rcv := h.Subscribe(8)
-	defer h.Unsubscribe(rcv)
+	rcv := c.d.Hub.Subscribe(8)
+	defer c.d.Hub.Unsubscribe(rcv)
 
 	c.Reconcile(context.Background())
 
@@ -232,7 +244,7 @@ func TestController_Reconcile_AfterCrash(t *testing.T) {
 	require.Equal(t, "a", ev.Payload["serverId"])
 	require.Equal(t, string(ModeTUN), ev.Payload["mode"])
 	require.Contains(t, ev.Payload, "network", "adopted connected event must carry network view")
-	require.Equal(t, sessionStart.UnixMilli(), ev.Payload["connectedAt"],
+	require.Equal(t, rec.At.UnixMilli(), ev.Payload["connectedAt"],
 		"adopted connected event must carry the original session start time, not now()")
 
 	st, srv, mode := c.Status()
