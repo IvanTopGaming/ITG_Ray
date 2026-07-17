@@ -398,10 +398,14 @@ func applyTunModeKillswitch(route map[string]any, lanBypassPrepended bool, block
 func BuildSingbox(in *SingboxInput) ([]byte, error) {
 	ruleBytes, err := rules.Compile(in.Rules)
 	if err != nil {
+		slog.Error("singbox build failed", slog.String("scope", "configgen"),
+			slog.String("stage", "compile rules"), slog.String("err", err.Error()))
 		return nil, err
 	}
 	var route map[string]any
 	if err := json.Unmarshal(ruleBytes, &route); err != nil {
+		slog.Error("singbox build failed", slog.String("scope", "configgen"),
+			slog.String("stage", "unmarshal route"), slog.String("err", err.Error()))
 		return nil, err
 	}
 
@@ -511,6 +515,8 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 		for _, tag := range tags {
 			path, ok := in.GeoRuleSets[tag]
 			if !ok {
+				slog.Error("singbox build failed", slog.String("scope", "configgen"),
+					slog.String("reason", "missing rule_set srs path"), slog.String("tag", tag))
 				return nil, fmt.Errorf("BuildSingbox: no local .srs path for rule_set tag %q", tag)
 			}
 			decls = append(decls, map[string]any{
@@ -554,5 +560,15 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 		inbounds = []map[string]any{inbound}
 	}
 	doc["inbounds"] = inbounds
-	return json.MarshalIndent(doc, "", "  ")
+	out, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	ruleSetCount := 0
+	if rs, ok := route["rule_set"].([]map[string]any); ok {
+		ruleSetCount = len(rs)
+	}
+	slog.Debug("singbox config built", slog.String("scope", "configgen"),
+		slog.Int("bytes", len(out)), slog.Int("rule_sets", ruleSetCount))
+	return out, nil
 }

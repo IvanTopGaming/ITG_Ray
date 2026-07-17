@@ -83,12 +83,17 @@ func TestBuildSingbox_GeoDeclaresLocalRuleSets(t *testing.T) {
 	}
 }
 
-func TestBuildSingbox_MissingPathErrors(t *testing.T) {
-	in := &SingboxInput{
+func inputWithRuleSetButNoPath(t *testing.T) *SingboxInput {
+	t.Helper()
+	return &SingboxInput{
 		Mode:        ModeSysProxy,
 		Rules:       geoTestModel(),
 		GeoRuleSets: map[string]string{"geosite-category-ru": "/c/geosite-category-ru.srs"},
 	}
+}
+
+func TestBuildSingbox_MissingPathErrors(t *testing.T) {
+	in := inputWithRuleSetButNoPath(t)
 	_, err := BuildSingbox(in)
 	if err == nil {
 		t.Fatal("expected error for geoip-ru missing from GeoRuleSets")
