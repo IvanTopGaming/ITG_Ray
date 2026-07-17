@@ -350,6 +350,8 @@ func NewStartChainHandler() Handler {
 			for time.Now().Before(deadline) {
 				select {
 				case <-ctx.Done():
+					slog.Error("chain start failed", slog.String("scope", "helper"),
+						slog.String("stage", "adapter-discovery"), slog.String("err", logging.RedactError(ctx.Err())))
 					rollback()
 					return nil, ctx.Err()
 				default:
