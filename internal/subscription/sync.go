@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/itg-team/itg-ray/internal/logging"
 	"github.com/itg-team/itg-ray/internal/server"
 )
 
@@ -70,7 +71,7 @@ func Sync(ctx context.Context, sub Subscription, existing []server.Server, timeo
 		meta.Status = "error"
 		meta.Message = err.Error()
 		slog.Error("sub sync failed", slog.String("scope", "sub"), slog.String("id", sub.ID),
-			slog.String("stage", "fetch"), slog.String("err", err.Error()))
+			slog.String("stage", "fetch"), slog.String("err", logging.RedactError(err)))
 		return nil, meta, err
 	}
 	meta.Headers = res.Headers
@@ -80,7 +81,7 @@ func Sync(ctx context.Context, sub Subscription, existing []server.Server, timeo
 		meta.Status = "error"
 		meta.Message = err.Error()
 		slog.Error("sub sync failed", slog.String("scope", "sub"), slog.String("id", sub.ID),
-			slog.String("stage", "parse"), slog.String("err", err.Error()))
+			slog.String("stage", "parse"), slog.String("err", logging.RedactError(err)))
 		return nil, meta, err
 	}
 

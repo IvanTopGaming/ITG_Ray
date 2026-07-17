@@ -1,6 +1,8 @@
 package logging
 
 import (
+	"errors"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -89,4 +91,17 @@ func TestRedact_NoFalsePositiveOnSID(t *testing.T) {
 	in := "user sid=session-abc-not-a-secret"
 	got := Redact(in)
 	require.Contains(t, got, "session-abc-not-a-secret")
+}
+
+func TestRedactError_DropsURLFromURLError(t *testing.T) {
+	err := &url.Error{
+		Op:  "Get",
+		URL: "https://panel.example.com/sub/abc?token=SECRETTOKEN",
+		Err: errors.New("dial tcp: i/o timeout"),
+	}
+	got := RedactError(err)
+	require.NotContains(t, got, "panel.example.com")
+	require.NotContains(t, got, "abc")
+	require.NotContains(t, got, "SECRETTOKEN")
+	require.Contains(t, got, "i/o timeout")
 }

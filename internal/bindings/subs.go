@@ -13,6 +13,7 @@ import (
 
 	"github.com/itg-team/itg-ray/internal/hub"
 	"github.com/itg-team/itg-ray/internal/hwid"
+	"github.com/itg-team/itg-ray/internal/logging"
 	"github.com/itg-team/itg-ray/internal/subscription"
 )
 
@@ -122,7 +123,7 @@ func (s *SubsService) Add(rawURL, name, userAgent string) (hub.SubView, error) {
 	go func(id string) {
 		if err := s.SyncOne(id); err != nil {
 			slog.Warn("sub add initial sync failed", slog.String("scope", "subs"),
-				slog.String("id", id), slog.String("err", err.Error()))
+				slog.String("id", id), slog.String("err", logging.RedactError(err)))
 		}
 	}(stored.ID)
 	return view, nil
@@ -368,7 +369,7 @@ func (s *SubsService) SyncAll() error {
 		if err := s.SyncOne(sub.ID); err != nil {
 			failed++
 			slog.Warn("sub sync skipped", slog.String("scope", "subs"),
-				slog.String("id", sub.ID), slog.String("err", err.Error()))
+				slog.String("id", sub.ID), slog.String("err", logging.RedactError(err)))
 			continue
 		}
 		ok++

@@ -1,7 +1,11 @@
 // Package logging provides structured logging and secret redaction.
 package logging
 
-import "regexp"
+import (
+	"errors"
+	"net/url"
+	"regexp"
+)
 
 // Sensitive-keyword alternation used by multiple rules.
 // Note: bare 'sid' deliberately excluded — too common as session-id abbreviation.
@@ -30,4 +34,19 @@ func Redact(s string) string {
 		s = r.re.ReplaceAllString(s, r.repl)
 	}
 	return s
+}
+
+// RedactError renders err for logging with secrets removed. It strips the
+// embedded URL from *url.Error (which carries the full request URL, possibly
+// with credentials) and passes the remainder through Redact.
+func RedactError(err error) string {
+	if err == nil {
+		return ""
+	}
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		// Drop ue.URL entirely; keep the operation + underlying cause.
+		return Redact(ue.Op + ": " + ue.Err.Error())
+	}
+	return Redact(err.Error())
 }

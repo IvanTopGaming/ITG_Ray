@@ -38,6 +38,30 @@ func TestSync_LogsStartAndFailureWithRedactedURL(t *testing.T) {
 	}
 }
 
+func TestSync_LogsNetworkFailureWithoutURL(t *testing.T) {
+	buf := logtest.Capture(t)
+
+	sub := Subscription{ID: "sub-net", URL: "http://127.0.0.1:1/sub?token=SECRETTOKEN"}
+	_, _, err := Sync(context.Background(), sub, nil, 5*time.Second)
+	if err == nil {
+		t.Fatal("expected Sync to fail on connection refused")
+	}
+	out := buf.String()
+	if !strings.Contains(out, "sub sync failed") {
+		t.Fatalf("missing failure log: %q", out)
+	}
+	if strings.Contains(out, "SECRETTOKEN") {
+		t.Fatalf("token leaked into logs: %q", out)
+	}
+	// The dialed host:port may still appear via the underlying net.OpError
+	// string (RedactError only strips the *url.Error's embedded request
+	// URL, which is where the credential-bearing query lived); what matters
+	// is that the request path + token are gone.
+	if strings.Contains(out, "/sub?token=") {
+		t.Fatalf("full sub URL/path leaked into logs: %q", out)
+	}
+}
+
 func TestSync_LogsSuccessCounts(t *testing.T) {
 	buf := logtest.Capture(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
