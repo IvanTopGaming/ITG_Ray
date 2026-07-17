@@ -70,7 +70,7 @@ func (d *Driver) probeOnce(ctx context.Context) {
 			addr := net.JoinHostPort(snapshot[i].Vless.Address, fmt.Sprintf("%d", snapshot[i].Vless.Port))
 			dur, perr := d.probeFunc(ctx, addr, d.probeTimeout)
 			if perr != nil {
-				d.log.Warn("refresh probe: server unreachable",
+				d.log.Debug("refresh probe: server unreachable",
 					slog.String("scope", "refresh"),
 					slog.String("id", snapshot[i].ID),
 					slog.String("err", logging.RedactError(perr)),
