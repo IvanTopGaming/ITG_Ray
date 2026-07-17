@@ -12,12 +12,14 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/itg-team/itg-ray/internal/configgen"
 	"github.com/itg-team/itg-ray/internal/helper/supervisor"
 	"github.com/itg-team/itg-ray/internal/helper/xrayapi"
+	"github.com/itg-team/itg-ray/internal/logging"
 )
 
 // runtimeDir is the root-writable scratch directory where the privileged
@@ -149,6 +151,8 @@ func NewStartChainHandler() Handler {
 			return nil, fmt.Errorf("chain already running (session=%s)", activeSess.sessionID)
 		}
 
+		slog.Info("chain start", slog.String("scope", "helper"), slog.String("mode", a.Mode))
+
 		state := &chainState{sessionID: newSessionID()}
 
 		// rollback runs in reverse order of operations performed; only the
@@ -165,24 +169,34 @@ func NewStartChainHandler() Handler {
 
 		// Step 1: prepare runtime dir.
 		if err := os.MkdirAll(runtimeDir, 0o750); err != nil {
+			slog.Error("chain start failed", slog.String("scope", "helper"),
+				slog.String("stage", "mkdir-runtime-dir"), slog.String("err", logging.RedactError(err)))
 			return nil, fmt.Errorf("mkdir runtime dir: %w", err)
 		}
 
 		// Step 2: persist configs VERBATIM. The bridge already generated
 		// them (including route_exclude_address for the server-loop), so this
-		// handler never touches configgen.
+		// handler never touches configgen. Only the operation name is logged
+		// on failure — config bytes carry server credentials and must never
+		// reach the log stream.
 		sbPath := filepath.Join(runtimeDir, "sing-box.json")
 		if err := os.WriteFile(sbPath, a.SingboxConfig, 0o640); err != nil { //nolint:gosec // /run/itgray-helper, root-only
+			slog.Error("chain start failed", slog.String("scope", "helper"),
+				slog.String("stage", "write-sing-box-config"), slog.String("err", logging.RedactError(err)))
 			return nil, fmt.Errorf("write sing-box config: %w", err)
 		}
 		xrPath := filepath.Join(runtimeDir, "xray.json")
 		if err := os.WriteFile(xrPath, a.XrayConfig, 0o640); err != nil { //nolint:gosec // /run/itgray-helper, root-only
+			slog.Error("chain start failed", slog.String("scope", "helper"),
+				slog.String("stage", "write-xray-config"), slog.String("err", logging.RedactError(err)))
 			return nil, fmt.Errorf("write xray config: %w", err)
 		}
 
 		// Step 3: spawn sing-box (creates its own TUN via auto_route).
 		sbExe, err := binaryPath("sing-box")
 		if err != nil {
+			slog.Error("chain start failed", slog.String("scope", "helper"),
+				slog.String("stage", "binary-path-sing-box"), slog.String("err", logging.RedactError(err)))
 			return nil, fmt.Errorf("binary path: %w", err)
 		}
 		sbLog := filepath.Join(runtimeDir, "sing-box.log")
@@ -191,6 +205,8 @@ func NewStartChainHandler() Handler {
 			sbLog)
 		if err != nil {
 			rollback()
+			slog.Error("chain start failed", slog.String("scope", "helper"),
+				slog.String("stage", "spawn-sing-box"), slog.String("err", logging.RedactError(err)))
 			return nil, fmt.Errorf("spawn sing-box: %w", err)
 		}
 		doneSingbox = true
@@ -199,6 +215,8 @@ func NewStartChainHandler() Handler {
 		xrExe, err := binaryPath("xray")
 		if err != nil {
 			rollback()
+			slog.Error("chain start failed", slog.String("scope", "helper"),
+				slog.String("stage", "binary-path-xray"), slog.String("err", logging.RedactError(err)))
 			return nil, fmt.Errorf("binary path xray: %w", err)
 		}
 		xrLog := filepath.Join(runtimeDir, "xray.log")
@@ -207,6 +225,8 @@ func NewStartChainHandler() Handler {
 			xrLog)
 		if err != nil {
 			rollback()
+			slog.Error("chain start failed", slog.String("scope", "helper"),
+				slog.String("stage", "spawn-xray"), slog.String("err", logging.RedactError(err)))
 			return nil, fmt.Errorf("spawn xray: %w", err)
 		}
 		doneXray = true
@@ -223,6 +243,9 @@ func NewStartChainHandler() Handler {
 		// drop handler reacts. Bound to `state` by pointer identity; a later
 		// StopChain/StartChain swaps activeSess and the watcher no-ops.
 		go watchChainExit(state)
+
+		slog.Debug("chain start ok", slog.String("scope", "helper"),
+			slog.String("session", state.sessionID), slog.String("mode", a.Mode))
 
 		// TunLUID is a Windows-only concept; sing-box owns the TUN on Linux.
 		return json.Marshal(StartChainResult{
@@ -279,7 +302,7 @@ func watchChainExit(sess *chainState) {
 	}
 
 	slog.Warn("core exited unexpectedly; clearing active chain session",
-		"session", sess.sessionID, "core", which)
+		slog.String("scope", "helper"), slog.String("session", sess.sessionID), slog.String("core", which))
 
 	// Same teardown StopActiveChain/OpStopChain run. stopActiveChainLocked
 	// requires chainMu held and activeSess != nil — both satisfied here.
@@ -306,6 +329,8 @@ func NewStopChainHandler() Handler {
 		if a.SessionID != "" && a.SessionID != activeSess.sessionID {
 			return nil, fmt.Errorf("session id mismatch: caller=%s active=%s", a.SessionID, activeSess.sessionID)
 		}
+
+		slog.Info("chain stop", slog.String("scope", "helper"), slog.String("session", activeSess.sessionID))
 
 		errs := stopActiveChainLocked()
 
@@ -353,21 +378,29 @@ func stopActiveChainLocked() []string {
 	// exits, so there is no host-level restore to run afterwards on Linux.
 	xrayErr, sbErr := stopBoth(2*time.Second, asStopper(s.xray), asStopper(s.singbox))
 	if xrayErr != nil {
-		errs = append(errs, "xray.Stop: "+xrayErr.Error())
+		errs = append(errs, "xray.Stop: "+logging.RedactError(xrayErr))
 	}
 	if sbErr != nil {
-		errs = append(errs, "singbox.Stop: "+sbErr.Error())
+		errs = append(errs, "singbox.Stop: "+logging.RedactError(sbErr))
 	}
 
 	// Close xray API client (best-effort; the conn may already be unusable
 	// because xray itself just exited).
 	if s.xrayAPI != nil {
 		if err := s.xrayAPI.Close(); err != nil {
-			errs = append(errs, "xrayAPI.Close: "+err.Error())
+			errs = append(errs, "xrayAPI.Close: "+logging.RedactError(err))
 		}
 	}
 
 	activeSess = nil
+
+	if len(errs) > 0 {
+		slog.Error("chain stop failed", slog.String("scope", "helper"),
+			slog.String("session", s.sessionID), slog.Int("count", len(errs)),
+			slog.String("err", strings.Join(errs, "; ")))
+	} else {
+		slog.Debug("chain stop ok", slog.String("scope", "helper"), slog.String("session", s.sessionID))
+	}
 	return errs
 }
 

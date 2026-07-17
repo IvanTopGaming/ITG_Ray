@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/itg-team/itg-ray/internal/helper/supervisor"
 	"github.com/itg-team/itg-ray/internal/helper/undo"
 	"github.com/itg-team/itg-ray/internal/helper/xrayapi"
+	"github.com/itg-team/itg-ray/internal/logging"
 )
 
 // coreStopper is the narrow surface stopBoth needs from a supervised
@@ -172,6 +174,8 @@ func NewStartChainHandler() Handler {
 			return nil, fmt.Errorf("chain already running (session=%s)", activeSess.sessionID)
 		}
 
+		slog.Info("chain start", slog.String("scope", "helper"), slog.String("mode", a.Mode))
+
 		state := &chainState{
 			sessionID: newSessionID(),
 			dnsAlias:  a.DnsAlias,
@@ -309,6 +313,8 @@ func NewStartChainHandler() Handler {
 			sbLog)
 		if err != nil {
 			rollback()
+			slog.Error("chain start failed", slog.String("scope", "helper"),
+				slog.String("stage", "spawn-sing-box"), slog.String("err", logging.RedactError(err)))
 			return nil, fmt.Errorf("spawn sing-box: %w", err)
 		}
 		doneSingbox = true
@@ -359,6 +365,8 @@ func NewStartChainHandler() Handler {
 			xrLog)
 		if err != nil {
 			rollback()
+			slog.Error("chain start failed", slog.String("scope", "helper"),
+				slog.String("stage", "spawn-xray"), slog.String("err", logging.RedactError(err)))
 			return nil, fmt.Errorf("spawn xray: %w", err)
 		}
 		doneXray = true
@@ -381,7 +389,8 @@ func NewStartChainHandler() Handler {
 			nrptName := "ITGRay-" + state.sessionID
 			if err := dns.AddNrptRule(nrptName, ".", []string{"1.1.1.1"}); err != nil {
 				slog.Warn("AddNrptRule failed; DNS may leak to ISP",
-					"session", state.sessionID, "err", err)
+					slog.String("scope", "helper"), slog.String("session", state.sessionID),
+					slog.String("err", logging.RedactError(err)))
 			} else {
 				state.nrptName = nrptName
 				doneNrpt = true
@@ -405,6 +414,9 @@ func NewStartChainHandler() Handler {
 		// drop handler reacts. Bound to `state` by pointer identity; a later
 		// StopChain/StartChain swaps activeSess and the watcher no-ops.
 		go watchChainExit(state)
+
+		slog.Debug("chain start ok", slog.String("scope", "helper"),
+			slog.String("session", state.sessionID), slog.String("mode", a.Mode))
 
 		return json.Marshal(StartChainResult{
 			SessionID:  state.sessionID,
@@ -460,7 +472,7 @@ func watchChainExit(sess *chainState) {
 	}
 
 	slog.Warn("core exited unexpectedly; clearing active chain session",
-		"session", sess.sessionID, "core", which)
+		slog.String("scope", "helper"), slog.String("session", sess.sessionID), slog.String("core", which))
 
 	// Same teardown StopActiveChain/OpStopChain run. stopActiveChainLocked
 	// requires chainMu held and activeSess != nil — both satisfied here.
@@ -504,6 +516,8 @@ func NewStopChainHandler() Handler {
 		if a.SessionID != "" && a.SessionID != activeSess.sessionID {
 			return nil, fmt.Errorf("session id mismatch: caller=%s active=%s", a.SessionID, activeSess.sessionID)
 		}
+
+		slog.Info("chain stop", slog.String("scope", "helper"), slog.String("session", activeSess.sessionID))
 
 		errs := stopActiveChainLocked()
 
@@ -552,17 +566,17 @@ func stopActiveChainLocked() []string {
 	// 1. Stop cores in parallel (worst case 2s — kill if not graceful by then).
 	xrayErr, sbErr := stopBoth(2*time.Second, asStopper(s.xray), asStopper(s.singbox))
 	if xrayErr != nil {
-		errs = append(errs, "xray.Stop: "+xrayErr.Error())
+		errs = append(errs, "xray.Stop: "+logging.RedactError(xrayErr))
 	}
 	if sbErr != nil {
-		errs = append(errs, "singbox.Stop: "+sbErr.Error())
+		errs = append(errs, "singbox.Stop: "+logging.RedactError(sbErr))
 	}
 
 	// 2. Restore DNS if we changed it (legacy dns_alias single-adapter path
 	// only; sing-box auto_route teardown handles its own DNS hijack restore).
 	if s.dnsPrior != nil {
 		if err := dns.Restore(*s.dnsPrior); err != nil {
-			errs = append(errs, "dns.Restore: "+err.Error())
+			errs = append(errs, "dns.Restore: "+logging.RedactError(err))
 		}
 	}
 
@@ -575,7 +589,9 @@ func stopActiveChainLocked() []string {
 	if name := s.nrptName; name != "" {
 		go func() {
 			if err := dns.RemoveNrptRule(name); err != nil {
-				slog.Warn("background NRPT removal failed", "rule", name, "err", err)
+				slog.Warn("background NRPT removal failed",
+					slog.String("scope", "helper"), slog.String("rule", name),
+					slog.String("err", logging.RedactError(err)))
 			}
 		}()
 	}
@@ -594,12 +610,12 @@ func stopActiveChainLocked() []string {
 			}
 		}
 	} else {
-		errs = append(errs, "route.Snapshot(post): "+err.Error())
+		errs = append(errs, "route.Snapshot(post): "+logging.RedactError(err))
 	}
 
 	// 5. Clear undo journal.
 	if err := undo.Clear(undoPath()); err != nil {
-		errs = append(errs, "undo.Clear: "+err.Error())
+		errs = append(errs, "undo.Clear: "+logging.RedactError(err))
 	}
 
 	// Note: do NOT wipe runtime.BasePath() here. Next session's OpStartChain
@@ -610,11 +626,19 @@ func stopActiveChainLocked() []string {
 	// because xray itself just exited).
 	if s.xrayAPI != nil {
 		if err := s.xrayAPI.Close(); err != nil {
-			errs = append(errs, "xrayAPI.Close: "+err.Error())
+			errs = append(errs, "xrayAPI.Close: "+logging.RedactError(err))
 		}
 	}
 
 	activeSess = nil
+
+	if len(errs) > 0 {
+		slog.Error("chain stop failed", slog.String("scope", "helper"),
+			slog.String("session", s.sessionID), slog.Int("count", len(errs)),
+			slog.String("err", strings.Join(errs, "; ")))
+	} else {
+		slog.Debug("chain stop ok", slog.String("scope", "helper"), slog.String("session", s.sessionID))
+	}
 	return errs
 }
 

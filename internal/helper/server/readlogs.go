@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 
 	"github.com/itg-team/itg-ray/internal/helper/protocol"
+	"github.com/itg-team/itg-ray/internal/logging"
 )
 
 var readLogsAllow = map[string]bool{"sing-box.log": true, "xray.log": true, "helper.log": true}
@@ -30,6 +32,8 @@ func NewReadLogsHandler() Handler {
 			return nil, err
 		}
 		if !readLogsAllow[args.Name] {
+			slog.Warn("read logs rejected: name not allowed",
+				slog.String("scope", "helper"), slog.String("name", args.Name))
 			return nil, fmt.Errorf("read logs: name %q not allowed", args.Name)
 		}
 		f, err := os.Open(filepath.Join(engineLogDir(), args.Name))
@@ -37,12 +41,16 @@ func NewReadLogsHandler() Handler {
 			if os.IsNotExist(err) {
 				return json.Marshal(protocol.ReadLogsResult{Offset: 0})
 			}
+			slog.Error("read logs failed", slog.String("scope", "helper"),
+				slog.String("stage", "open"), slog.String("name", args.Name), slog.String("err", logging.RedactError(err)))
 			return nil, err
 		}
 		defer f.Close()
 
 		info, err := f.Stat()
 		if err != nil {
+			slog.Error("read logs failed", slog.String("scope", "helper"),
+				slog.String("stage", "stat"), slog.String("name", args.Name), slog.String("err", logging.RedactError(err)))
 			return nil, err
 		}
 		offset, truncated := args.Offset, false
@@ -50,12 +58,18 @@ func NewReadLogsHandler() Handler {
 			offset, truncated = 0, true
 		}
 		if _, err := f.Seek(offset, io.SeekStart); err != nil {
+			slog.Error("read logs failed", slog.String("scope", "helper"),
+				slog.String("stage", "seek"), slog.String("name", args.Name), slog.String("err", logging.RedactError(err)))
 			return nil, err
 		}
 		data, err := io.ReadAll(io.LimitReader(f, int64(maxLogChunk)))
 		if err != nil {
+			slog.Error("read logs failed", slog.String("scope", "helper"),
+				slog.String("stage", "read"), slog.String("name", args.Name), slog.String("err", logging.RedactError(err)))
 			return nil, err
 		}
+		slog.Debug("read logs ok", slog.String("scope", "helper"),
+			slog.String("name", args.Name), slog.Int("bytes", len(data)), slog.Bool("truncated", truncated))
 		return json.Marshal(protocol.ReadLogsResult{
 			Data:      data,
 			Offset:    offset + int64(len(data)),

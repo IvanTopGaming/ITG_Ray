@@ -6,8 +6,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/itg-team/itg-ray/internal/helper/route"
+	"github.com/itg-team/itg-ray/internal/logging"
 )
 
 // RouteSnapshotResult is what OpRouteSnapshot returns.
@@ -33,9 +35,13 @@ func NewRouteAddHandler() Handler {
 		if err := json.Unmarshal(args, &e); err != nil {
 			return nil, fmt.Errorf("decode args: %w", err)
 		}
+		slog.Info("route add", slog.String("scope", "helper"), slog.String("dest", e.DestCIDR))
 		if err := route.Add(e); err != nil {
+			slog.Error("route add failed", slog.String("scope", "helper"),
+				slog.String("dest", e.DestCIDR), slog.String("err", logging.RedactError(err)))
 			return nil, err
 		}
+		slog.Debug("route add ok", slog.String("scope", "helper"), slog.String("dest", e.DestCIDR))
 		return json.RawMessage(`{}`), nil
 	}
 }
@@ -47,9 +53,13 @@ func NewRouteRemoveHandler() Handler {
 		if err := json.Unmarshal(args, &e); err != nil {
 			return nil, fmt.Errorf("decode args: %w", err)
 		}
+		slog.Info("route remove", slog.String("scope", "helper"), slog.String("dest", e.DestCIDR))
 		if err := route.Remove(e); err != nil {
+			slog.Error("route remove failed", slog.String("scope", "helper"),
+				slog.String("dest", e.DestCIDR), slog.String("err", logging.RedactError(err)))
 			return nil, err
 		}
+		slog.Debug("route remove ok", slog.String("scope", "helper"), slog.String("dest", e.DestCIDR))
 		return json.RawMessage(`{}`), nil
 	}
 }
