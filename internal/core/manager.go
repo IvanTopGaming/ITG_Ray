@@ -47,13 +47,9 @@ func (m *Manager) DryValidate(ctx context.Context, sbJSON, xrJSON []byte) error 
 // On any error, both are torn down.
 func (m *Manager) Start(ctx context.Context, sbJSON, xrJSON []byte) error {
 	if err := m.xry.Start(ctx, xrJSON); err != nil {
-		slog.Error("core start failed", slog.String("scope", "core"),
-			slog.String("engine", "xray"), slog.String("err", logging.RedactError(err)))
 		return err
 	}
 	if err := m.sbx.Start(ctx, sbJSON); err != nil {
-		slog.Error("core start failed", slog.String("scope", "core"),
-			slog.String("engine", "singbox"), slog.String("err", logging.RedactError(err)))
 		_ = m.xry.Close()
 		return err
 	}
@@ -65,15 +61,7 @@ func (m *Manager) Start(ctx context.Context, sbJSON, xrJSON []byte) error {
 // other instance is still attempted.
 func (m *Manager) Stop() error {
 	errSB := m.sbx.Close()
-	if errSB != nil {
-		slog.Error("core stop failed", slog.String("scope", "core"),
-			slog.String("engine", "singbox"), slog.String("err", logging.RedactError(errSB)))
-	}
 	errX := m.xry.Close()
-	if errX != nil {
-		slog.Error("core stop failed", slog.String("scope", "core"),
-			slog.String("engine", "xray"), slog.String("err", logging.RedactError(errX)))
-	}
 	if errSB != nil {
 		return errSB
 	}
