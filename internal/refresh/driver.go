@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/itg-team/itg-ray/internal/latency"
+	"github.com/itg-team/itg-ray/internal/logging"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/subscription"
 )
@@ -133,14 +134,25 @@ func NewDriver(c Config) *Driver {
 func (d *Driver) Run(ctx context.Context) error {
 	subs, err := d.subs.Load()
 	if err != nil {
-		d.log.Error("refresh: load subs", "err", err)
+		d.log.Error("refresh load subs failed",
+			slog.String("scope", "refresh"),
+			slog.String("err", logging.RedactError(err)),
+		)
 		// Still run probe loop — operator may add subs without restarting.
 		subs = nil
 	}
+	d.log.Info("refresh started",
+		slog.String("scope", "refresh"),
+		slog.Int("subs", len(subs)),
+	)
 	for _, s := range subs {
 		d.wg.Go(func() { d.runSub(ctx, s) })
 	}
 
+	d.log.Debug("refresh probe loop starting",
+		slog.String("scope", "refresh"),
+		slog.Duration("interval", d.probeInterval),
+	)
 	d.wg.Go(func() { d.runProbe(ctx) })
 
 	<-ctx.Done()

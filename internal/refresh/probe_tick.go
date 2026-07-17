@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/itg-team/itg-ray/internal/logging"
 	"github.com/itg-team/itg-ray/internal/server"
 )
 
@@ -19,7 +20,10 @@ import (
 func (d *Driver) probeOnce(ctx context.Context) {
 	defer func() {
 		if r := recover(); r != nil {
-			d.log.Error("refresh.probe panic", "panic", r)
+			d.log.Error("refresh probe panic",
+				slog.String("scope", "refresh"),
+				slog.Any("panic", r),
+			)
 		}
 	}()
 	start := d.now()
@@ -28,7 +32,10 @@ func (d *Driver) probeOnce(ctx context.Context) {
 	snapshot, err := server.Load(d.serversPath)
 	d.serversMu.Unlock()
 	if err != nil {
-		d.log.Error("refresh.probe.load", "err", err)
+		d.log.Error("refresh probe: load servers failed",
+			slog.String("scope", "refresh"),
+			slog.String("err", logging.RedactError(err)),
+		)
 		return
 	}
 	if len(snapshot) == 0 {
@@ -46,7 +53,11 @@ func (d *Driver) probeOnce(ctx context.Context) {
 		wg.Go(func() {
 			defer func() {
 				if r := recover(); r != nil {
-					d.log.Error("refresh.probe.worker panic", "id", snapshot[i].ID, "panic", r)
+					d.log.Error("refresh probe worker panic",
+						slog.String("scope", "refresh"),
+						slog.String("id", snapshot[i].ID),
+						slog.Any("panic", r),
+					)
 				}
 			}()
 			select {
@@ -59,6 +70,11 @@ func (d *Driver) probeOnce(ctx context.Context) {
 			addr := net.JoinHostPort(snapshot[i].Vless.Address, fmt.Sprintf("%d", snapshot[i].Vless.Port))
 			dur, perr := d.probeFunc(ctx, addr, d.probeTimeout)
 			if perr != nil {
+				d.log.Warn("refresh probe: server unreachable",
+					slog.String("scope", "refresh"),
+					slog.String("id", snapshot[i].ID),
+					slog.String("err", logging.RedactError(perr)),
+				)
 				results[i] = result{ID: snapshot[i].ID, LatencyP: nil}
 				return
 			}
@@ -78,7 +94,10 @@ func (d *Driver) probeOnce(ctx context.Context) {
 	defer d.serversMu.Unlock()
 	current, err := server.Load(d.serversPath)
 	if err != nil {
-		d.log.Error("refresh.probe.reload", "err", err)
+		d.log.Error("refresh probe: reload servers failed",
+			slog.String("scope", "refresh"),
+			slog.String("err", logging.RedactError(err)),
+		)
 		return
 	}
 	byID := make(map[string]int, len(current))
@@ -102,10 +121,14 @@ func (d *Driver) probeOnce(ctx context.Context) {
 		}
 	}
 	if err := server.Save(d.serversPath, current); err != nil {
-		d.log.Error("refresh.probe.save", "err", err)
+		d.log.Error("refresh probe: save servers failed",
+			slog.String("scope", "refresh"),
+			slog.String("err", logging.RedactError(err)),
+		)
 		return
 	}
-	d.log.Info("latency.probe",
+	d.log.Info("refresh probe done",
+		slog.String("scope", "refresh"),
 		slog.Int("total", len(snapshot)),
 		slog.Int("ok", ok),
 		slog.Int("failed", failed),
@@ -120,7 +143,10 @@ func (d *Driver) probeOnce(ctx context.Context) {
 func (d *Driver) runProbe(ctx context.Context) {
 	defer func() {
 		if r := recover(); r != nil {
-			d.log.Error("refresh.runProbe panic", "panic", r)
+			d.log.Error("refresh probe loop panic",
+				slog.String("scope", "refresh"),
+				slog.Any("panic", r),
+			)
 		}
 	}()
 

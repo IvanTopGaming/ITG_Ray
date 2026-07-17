@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/itg-team/itg-ray/internal/logging"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/subscription"
 )
@@ -20,7 +21,11 @@ func (d *Driver) syncOne(ctx context.Context, sub subscription.Stored) {
 	if err != nil {
 		d.serversMu.Unlock()
 		d.recordMeta(ctx, sub.ID, "error", "load servers: "+truncate(err.Error(), lastStatusMaxLen))
-		d.log.Error("refresh.sync.load", "id", sub.ID, "err", err)
+		d.log.Error("refresh sync: load servers failed",
+			slog.String("scope", "refresh"),
+			slog.String("id", sub.ID),
+			slog.String("err", logging.RedactError(err)),
+		)
 		return
 	}
 
@@ -29,7 +34,11 @@ func (d *Driver) syncOne(ctx context.Context, sub subscription.Stored) {
 		if saveErr := server.Save(d.serversPath, merged); saveErr != nil {
 			d.serversMu.Unlock()
 			d.recordMeta(ctx, sub.ID, "error", "save servers: "+truncate(saveErr.Error(), lastStatusMaxLen))
-			d.log.Error("refresh.sync.save", "id", sub.ID, "err", saveErr)
+			d.log.Error("refresh sync: save servers failed",
+				slog.String("scope", "refresh"),
+				slog.String("id", sub.ID),
+				slog.String("err", logging.RedactError(saveErr)),
+			)
 			return
 		}
 	}
@@ -45,9 +54,14 @@ func (d *Driver) syncOne(ctx context.Context, sub subscription.Stored) {
 		ui = meta.Headers.Userinfo
 	}
 	if err := d.subs.UpdateMeta(sub.ID, d.now(), meta.Status, truncate(meta.Message, lastStatusMaxLen), ui); err != nil {
-		d.log.Error("refresh.sync.updateMeta", "id", sub.ID, "err", err)
+		d.log.Error("refresh sync: update meta failed",
+			slog.String("scope", "refresh"),
+			slog.String("id", sub.ID),
+			slog.String("err", logging.RedactError(err)),
+		)
 	}
-	d.log.Info("subscription.sync",
+	d.log.Info("refresh sync done",
+		slog.String("scope", "refresh"),
 		slog.String("id", sub.ID),
 		slog.String("status", meta.Status),
 		slog.String("message", truncate(meta.Message, 80)),
@@ -66,7 +80,11 @@ func (d *Driver) recordMeta(ctx context.Context, id, status, message string) {
 		return
 	}
 	if err := d.subs.UpdateMeta(id, d.now(), status, message, nil); err != nil {
-		d.log.Error("refresh.sync.updateMeta", "id", id, "err", err)
+		d.log.Error("refresh sync: update meta failed",
+			slog.String("scope", "refresh"),
+			slog.String("id", id),
+			slog.String("err", logging.RedactError(err)),
+		)
 	}
 }
 
@@ -89,7 +107,11 @@ func truncate(s string, n int) string {
 func (d *Driver) runSub(ctx context.Context, s subscription.Stored) {
 	defer func() {
 		if r := recover(); r != nil {
-			d.log.Error("refresh.runSub panic", "id", s.ID, "panic", r)
+			d.log.Error("refresh sync panic",
+				slog.String("scope", "refresh"),
+				slog.String("id", s.ID),
+				slog.Any("panic", r),
+			)
 		}
 	}()
 
