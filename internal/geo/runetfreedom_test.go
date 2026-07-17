@@ -109,3 +109,40 @@ func TestResolve_Runetfreedom_CategoryFallback(t *testing.T) {
 		t.Fatalf("fallback bytes = %q", b)
 	}
 }
+
+func TestResolve_Runetfreedom_BestEffort_SkipsMissing(t *testing.T) {
+	zipBytes := buildFixtureZip(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(zipBytes)
+	}))
+	defer srv.Close()
+
+	m := NewManager(t.TempDir(), nil)
+	m.zipURLOverride = srv.URL
+	got, err := m.Resolve(context.Background(), Source{Preset: PresetRunetfreedom},
+		[]string{"geoip-ru", "geosite-category-does-not-exist"})
+	if err != nil {
+		t.Fatalf("best-effort should not error when one tag succeeds: %v", err)
+	}
+	if got["geoip-ru"] == "" {
+		t.Fatal("geoip-ru should have been extracted")
+	}
+	if _, ok := got["geosite-category-does-not-exist"]; ok {
+		t.Fatal("absent tag must be skipped")
+	}
+}
+
+func TestResolve_Runetfreedom_BestEffort_AllMissingErrors(t *testing.T) {
+	zipBytes := buildFixtureZip(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(zipBytes)
+	}))
+	defer srv.Close()
+
+	m := NewManager(t.TempDir(), nil)
+	m.zipURLOverride = srv.URL
+	if _, err := m.Resolve(context.Background(), Source{Preset: PresetRunetfreedom},
+		[]string{"geosite-absent-one", "geosite-absent-two"}); err == nil {
+		t.Fatal("expected error when no tag is in the zip")
+	}
+}

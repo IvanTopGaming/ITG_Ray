@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 )
 
@@ -50,6 +51,7 @@ func (m *Manager) fetchRunetfreedom(ctx context.Context, tags []string, force bo
 	for _, f := range zr.File {
 		index[f.Name] = f
 	}
+	var skipped []string
 	for _, tag := range missing {
 		var f *zip.File
 		for _, n := range sourceNames(tag) {
@@ -59,23 +61,35 @@ func (m *Manager) fetchRunetfreedom(ctx context.Context, tags []string, force bo
 			}
 		}
 		if f == nil {
-			return nil, fmt.Errorf("geo: tag %q not found in runetfreedom source", tag)
+			skipped = append(skipped, tag)
+			slog.Warn("geo: tag not in runetfreedom source", slog.String("scope", "geo"), slog.String("tag", tag))
+			continue
 		}
 		rc, err := f.Open()
 		if err != nil {
-			return nil, fmt.Errorf("geo: open %q in zip: %w", tag, err)
+			skipped = append(skipped, tag)
+			slog.Warn("geo: open tag in zip failed", slog.String("scope", "geo"), slog.String("tag", tag), slog.String("err", err.Error()))
+			continue
 		}
 		var b bytes.Buffer
 		if _, err := b.ReadFrom(rc); err != nil {
 			rc.Close()
-			return nil, fmt.Errorf("geo: read %q from zip: %w", tag, err)
+			skipped = append(skipped, tag)
+			slog.Warn("geo: read tag from zip failed", slog.String("scope", "geo"), slog.String("tag", tag), slog.String("err", err.Error()))
+			continue
 		}
 		rc.Close()
 		p, err := m.writeCache(PresetRunetfreedom, tag, b.Bytes())
 		if err != nil {
-			return nil, fmt.Errorf("geo: cache %q: %w", tag, err)
+			skipped = append(skipped, tag)
+			slog.Warn("geo: tag cache write failed", slog.String("scope", "geo"), slog.String("tag", tag), slog.String("err", err.Error()))
+			continue
 		}
 		out[tag] = p
+		slog.Debug("geo: tag downloaded", slog.String("scope", "geo"), slog.String("tag", tag))
+	}
+	if len(out) == 0 && len(tags) > 0 {
+		return nil, fmt.Errorf("geo: no tags available from runetfreedom (skipped %v)", skipped)
 	}
 	return out, nil
 }

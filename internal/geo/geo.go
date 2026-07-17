@@ -3,6 +3,7 @@ package geo
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -122,17 +123,26 @@ func (m *Manager) fetch(ctx context.Context, src Source, tags []string, force bo
 			return nil, fmt.Errorf("geo: invalid tag %q", tag)
 		}
 	}
+	slog.Info("geo: refresh start", slog.String("scope", "geo"), slog.String("preset", src.Preset), slog.Int("tags", len(tags)))
+	var out map[string]string
+	var err error
 	switch src.Preset {
 	case PresetRunetfreedom:
-		return m.fetchRunetfreedom(ctx, tags, force)
+		out, err = m.fetchRunetfreedom(ctx, tags, force)
 	case PresetSagerNet:
-		return m.fetchDirect(ctx, PresetSagerNet, DefaultSagerNetBase, tags, force)
+		out, err = m.fetchDirect(ctx, PresetSagerNet, DefaultSagerNetBase, tags, force)
 	case PresetCustom:
 		if src.CustomURL == "" {
 			return nil, fmt.Errorf("geo: custom source selected but customURL is empty")
 		}
-		return m.fetchDirect(ctx, PresetCustom, src.CustomURL, tags, force)
+		out, err = m.fetchDirect(ctx, PresetCustom, src.CustomURL, tags, force)
 	default:
-		return m.fetchRunetfreedom(ctx, tags, force)
+		out, err = m.fetchRunetfreedom(ctx, tags, force)
 	}
+	if err != nil {
+		slog.Error("geo: refresh failed", slog.String("scope", "geo"), slog.String("preset", src.Preset), slog.String("err", err.Error()))
+		return nil, err
+	}
+	slog.Info("geo: refresh done", slog.String("scope", "geo"), slog.Int("ok", len(out)), slog.Int("total", len(tags)))
+	return out, nil
 }
