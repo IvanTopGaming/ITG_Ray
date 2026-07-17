@@ -62,6 +62,26 @@ func TestSync_LogsNetworkFailureWithoutURL(t *testing.T) {
 	}
 }
 
+func TestSync_MetaMessageRedactedOnNetworkFailure(t *testing.T) {
+	// meta.Message is persisted to disk (sub LastMessage), published to the
+	// frontend, AND logged to app.log by the refresh scheduler — so the token
+	// must be stripped at the source, not only in Sync's own log line.
+	sub := Subscription{ID: "sub-meta", URL: "http://127.0.0.1:1/sub?token=SECRETTOKEN"}
+	_, meta, err := Sync(context.Background(), sub, nil, 5*time.Second)
+	if err == nil {
+		t.Fatal("expected Sync to fail on connection refused")
+	}
+	if meta.Status != "error" {
+		t.Fatalf("expected error status, got %q", meta.Status)
+	}
+	if strings.Contains(meta.Message, "SECRETTOKEN") {
+		t.Fatalf("token leaked into meta.Message: %q", meta.Message)
+	}
+	if strings.Contains(meta.Message, "/sub?token=") {
+		t.Fatalf("full sub URL/path leaked into meta.Message: %q", meta.Message)
+	}
+}
+
 func TestSync_LogsSuccessCounts(t *testing.T) {
 	buf := logtest.Capture(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

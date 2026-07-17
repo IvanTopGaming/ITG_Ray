@@ -51,7 +51,7 @@ type SyncMeta struct {
 // On success: returns (merged, meta, nil) with meta.Status == "ok" and
 // meta.Message == "imported=N invalid=M skipped=K".
 // On failure: returns (nil, meta, err) — meta is still populated with
-// LastUpdate, Status="error", Message=err.Error(), and Headers if Fetch
+// LastUpdate, Status="error", Message=logging.RedactError(err), and Headers if Fetch
 // succeeded. Callers should always persist meta regardless of err.
 func Sync(ctx context.Context, sub Subscription, existing []server.Server, timeout time.Duration) ([]server.Server, SyncMeta, error) { //nolint:gocritic // sub is a value type; caller convenience outweighs copy cost
 	slog.Info("sub sync start", slog.String("scope", "sub"), slog.String("id", sub.ID))
@@ -69,7 +69,7 @@ func Sync(ctx context.Context, sub Subscription, existing []server.Server, timeo
 	})
 	if err != nil {
 		meta.Status = "error"
-		meta.Message = err.Error()
+		meta.Message = logging.RedactError(err)
 		slog.Error("sub sync failed", slog.String("scope", "sub"), slog.String("id", sub.ID),
 			slog.String("stage", "fetch"), slog.String("err", logging.RedactError(err)))
 		return nil, meta, err
@@ -79,7 +79,7 @@ func Sync(ctx context.Context, sub Subscription, existing []server.Server, timeo
 	parsed, err := Parse(res.Body)
 	if err != nil {
 		meta.Status = "error"
-		meta.Message = err.Error()
+		meta.Message = logging.RedactError(err)
 		slog.Error("sub sync failed", slog.String("scope", "sub"), slog.String("id", sub.ID),
 			slog.String("stage", "parse"), slog.String("err", logging.RedactError(err)))
 		return nil, meta, err
