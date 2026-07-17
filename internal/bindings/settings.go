@@ -1,6 +1,8 @@
 package bindings
 
 import (
+	"log/slog"
+
 	"github.com/itg-team/itg-ray/internal/hub"
 )
 
@@ -46,6 +48,7 @@ func (s *SettingsService) Update(section string, patch map[string]any) (hub.Sett
 	if err != nil {
 		return hub.SettingsView{}, err
 	}
+	slog.Info("settings applied", slog.String("scope", "settings"), slog.String("section", section))
 	if s.d.Hub != nil {
 		s.d.Hub.Publish(hub.Event{
 			Name:    hub.EventSettings,

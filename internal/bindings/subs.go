@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strings"
 	"time"
@@ -116,8 +117,13 @@ func (s *SubsService) Add(rawURL, name, userAgent string) (hub.SubView, error) {
 		return hub.SubView{}, fmt.Errorf("sub.Save: %w", err)
 	}
 	view := toSubViews([]subscription.Stored{stored}, nil)[0]
+	slog.Info("sub added", slog.String("scope", "subs"),
+		slog.String("id", stored.ID), slog.String("name", stored.Name))
 	go func(id string) {
-		_ = s.SyncOne(id)
+		if err := s.SyncOne(id); err != nil {
+			slog.Warn("sub add initial sync failed", slog.String("scope", "subs"),
+				slog.String("id", id), slog.String("err", err.Error()))
+		}
 	}(stored.ID)
 	return view, nil
 }
@@ -141,6 +147,7 @@ func (s *SubsService) Remove(id string) error {
 	if err := s.d.SubStore.Save(out); err != nil {
 		return fmt.Errorf("sub.Save: %w", err)
 	}
+	slog.Info("sub removed", slog.String("scope", "subs"), slog.String("id", id))
 
 	// Cascade: drop the servers this subscription imported so they don't
 	// linger as orphans (mislabeled "manual", undeletable). Mirrors Edit's
@@ -159,8 +166,14 @@ func (s *SubsService) Remove(id string) error {
 		if removed {
 			if serr := s.d.ServerStore.Save(kept); serr == nil {
 				s.d.Hub.Publish(hub.Event{Name: hub.EventServersChanged})
+			} else {
+				slog.Warn("sub remove cascade save failed", slog.String("scope", "subs"),
+					slog.String("id", id), slog.String("err", serr.Error()))
 			}
 		}
+	} else {
+		slog.Warn("sub remove cascade load failed", slog.String("scope", "subs"),
+			slog.String("id", id), slog.String("err", lerr.Error()))
 	}
 	return nil
 }
@@ -234,6 +247,7 @@ func (s *SubsService) Edit(id, rawURL, name, userAgent string) (hub.SubView, err
 	if err != nil {
 		return hub.SubView{}, fmt.Errorf("server.Load: %w", err)
 	}
+	slog.Info("sub edited", slog.String("scope", "subs"), slog.String("id", id))
 	return toSubViews([]subscription.Stored{subs[idx]}, serverCountBySource(servers))[0], nil
 }
 
@@ -321,7 +335,10 @@ func (s *SubsService) SyncOne(id string) error {
 	if syncOK {
 		ui = meta.Headers.Userinfo
 	}
-	_ = s.d.SubStore.UpdateMeta(id, time.Now(), status, truncate(msg, 120), ui)
+	if err := s.d.SubStore.UpdateMeta(id, time.Now(), status, truncate(msg, 120), ui); err != nil {
+		slog.Warn("sub meta update failed", slog.String("scope", "subs"),
+			slog.String("id", id), slog.String("err", err.Error()))
+	}
 
 	s.d.Hub.Publish(hub.Event{
 		Name: hub.EventSubSynced,
@@ -346,9 +363,18 @@ func (s *SubsService) SyncAll() error {
 	if err != nil {
 		return fmt.Errorf("sub.Load: %w", err)
 	}
+	var ok, failed int
 	for _, sub := range subs {
-		_ = s.SyncOne(sub.ID)
+		if err := s.SyncOne(sub.ID); err != nil {
+			failed++
+			slog.Warn("sub sync skipped", slog.String("scope", "subs"),
+				slog.String("id", sub.ID), slog.String("err", err.Error()))
+			continue
+		}
+		ok++
 	}
+	slog.Info("subs sync complete", slog.String("scope", "subs"),
+		slog.Int("ok", ok), slog.Int("failed", failed))
 	return nil
 }
 
