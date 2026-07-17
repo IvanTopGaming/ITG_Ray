@@ -179,21 +179,14 @@ export function Settings() {
   };
 
   const geo = useGeoProgress();
-  const [geoRefreshing, setGeoRefreshing] = useState(false);
-  const [geoResult, setGeoResult] = useState<'ok' | 'error' | null>(null);
   const updateGeoDatabases = async () => {
-    setGeoRefreshing(true);
-    setGeoResult(null);
+    if (geo.refreshing) return;
     geoBegin();
     try {
       await GeoRefresh();
-      setGeoResult('ok');
+      geoEnd('ok');
     } catch {
-      setGeoResult('error');
-    } finally {
-      geoEnd();
-      setGeoRefreshing(false);
-      setTimeout(() => setGeoResult(null), 2000);
+      geoEnd('error');
     }
   };
   const geoPercent = geo.total > 0 ? Math.round((geo.done / geo.total) * 100) : 0;
@@ -396,16 +389,16 @@ export function Settings() {
           <button
             type="button"
             onClick={updateGeoDatabases}
-            disabled={geoRefreshing}
+            disabled={geo.refreshing}
             className="px-3.5 py-1.5 text-xs font-semibold rounded-[10px] bg-gradient-to-b from-accent-start to-accent-mid text-white disabled:opacity-60"
           >
-            {geoRefreshing
+            {geo.refreshing
               ? (geo.total > 0
                   ? t('settings.connection.geoUpdatingPct', { pct: geoPercent })
                   : t('settings.connection.geoUpdating'))
-              : geoResult === 'ok'
+              : geo.result === 'ok'
                 ? t('settings.connection.geoUpdated')
-                : geoResult === 'error'
+                : geo.result === 'error'
                   ? t('settings.connection.geoUpdateFailed')
                   : t('settings.connection.geoUpdate')}
           </button>
