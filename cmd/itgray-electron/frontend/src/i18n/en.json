@@ -361,7 +361,9 @@
       "geoDatabasesHint": "Download/refresh the .srs files for the current source.",
       "geoUpdate": "Update databases",
       "geoUpdating": "Loading…",
-      "geoUpdatingPct": "Loading… {{pct}}%"
+      "geoUpdatingPct": "Loading… {{pct}}%",
+      "geoUpdated": "Databases updated",
+      "geoUpdateFailed": "Update failed"
     },
     "killSwitch": {
       "title": "Kill switch",

@@ -362,7 +362,9 @@
       "geoDatabasesHint": "Скачать/обновить .srs для текущего источника.",
       "geoUpdate": "Обновить базы",
       "geoUpdating": "Загрузка…",
-      "geoUpdatingPct": "Загрузка… {{pct}}%"
+      "geoUpdatingPct": "Загрузка… {{pct}}%",
+      "geoUpdated": "Базы обновлены",
+      "geoUpdateFailed": "Ошибка обновления"
     },
     "killSwitch": {
       "title": "Аварийное отключение",

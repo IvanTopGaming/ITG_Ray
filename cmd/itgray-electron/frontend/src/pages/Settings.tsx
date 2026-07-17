@@ -180,14 +180,20 @@ export function Settings() {
 
   const geo = useGeoProgress();
   const [geoRefreshing, setGeoRefreshing] = useState(false);
+  const [geoResult, setGeoResult] = useState<'ok' | 'error' | null>(null);
   const updateGeoDatabases = async () => {
     setGeoRefreshing(true);
+    setGeoResult(null);
     geoBegin();
     try {
       await GeoRefresh();
+      setGeoResult('ok');
+    } catch {
+      setGeoResult('error');
     } finally {
       geoEnd();
       setGeoRefreshing(false);
+      setTimeout(() => setGeoResult(null), 2000);
     }
   };
   const geoPercent = geo.total > 0 ? Math.round((geo.done / geo.total) * 100) : 0;
@@ -397,7 +403,11 @@ export function Settings() {
               ? (geo.total > 0
                   ? t('settings.connection.geoUpdatingPct', { pct: geoPercent })
                   : t('settings.connection.geoUpdating'))
-              : t('settings.connection.geoUpdate')}
+              : geoResult === 'ok'
+                ? t('settings.connection.geoUpdated')
+                : geoResult === 'error'
+                  ? t('settings.connection.geoUpdateFailed')
+                  : t('settings.connection.geoUpdate')}
           </button>
         </SettingRow>
           <div className="mt-2">
