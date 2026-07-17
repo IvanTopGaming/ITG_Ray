@@ -3,6 +3,7 @@ package subscription
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/itg-team/itg-ray/internal/server"
@@ -52,6 +53,8 @@ type SyncMeta struct {
 // LastUpdate, Status="error", Message=err.Error(), and Headers if Fetch
 // succeeded. Callers should always persist meta regardless of err.
 func Sync(ctx context.Context, sub Subscription, existing []server.Server, timeout time.Duration) ([]server.Server, SyncMeta, error) { //nolint:gocritic // sub is a value type; caller convenience outweighs copy cost
+	slog.Info("sub sync start", slog.String("scope", "sub"), slog.String("id", sub.ID))
+
 	meta := SyncMeta{LastUpdate: time.Now()}
 	res, err := Fetch(ctx, FetchOptions{
 		URL:         sub.URL,
@@ -66,6 +69,8 @@ func Sync(ctx context.Context, sub Subscription, existing []server.Server, timeo
 	if err != nil {
 		meta.Status = "error"
 		meta.Message = err.Error()
+		slog.Error("sub sync failed", slog.String("scope", "sub"), slog.String("id", sub.ID),
+			slog.String("stage", "fetch"), slog.String("err", err.Error()))
 		return nil, meta, err
 	}
 	meta.Headers = res.Headers
@@ -74,6 +79,8 @@ func Sync(ctx context.Context, sub Subscription, existing []server.Server, timeo
 	if err != nil {
 		meta.Status = "error"
 		meta.Message = err.Error()
+		slog.Error("sub sync failed", slog.String("scope", "sub"), slog.String("id", sub.ID),
+			slog.String("stage", "parse"), slog.String("err", err.Error()))
 		return nil, meta, err
 	}
 
@@ -85,6 +92,8 @@ func Sync(ctx context.Context, sub Subscription, existing []server.Server, timeo
 
 	meta.Status = "ok"
 	meta.Message = fmt.Sprintf("imported=%d invalid=%d skipped=%d", len(parsed.Configs), parsed.Invalid, sumSkipped(parsed.Skipped))
+	slog.Info("sub synced", slog.String("scope", "sub"), slog.String("id", sub.ID),
+		slog.Int("servers", len(merged)), slog.Int("skipped", sumSkipped(parsed.Skipped)))
 	return merged, meta, nil
 }
 

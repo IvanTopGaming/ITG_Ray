@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -95,13 +96,16 @@ type subsFileEnvelope struct {
 func (s FileStore) Load() ([]Stored, error) {
 	b, err := os.ReadFile(s.Path) //nolint:gosec // path is application-controlled
 	if errors.Is(err, fs.ErrNotExist) {
+		slog.Debug("sub store empty", slog.String("scope", "sub"), slog.String("path", s.Path))
 		return nil, nil
 	}
 	if err != nil {
+		slog.Error("sub store read failed", slog.String("scope", "sub"), slog.String("path", s.Path), slog.String("err", err.Error()))
 		return nil, fmt.Errorf("read %s: %w", s.Path, err)
 	}
 	var env subsFileEnvelope
 	if err := json.Unmarshal(b, &env); err != nil {
+		slog.Error("sub store parse failed", slog.String("scope", "sub"), slog.String("path", s.Path), slog.String("err", err.Error()))
 		return nil, fmt.Errorf("unmarshal %s: %w", s.Path, err)
 	}
 	return env.Subs, nil
@@ -114,9 +118,14 @@ func (s FileStore) Save(subs []Stored) error {
 	}
 	b, err := json.MarshalIndent(subsFileEnvelope{Subs: subs}, "", "  ")
 	if err != nil {
+		slog.Error("sub store save failed", slog.String("scope", "sub"), slog.String("path", s.Path), slog.String("err", err.Error()))
 		return fmt.Errorf("marshal: %w", err)
 	}
-	return config.WriteAtomic(s.Path, b, 0o600)
+	if err := config.WriteAtomic(s.Path, b, 0o600); err != nil {
+		slog.Error("sub store save failed", slog.String("scope", "sub"), slog.String("path", s.Path), slog.String("err", err.Error()))
+		return err
+	}
+	return nil
 }
 
 // UpdateMeta updates the metadata for one subscription. status is the clean
