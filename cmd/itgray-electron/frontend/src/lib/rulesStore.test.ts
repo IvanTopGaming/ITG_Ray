@@ -6,12 +6,18 @@ const {
   addGroupMock,
   getDashStateMock,
   setCurrentRulesSignatureMock,
+  importPreviewMock,
+  importApplyMock,
+  exportGroupMock,
 } = vi.hoisted(() => ({
   eventHandlers: {} as Record<string, (...args: any[]) => void>,
   listMock: vi.fn(),
   addGroupMock: vi.fn(),
   getDashStateMock: vi.fn(),
   setCurrentRulesSignatureMock: vi.fn(),
+  importPreviewMock: vi.fn(),
+  importApplyMock: vi.fn(),
+  exportGroupMock: vi.fn(),
 }));
 
 vi.mock("@/lib/itg/runtime", () => ({
@@ -34,6 +40,9 @@ vi.mock("@/lib/itg/RulesService", () => ({
   RuleRemove: vi.fn(),
   RuleToggle: vi.fn(),
   RuleMove: vi.fn(),
+  ImportPreview: (params: { link: string }) => importPreviewMock(params),
+  ImportApply: (params: { link: string }) => importApplyMock(params),
+  ExportGroup: (params: { groupId: string }) => exportGroupMock(params),
 }));
 
 vi.mock("@/lib/dashStore", () => ({
@@ -49,6 +58,9 @@ import {
   __resetRulesForTest,
   getRulesState,
   rulesAddGroup,
+  rulesExportGroup,
+  rulesImportApply,
+  rulesImportPreview,
   rulesSignature,
 } from "./rulesStore";
 
@@ -58,6 +70,9 @@ beforeEach(() => {
   addGroupMock.mockReset();
   getDashStateMock.mockReset();
   setCurrentRulesSignatureMock.mockReset();
+  importPreviewMock.mockReset();
+  importApplyMock.mockReset();
+  exportGroupMock.mockReset();
   // Default: chain is idle so mutations do NOT arm the toast unless a
   // test opts in by overriding the dash status.
   getDashStateMock.mockReturnValue({ status: "idle" });
@@ -124,5 +139,52 @@ describe("rulesStore", () => {
     expect(setCurrentRulesSignatureMock).toHaveBeenCalledWith(
       rulesSignature(getRulesState()),
     );
+  });
+});
+
+describe("rules import/export", () => {
+  it("rulesImportPreview returns the backend preview without mutating", async () => {
+    const preview = {
+      name: "Streaming",
+      groups: [{ id: "g1", name: "S", locked: false, enabled: true, rules: [] }],
+      proxyCount: 3,
+      directCount: 1,
+      blockCount: 0,
+    };
+    importPreviewMock.mockResolvedValue(preview);
+    const got = await rulesImportPreview("itgray://rules/import/abc");
+    expect(importPreviewMock).toHaveBeenCalledWith({ link: "itgray://rules/import/abc" });
+    expect(got).toEqual(preview);
+    expect(listMock).not.toHaveBeenCalled();
+  });
+
+  it("rulesImportApply calls RulesService.ImportApply and refetches", async () => {
+    listMock.mockResolvedValue(baseView);
+    await __bootRulesForTest();
+    importApplyMock.mockResolvedValue(null);
+    listMock.mockResolvedValue(baseView);
+    await rulesImportApply("itgray://rules/import/abc");
+    expect(importApplyMock).toHaveBeenCalledWith({ link: "itgray://rules/import/abc" });
+    expect(listMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("rulesImportApply republishes the canonical rules signature", async () => {
+    listMock.mockResolvedValue(baseView);
+    await __bootRulesForTest();
+    importApplyMock.mockResolvedValue(null);
+    listMock.mockResolvedValue(baseView);
+    setCurrentRulesSignatureMock.mockReset();
+    await rulesImportApply("itgray://rules/import/abc");
+    expect(setCurrentRulesSignatureMock).toHaveBeenCalledTimes(1);
+    expect(setCurrentRulesSignatureMock).toHaveBeenCalledWith(
+      rulesSignature(getRulesState()),
+    );
+  });
+
+  it("rulesExportGroup returns the link string", async () => {
+    exportGroupMock.mockResolvedValue({ link: "itgray://rules/import/xyz" });
+    const link = await rulesExportGroup("g1");
+    expect(exportGroupMock).toHaveBeenCalledWith({ groupId: "g1" });
+    expect(link).toBe("itgray://rules/import/xyz");
   });
 });

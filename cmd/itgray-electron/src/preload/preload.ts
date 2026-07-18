@@ -94,6 +94,9 @@ contextBridge.exposeInMainWorld("itg", {
     ruleToggle: (params: { id: string }) => rpc("rules.ruleToggle", params),
     ruleMove: (params: { id: string; toGroupId: string }) =>
       rpc("rules.ruleMove", params),
+    importPreview: (params: { link: string }) => rpc("rules.importPreview", params),
+    importApply: (params: { link: string }) => rpc("rules.importApply", params),
+    exportGroup: (params: { groupId: string }) => rpc("rules.exportGroup", params),
   },
   window: {
     minimise: () => ipcRenderer.invoke("window.minimise"),

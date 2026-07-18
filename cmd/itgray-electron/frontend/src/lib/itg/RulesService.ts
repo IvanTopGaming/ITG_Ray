@@ -47,3 +47,15 @@ export function RuleToggle(params: { id: string }): Promise<unknown> {
 export function RuleMove(params: { id: string; toGroupId: string }): Promise<unknown> {
   return svc().ruleMove?.(params) ?? Promise.resolve(null);
 }
+
+export function ImportPreview(params: { link: string }): Promise<unknown> {
+  return svc().importPreview?.(params) ?? Promise.resolve(null);
+}
+
+export function ImportApply(params: { link: string }): Promise<unknown> {
+  return svc().importApply?.(params) ?? Promise.resolve(null);
+}
+
+export function ExportGroup(params: { groupId: string }): Promise<{ link: string }> {
+  return (svc().exportGroup?.(params) as Promise<{ link: string }>) ?? Promise.resolve({ link: "" });
+}

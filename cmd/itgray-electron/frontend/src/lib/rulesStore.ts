@@ -238,6 +238,28 @@ export function rulesReplaceAll(model: {
   });
 }
 
+export type ImportPreview = {
+  name: string;
+  groups: GroupView[];
+  proxyCount: number;
+  directCount: number;
+  blockCount: number;
+};
+
+export function rulesImportPreview(link: string): Promise<ImportPreview> {
+  return RulesService.ImportPreview({ link }) as Promise<ImportPreview>;
+}
+
+export function rulesImportApply(link: string): Promise<void> {
+  return applyMutation(async () => {
+    await RulesService.ImportApply({ link });
+  });
+}
+
+export function rulesExportGroup(groupId: string): Promise<string> {
+  return RulesService.ExportGroup({ groupId }).then((r) => r.link);
+}
+
 // Test-only helpers.
 export function __resetRulesForTest(): void {
   state = initialState();
