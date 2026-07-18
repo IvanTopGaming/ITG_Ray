@@ -9,11 +9,21 @@ import { loadState, attachStatePersister } from "./window-state";
 import { defaultAutostart } from "./autostart";
 import { makeNotifier } from "./notifications";
 import { resolveStartMinimized, type StartupSnapshot } from "./startup";
+import { extractDeeplink } from "./deeplink";
 
 let mainWindow: BrowserWindow | null = null;
 let supervisor: BridgeSupervisor | null = null;
 let tray: ReturnType<typeof createTray> | null = null;
 let quitting = false;
+let pendingDeeplink: string | null = null;
+
+function deliverDeeplink(url: string): void {
+  pendingDeeplink = url;
+  if (mainWindow && !mainWindow.webContents.isLoading()) {
+    mainWindow.webContents.send("event:deeplink", url);
+    pendingDeeplink = null;
+  }
+}
 
 app.setName("ITG Ray");
 // Windows: attribute OS notifications to the installed app (the NSIS
@@ -22,6 +32,8 @@ app.setName("ITG Ray");
 // "ITG Ray". No-op on other platforms.
 app.setAppUserModelId("com.itgray.app");
 app.setPath("userData", path.join(app.getPath("appData"), "ITG Ray"));
+app.setAsDefaultProtocolClient("itgray");
+pendingDeeplink = extractDeeplink(process.argv);
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -29,7 +41,7 @@ if (!gotLock) {
   // primary instance's "second-instance" handler can refocus its window.
   app.quit();
 } else {
-  app.on("second-instance", () => {
+  app.on("second-instance", (_event, argv) => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       // The window may be hidden (start-minimized launch builds it with
@@ -38,6 +50,8 @@ if (!gotLock) {
       mainWindow.show();
       mainWindow.focus();
     }
+    const url = extractDeeplink(argv);
+    if (url) deliverDeeplink(url);
   });
 }
 
@@ -70,6 +84,13 @@ async function createWindow(): Promise<void> {
   } else {
     mainWindow.loadFile(path.join(__dirname, "..", "..", "dist-frontend", "index.html"));
   }
+
+  mainWindow.webContents.on("did-finish-load", () => {
+    if (pendingDeeplink && mainWindow) {
+      mainWindow.webContents.send("event:deeplink", pendingDeeplink);
+      pendingDeeplink = null;
+    }
+  });
 
   mainWindow.on("closed", () => {
     mainWindow = null;

@@ -45,6 +45,12 @@
     "appId": "com.itgray.app",
     "productName": "ITG Ray",
     "copyright": "Copyright © 2026 ITG Ray Team",
+    "protocols": [
+      {
+        "name": "ITG Ray",
+        "schemes": ["itgray"]
+      }
+    ],
     "directories": {
       "output": "dist-installer",
       "buildResources": "resources"
