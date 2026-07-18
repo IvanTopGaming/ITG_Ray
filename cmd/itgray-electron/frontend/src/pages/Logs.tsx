@@ -17,6 +17,8 @@ const LEVELS: LogLevel[] = ["DEBUG", "INFO", "WARN", "ERROR"];
 
 const SOURCES_STORAGE_KEY = "itg.logs.sources";
 
+const MAX_RENDER = 800;
+
 function loadSources(): Set<string> {
   try {
     const raw = localStorage.getItem(SOURCES_STORAGE_KEY);
@@ -71,6 +73,12 @@ export function Logs() {
     () => filterLogs(all, { sources, minLevel, search }),
     [all, sources, minLevel, search],
   );
+
+  const visible = useMemo(
+    () => (rows.length > MAX_RENDER ? rows.slice(rows.length - MAX_RENDER) : rows),
+    [rows],
+  );
+  const hiddenCount = rows.length - visible.length;
 
   useEffect(() => {
     if (pinned && scrollRef.current)
@@ -183,7 +191,12 @@ export function Logs() {
           {rows.length === 0 && (
             <div className="p-4 text-white/40">{t("logs.empty")}</div>
           )}
-          {rows.map((r) => (
+          {hiddenCount > 0 && (
+            <div className="px-2 py-1 text-[11px] text-white/35">
+              {t("logs.olderHidden", { count: hiddenCount })}
+            </div>
+          )}
+          {visible.map((r) => (
             <div
               key={r.seq}
               className={`px-2 ${r.level === "ERROR" ? "bg-danger/10" : r.level === "WARN" ? "bg-warn/[0.08]" : ""}`}
