@@ -169,6 +169,9 @@ type RulesService interface {
 	RuleRemove(p RulesRuleRemoveParams) (Empty, error)
 	RuleToggle(p RulesRuleToggleParams) (Empty, error)
 	RuleMove(p RulesRuleMoveParams) (Empty, error)
+	ImportPreview(p RulesImportPreviewParams) (hub.ImportPreview, error)
+	ImportApply(p RulesImportApplyParams) (Empty, error)
+	ExportGroup(p RulesExportGroupParams) (RulesExportGroupResult, error)
 }
 
 type RulesReplaceAllParams struct {
@@ -217,6 +220,22 @@ type RulesRuleToggleParams struct {
 type RulesRuleMoveParams struct {
 	ID        string `json:"id"`
 	ToGroupID string `json:"toGroupId"`
+}
+
+type RulesImportPreviewParams struct {
+	Link string `json:"link"`
+}
+
+type RulesImportApplyParams struct {
+	Link string `json:"link"`
+}
+
+type RulesExportGroupParams struct {
+	GroupID string `json:"groupId"`
+}
+
+type RulesExportGroupResult struct {
+	Link string `json:"link"`
 }
 
 // GeoService — methods under "geo." namespace.

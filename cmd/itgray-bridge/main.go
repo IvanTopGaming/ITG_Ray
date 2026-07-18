@@ -342,6 +342,9 @@ func main() {
 	d.Register("rules.ruleRemove", rulesH.RuleRemove)
 	d.Register("rules.ruleToggle", rulesH.RuleToggle)
 	d.Register("rules.ruleMove", rulesH.RuleMove)
+	d.Register("rules.importPreview", rulesH.ImportPreview)
+	d.Register("rules.importApply", rulesH.ImportApply)
+	d.Register("rules.exportGroup", rulesH.ExportGroup)
 
 	run := handlers.RunHandlers{Svc: runSvc}
 	d.Register("run.connect", run.Connect)

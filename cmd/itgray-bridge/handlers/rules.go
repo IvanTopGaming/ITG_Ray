@@ -24,6 +24,9 @@ type Rules interface {
 	RuleRemove(id string) error
 	RuleToggle(id string) error
 	RuleMove(id, toGroupID string) error
+	ImportPreview(link string) (hub.ImportPreview, error)
+	ImportApply(link string) error
+	ExportGroup(groupID string) (string, error)
 }
 
 // RulesHandlers groups methods under the "rules." namespace. Method
@@ -76,6 +79,18 @@ type rulesRuleToggleParams struct {
 type rulesRuleMoveParams struct {
 	ID        string `json:"id"`
 	ToGroupID string `json:"toGroupId"`
+}
+
+type rulesImportPreviewParams struct {
+	Link string `json:"link"`
+}
+
+type rulesImportApplyParams struct {
+	Link string `json:"link"`
+}
+
+type rulesExportGroupParams struct {
+	GroupID string `json:"groupId"`
 }
 
 // emptyResult is a stable success-with-no-payload shape — a JSON
@@ -201,4 +216,35 @@ func (h RulesHandlers) RuleMove(_ context.Context, params json.RawMessage) (any,
 		return nil, err
 	}
 	return emptyResult{}, nil
+}
+
+func (h RulesHandlers) ImportPreview(_ context.Context, params json.RawMessage) (any, error) {
+	var p rulesImportPreviewParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, err
+	}
+	return h.Svc.ImportPreview(p.Link)
+}
+
+func (h RulesHandlers) ImportApply(_ context.Context, params json.RawMessage) (any, error) {
+	var p rulesImportApplyParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, err
+	}
+	if err := h.Svc.ImportApply(p.Link); err != nil {
+		return nil, err
+	}
+	return emptyResult{}, nil
+}
+
+func (h RulesHandlers) ExportGroup(_ context.Context, params json.RawMessage) (any, error) {
+	var p rulesExportGroupParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, err
+	}
+	link, err := h.Svc.ExportGroup(p.GroupID)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]string{"link": link}, nil
 }

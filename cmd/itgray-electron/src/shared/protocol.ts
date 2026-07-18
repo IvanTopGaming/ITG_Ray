@@ -63,6 +63,14 @@ export interface HelperStatusResult {
   state: string;
 }
 
+export interface ImportPreview {
+  name: string;
+  groups: GroupView[];
+  proxyCount: number;
+  directCount: number;
+  blockCount: number;
+}
+
 export interface KillSwitchSettings {
   enabled: boolean;
   alwaysOn: boolean;
@@ -146,6 +154,14 @@ export interface RuleView {
   conditions: Conditions;
 }
 
+export interface RulesExportGroupParams {
+  groupId: string;
+}
+
+export interface RulesExportGroupResult {
+  link: string;
+}
+
 export interface RulesGroupAddParams {
   name: string;
 }
@@ -162,6 +178,14 @@ export interface RulesGroupEditParams {
 
 export interface RulesGroupRemoveParams {
   id: string;
+}
+
+export interface RulesImportApplyParams {
+  link: string;
+}
+
+export interface RulesImportPreviewParams {
+  link: string;
 }
 
 export interface RulesReplaceAllParams {
@@ -361,9 +385,12 @@ export interface RpcMethods {
   "onboarding.complete": { params: Empty; result: Empty };
   "onboarding.getState": { params: Empty; result: OnboardingStateResult };
   "onboarding.skip": { params: Empty; result: Empty };
+  "rules.exportGroup": { params: RulesExportGroupParams; result: RulesExportGroupResult };
   "rules.groupAdd": { params: RulesGroupAddParams; result: RulesGroupAddResult };
   "rules.groupEdit": { params: RulesGroupEditParams; result: Empty };
   "rules.groupRemove": { params: RulesGroupRemoveParams; result: Empty };
+  "rules.importApply": { params: RulesImportApplyParams; result: Empty };
+  "rules.importPreview": { params: RulesImportPreviewParams; result: ImportPreview };
   "rules.list": { params: Empty; result: RulesView };
   "rules.replaceAll": { params: RulesReplaceAllParams; result: Empty };
   "rules.ruleAdd": { params: RulesRuleAddParams; result: RulesRuleAddResult };
