@@ -63,6 +63,16 @@ func asStopper(c *supervisor.Child) coreStopper {
 	return c
 }
 
+// stopChildBestEffort runs c.Stop(grace), overridable in tests. It backs
+// the StartChain rollback path's core teardown so a Stop failure can be
+// observed without a real spawned process.
+var stopChildBestEffort = func(c *supervisor.Child, grace time.Duration) error {
+	if c == nil {
+		return nil
+	}
+	return c.Stop(grace)
+}
+
 // chainState tracks the active session inside the daemon process. On Linux
 // it is deliberately thinner than the Windows twin: no route snapshot, no
 // peer-route, no DNS/NRPT restore state — sing-box's auto_route creates the
@@ -160,10 +170,16 @@ func NewStartChainHandler() Handler {
 		var doneSingbox, doneXray bool
 		rollback := func() {
 			if doneXray && state.xray != nil {
-				_ = state.xray.Stop(2 * time.Second)
+				if err := stopChildBestEffort(state.xray, 2*time.Second); err != nil {
+					slog.Warn("chain teardown: xray stop failed", slog.String("scope", "helper"),
+						slog.String("session", state.sessionID), slog.String("err", logging.RedactError(err)))
+				}
 			}
 			if doneSingbox && state.singbox != nil {
-				_ = state.singbox.Stop(2 * time.Second)
+				if err := stopChildBestEffort(state.singbox, 2*time.Second); err != nil {
+					slog.Warn("chain teardown: singbox stop failed", slog.String("scope", "helper"),
+						slog.String("session", state.sessionID), slog.String("err", logging.RedactError(err)))
+				}
 			}
 		}
 

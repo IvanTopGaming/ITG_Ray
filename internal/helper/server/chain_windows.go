@@ -194,10 +194,18 @@ func NewStartChainHandler() Handler {
 				_ = state.singbox.Stop(2 * time.Second)
 			}
 			if doneNrpt && state.nrptName != "" {
-				_ = dns.RemoveNrptRule(state.nrptName)
+				if err := dns.RemoveNrptRule(state.nrptName); err != nil {
+					slog.Warn("chain teardown: remove nrpt rule failed", slog.String("scope", "helper"),
+						slog.String("session", state.sessionID), slog.String("rule", state.nrptName),
+						slog.String("err", logging.RedactError(err)))
+				}
 			}
 			if doneDnsSnap && state.dnsPrior != nil {
-				_ = dns.Restore(*state.dnsPrior)
+				if err := dns.Restore(*state.dnsPrior); err != nil {
+					slog.Warn("chain teardown: dns restore failed", slog.String("scope", "helper"),
+						slog.String("session", state.sessionID), slog.String("interface", state.dnsPrior.InterfaceAlias),
+						slog.String("err", logging.RedactError(err)))
+				}
 			}
 			if donePeerRoute {
 				_ = route.Remove(state.peerRoute)
@@ -641,7 +649,11 @@ func stopActiveChainLocked() []string {
 		have := indexRouteEntries(current)
 		for k, e := range want {
 			if _, ok := have[k]; !ok {
-				_ = route.Add(e)
+				if err := route.Add(e); err != nil {
+					slog.Warn("chain teardown: route restore failed", slog.String("scope", "helper"),
+						slog.String("session", s.sessionID), slog.String("dest", e.DestCIDR),
+						slog.String("err", logging.RedactError(err)))
+				}
 			}
 		}
 	} else {

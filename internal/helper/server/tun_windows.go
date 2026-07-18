@@ -6,9 +6,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"sync"
 
 	"github.com/itg-team/itg-ray/internal/helper/wintun"
+	"github.com/itg-team/itg-ray/internal/logging"
 )
 
 // TunCreateArgs is the JSON payload of OpTunCreate.
@@ -41,6 +43,7 @@ func NewTunCreateHandler() Handler {
 		if a.Name == "" {
 			return nil, fmt.Errorf("name is required")
 		}
+		slog.Info("tun create", slog.String("scope", "helper"), slog.String("name", a.Name))
 		tunMu.Lock()
 		defer tunMu.Unlock()
 		if _, exists := tunAdapters[a.Name]; exists {
@@ -48,6 +51,8 @@ func NewTunCreateHandler() Handler {
 		}
 		ad, err := wintun.Create(a.Name)
 		if err != nil {
+			slog.Error("tun create failed", slog.String("scope", "helper"),
+				slog.String("name", a.Name), slog.String("err", logging.RedactError(err)))
 			return nil, err
 		}
 		tunAdapters[a.Name] = ad
@@ -62,6 +67,7 @@ func NewTunDestroyHandler() Handler {
 		if err := json.Unmarshal(args, &a); err != nil {
 			return nil, fmt.Errorf("decode args: %w", err)
 		}
+		slog.Info("tun destroy", slog.String("scope", "helper"), slog.String("name", a.Name))
 		tunMu.Lock()
 		defer tunMu.Unlock()
 		ad, ok := tunAdapters[a.Name]
@@ -69,6 +75,8 @@ func NewTunDestroyHandler() Handler {
 			return nil, fmt.Errorf("adapter %q not found", a.Name)
 		}
 		if err := ad.Close(); err != nil {
+			slog.Error("tun destroy failed", slog.String("scope", "helper"),
+				slog.String("name", a.Name), slog.String("err", logging.RedactError(err)))
 			return nil, err
 		}
 		delete(tunAdapters, a.Name)
