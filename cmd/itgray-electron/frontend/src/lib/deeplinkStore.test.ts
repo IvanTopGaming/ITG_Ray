@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   consumePendingImportLink,
   setPendingImportLink,
@@ -6,6 +6,10 @@ import {
 } from "./deeplinkStore";
 
 describe("deeplinkStore", () => {
+  beforeEach(() => {
+    consumePendingImportLink();
+  });
+
   it("consumePendingImportLink returns the link then null on second consume", () => {
     setPendingImportLink("itgray://rules/import/abc");
     expect(consumePendingImportLink()).toBe("itgray://rules/import/abc");

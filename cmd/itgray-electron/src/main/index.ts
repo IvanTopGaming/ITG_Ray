@@ -1,5 +1,5 @@
 // cmd/itgray-electron/src/main/index.ts
-import { app, BrowserWindow, Notification } from "electron";
+import { app, BrowserWindow, Notification, ipcMain } from "electron";
 import path from "node:path";
 import { BridgeSupervisor } from "./bridge";
 import { wireIPC } from "./ipc";
@@ -114,6 +114,12 @@ app.whenReady().then(async () => {
     },
   );
   wireIPC(supervisor, () => mainWindow, (s) => tray?.setStatus(s));
+
+  ipcMain.handle("deeplink.getPending", () => {
+    const url = pendingDeeplink;
+    pendingDeeplink = null;
+    return url ?? null;
+  });
 
   // OS notifications on connect / disconnect / sub-synced. Prefs are read
   // fresh per event via the bridge snapshot; sound maps to !silent.

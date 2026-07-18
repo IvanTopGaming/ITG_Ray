@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld("itg", {
     quit: () => ipcRenderer.invoke("app.quit"),
     getAutostart: () => ipcRenderer.invoke("app.getAutostart") as Promise<boolean>,
     setAutostart: (enabled: boolean) => ipcRenderer.invoke("app.setAutostart", enabled) as Promise<boolean>,
+    getPendingDeeplink: () => ipcRenderer.invoke("deeplink.getPending") as Promise<string | null>,
   },
   onboarding: {
     getState: () => rpc("onboarding.getState"),

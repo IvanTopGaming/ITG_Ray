@@ -38,6 +38,15 @@ export function AppShell() {
     return off;
   }, [navigate]);
 
+  useEffect(() => {
+    void window.itg.app.getPendingDeeplink().then((url) => {
+      if (typeof url === "string" && url.startsWith("itgray://rules/import/")) {
+        setPendingImportLink(url);
+        navigate("/routing");
+      }
+    });
+  }, [navigate]);
+
   const handleReconnect = async () => {
     const snap = getConnectSnapshot();
     const serverId =
