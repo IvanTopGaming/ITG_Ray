@@ -527,6 +527,8 @@
     "importPreviewBtn": "Показать",
     "importApplyBtn": "Импортировать",
     "importUnnamed": "Без названия",
+    "importUnnamedRule": "Без названия",
+    "importGroupEmpty": "Нет правил",
     "importCounts": "{{proxy}} прокси / {{direct}} напрямую / {{block}} блок",
     "importWarning": "Часть трафика пойдёт мимо VPN (напрямую) или будет заблокирована.",
     "importErrorMalformed": "Ссылка выглядит повреждённой или неподдерживаемой.",

@@ -4,8 +4,16 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { AlertTriangle, X } from "lucide-react";
 import { rulesImportPreview, rulesImportApply, type ImportPreview } from "@/lib/rulesStore";
+import { summarise } from "@/lib/ruleSummary";
+import { cn } from "@/lib/cn";
 
 const SNAP_EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+
+function actionStyle(action: string): string {
+  if (action === "proxy") return "bg-sky-500/20 text-sky-200";
+  if (action === "direct") return "bg-amber-500/20 text-amber-200";
+  return "bg-rose-500/20 text-rose-200";
+}
 
 type Props = { open: boolean; initialLink?: string; onClose: () => void };
 
@@ -139,14 +147,37 @@ export function ImportRulesModal({ open, initialLink, onClose }: Props) {
 
               {preview && (
                 <div className="flex flex-col gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] p-3">
-                  <h3 className="text-[14px] font-medium text-white/90">{preview.name || t("routing.importUnnamed")}</h3>
-                  <p className="text-[12px] text-white/70">
-                    {t("routing.importCounts", {
-                      proxy: preview.proxyCount,
-                      direct: preview.directCount,
-                      block: preview.blockCount,
-                    })}
-                  </p>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h3 className="truncate text-[14px] font-medium text-white/90">{preview.name || t("routing.importUnnamed")}</h3>
+                    <span className="shrink-0 text-[11px] text-white/45">
+                      {t("routing.importCounts", {
+                        proxy: preview.proxyCount,
+                        direct: preview.directCount,
+                        block: preview.blockCount,
+                      })}
+                    </span>
+                  </div>
+                  <div className="flex max-h-60 flex-col gap-2 overflow-y-auto pr-1">
+                    {preview.groups.map((g, gi) => (
+                      <div key={gi} className="flex flex-col gap-1">
+                        {preview.groups.length > 1 && (
+                          <div className="px-0.5 text-[11px] font-medium uppercase tracking-wider text-white/40">{g.name}</div>
+                        )}
+                        {g.rules.map((r, ri) => (
+                          <div key={ri} className="flex min-w-0 items-center gap-2.5 rounded-md bg-white/[0.03] px-2.5 py-1.5">
+                            <span className={cn("shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider", actionStyle(r.action))}>
+                              {r.action}
+                            </span>
+                            <span className="truncate text-[12px] text-white/85">{r.name || t("routing.importUnnamedRule")}</span>
+                            <span className="ml-auto shrink-0 truncate text-[11px] text-white/45">{summarise(r.conditions, t)}</span>
+                          </div>
+                        ))}
+                        {g.rules.length === 0 && (
+                          <div className="px-2.5 py-1.5 text-[11px] text-white/35">{t("routing.importGroupEmpty")}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                   {hasWarning && (
                     <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11.5px] text-amber-200">
                       {t("routing.importWarning")}

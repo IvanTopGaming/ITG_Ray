@@ -523,6 +523,8 @@
     "importPreviewBtn": "Preview",
     "importApplyBtn": "Import",
     "importUnnamed": "Untitled rule set",
+    "importUnnamedRule": "Unnamed rule",
+    "importGroupEmpty": "No rules",
     "importCounts": "{{proxy}} proxy / {{direct}} direct / {{block}} block",
     "importWarning": "Some of this traffic will bypass the VPN (direct) or be blocked (block).",
     "importErrorMalformed": "This link looks malformed or unsupported.",
