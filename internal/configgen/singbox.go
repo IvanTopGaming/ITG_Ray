@@ -87,7 +87,23 @@ func logLevelOrDefault(level string) string {
 // mode with FakeIP enabled, it emits a remote+fakeip server pair where the
 // fakeip server type returns synthetic IPs in 198.18.0.0/15 for A/AAAA
 // queries; everything else falls through to route.default_domain_resolver.
-// In any other configuration, it emits a single "default" server.
+// In any other configuration, it emits a single "default" server. Both
+// shapes also declare a "local" server that the direct outbound's
+// domain_resolver points at, so direct-routed domains resolve off the
+// physical NIC — correct GeoDNS answers for the user's real region, no proxy
+// leak. Two deliberate choices make that geo-correct:
+//   - detour:"direct" (not type:"local"): type:"local" reads the system
+//     resolv.conf, which can loop back into the tunnel — e.g. a coexisting
+//     Tailscale sets 100.100.100.100 as the system resolver, and the forward
+//     gets hijacked into fakeip. Dialing an explicit resolver via the direct
+//     outbound egresses the physical NIC instead.
+//   - server localGeoResolver (Google 8.8.8.8), NOT the upstreams[0] used by
+//     remote: the resolver must honor EDNS Client Subnet (ECS) so the
+//     authoritative GeoDNS sees the user's real subnet. Cloudflare (1.1.1.1,
+//     the usual upstreams[0]) strips ECS and, in regions where it has no PoP,
+//     answers from a distant one — a RU user resolving a GeoDNS-guarded host
+//     via 1.1.1.1 gets a Frankfurt node (~80ms), via 8.8.8.8 a Moscow node.
+//     remote stays on upstreams[0]: it's tunnelled, so its geo is irrelevant.
 //
 // Upstream DNS uses DoT (RFC 7858) over the proxy outbound rather than
 // plain UDP/53. Without TLS the queries are visible in cleartext to the
@@ -103,6 +119,12 @@ func logLevelOrDefault(level string) string {
 // 1.12+ with WARN-level deprecation messages and degraded DNS handling —
 // hijack-dns silently fails to answer queries directed at the TUN gateway.
 // See https://sing-box.sagernet.org/migration/ for the migration spec.
+// localGeoResolver is the resolver the "local" DNS server queries for
+// direct-routed domains. It must honor EDNS Client Subnet so GeoDNS-guarded
+// hosts resolve to the user's real region; Google Public DNS does, Cloudflare
+// does not. See buildDNSBlock's doc comment.
+const localGeoResolver = "8.8.8.8"
+
 func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
 	strategy := in.IPv6Strategy
 	if strategy == "" {
@@ -117,6 +139,7 @@ func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
 			"servers": []map[string]any{
 				{"tag": "remote", "type": "tls", "server": upstreams[0], "detour": "proxy"},
 				fakeipServer,
+				{"tag": "local", "type": "tls", "server": localGeoResolver, "detour": "direct"},
 			},
 			"rules": []map[string]any{
 				{"query_type": []string{"A", "AAAA"}, "server": "fakeip"},
@@ -128,6 +151,7 @@ func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
 	return map[string]any{
 		"servers": []map[string]any{
 			{"tag": "default", "type": "tls", "server": upstreams[0], "detour": "proxy"},
+			{"tag": "local", "type": "tls", "server": localGeoResolver, "detour": "direct"},
 		},
 		"strategy": strategy,
 	}
@@ -505,7 +529,7 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 				"server_port": in.XraySOCKSPort,
 				"version":     "5",
 			},
-			{"type": "direct", "tag": "direct"},
+			{"type": "direct", "tag": "direct", "domain_resolver": "local"},
 			{"type": "block", "tag": "block"},
 		},
 		"route": route,

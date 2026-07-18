@@ -755,3 +755,86 @@ func TestBuildSingbox_TunnelMode_NoIPv6Block(t *testing.T) {
 			"tunnelling modes must not emit a ::/0 → block rule")
 	}
 }
+
+func findOutbound(t *testing.T, doc map[string]any, tag string) map[string]any {
+	t.Helper()
+	for _, o := range doc["outbounds"].([]any) {
+		m := o.(map[string]any)
+		if m["tag"] == tag {
+			return m
+		}
+	}
+	t.Fatalf("outbound %q not found", tag)
+	return nil
+}
+
+func dnsServerTags(dns map[string]any) map[string]bool {
+	tags := map[string]bool{}
+	for _, s := range dns["servers"].([]any) {
+		if tag, ok := s.(map[string]any)["tag"].(string); ok {
+			tags[tag] = true
+		}
+	}
+	return tags
+}
+
+func TestBuildSingbox_DirectResolvesViaLocalDNS_FakeIP(t *testing.T) {
+	in := SingboxInput{
+		Mode:          ModeTun,
+		FakeIP:        true,
+		TunName:       "ITGRay-TUN",
+		TunIPv4:       "198.18.0.1/15",
+		XraySOCKSHost: "127.0.0.1",
+		XraySOCKSPort: 1081,
+		Rules:         rules.Model{DefaultAction: rules.ActionProxy},
+	}
+	b, err := BuildSingbox(&in)
+	require.NoError(t, err)
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(b, &doc))
+
+	dns := doc["dns"].(map[string]any)
+	require.True(t, dnsServerTags(dns)["local"],
+		"dns.servers must include a type=local server so direct traffic resolves off the physical NIC (correct geo, no proxy leak)")
+
+	var local map[string]any
+	for _, s := range dns["servers"].([]any) {
+		if m := s.(map[string]any); m["tag"] == "local" {
+			local = m
+		}
+	}
+	require.Equal(t, "tls", local["type"], "local server must be a real upstream resolver, not type=local (which reads system resolv.conf and can loop back into the tunnel via a coexisting Tailscale/TUN resolver)")
+	require.Equal(t, "direct", local["detour"], "local server must dial via the direct outbound so the query egresses the physical NIC (correct geo, no fakeip loop)")
+	require.Equal(t, "8.8.8.8", local["server"], "local server must query an ECS-honoring resolver (Google) so GeoDNS returns the user's real region — Cloudflare strips ECS and answers RU users from Frankfurt")
+
+	var remote map[string]any
+	for _, s := range dns["servers"].([]any) {
+		if m := s.(map[string]any); m["tag"] == "remote" {
+			remote = m
+		}
+	}
+	require.Equal(t, "1.1.1.1", remote["server"], "remote (proxy-detoured) server stays on upstreams[0]; only local needs the ECS resolver")
+
+	direct := findOutbound(t, doc, "direct")
+	require.Equal(t, "local", direct["domain_resolver"],
+		"direct outbound must resolve domains via the local server, not the proxy-detoured remote — otherwise GeoDNS returns the exit node's region")
+}
+
+func TestBuildSingbox_DirectResolvesViaLocalDNS_SysProxy(t *testing.T) {
+	in := SingboxInput{
+		SocksInboundPort: 1080,
+		XraySOCKSHost:    "127.0.0.1",
+		XraySOCKSPort:    1081,
+		Rules:            rules.Model{DefaultAction: rules.ActionProxy},
+	}
+	b, err := BuildSingbox(&in)
+	require.NoError(t, err)
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(b, &doc))
+
+	dns := doc["dns"].(map[string]any)
+	require.True(t, dnsServerTags(dns)["local"], "sysproxy dns.servers must include a type=local server")
+
+	direct := findOutbound(t, doc, "direct")
+	require.Equal(t, "local", direct["domain_resolver"], "sysproxy direct outbound must resolve via local")
+}
