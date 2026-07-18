@@ -190,6 +190,8 @@ func (c *Controller) Start(ctx context.Context, serverID string, mode Mode) erro
 	go func() {
 		effectiveMode, net, err := c.bringUp(ctx, srv, mode)
 		if err != nil {
+			slog.Error("chain connect failed", slog.String("scope", "chainctl"),
+				slog.String("mode", string(mode)), slog.String("err", logging.RedactError(err)))
 			c.d.Hub.Publish(hub.Event{
 				Name: hub.EventChainError,
 				Payload: map[string]any{
