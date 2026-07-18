@@ -17,6 +17,9 @@ type Helper interface {
 	Reinstall() error
 	InstallLinux() error
 	UninstallLinux() error
+	StartLinux() error
+	StopLinux() error
+	RestartLinux() error
 }
 
 // HelperHandlers groups methods under the "helper." namespace.
@@ -103,4 +106,25 @@ func (h HelperHandlers) UninstallLinux(_ context.Context, _ json.RawMessage) (an
 		return struct{}{}, nil
 	}
 	return struct{}{}, h.Svc.UninstallLinux()
+}
+
+func (h HelperHandlers) StartLinux(_ context.Context, _ json.RawMessage) (any, error) {
+	if h.Svc == nil {
+		return struct{}{}, nil
+	}
+	return struct{}{}, h.Svc.StartLinux()
+}
+
+func (h HelperHandlers) StopLinux(_ context.Context, _ json.RawMessage) (any, error) {
+	if h.Svc == nil {
+		return struct{}{}, nil
+	}
+	return struct{}{}, h.Svc.StopLinux()
+}
+
+func (h HelperHandlers) RestartLinux(_ context.Context, _ json.RawMessage) (any, error) {
+	if h.Svc == nil {
+		return struct{}{}, nil
+	}
+	return struct{}{}, h.Svc.RestartLinux()
 }

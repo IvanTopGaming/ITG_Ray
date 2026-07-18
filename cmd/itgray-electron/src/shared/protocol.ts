@@ -373,9 +373,12 @@ export interface RpcMethods {
   "helper.installLinux": { params: Empty; result: Empty };
   "helper.reinstall": { params: Empty; result: Empty };
   "helper.restart": { params: Empty; result: Empty };
+  "helper.restartLinux": { params: Empty; result: Empty };
   "helper.start": { params: Empty; result: Empty };
+  "helper.startLinux": { params: Empty; result: Empty };
   "helper.status": { params: Empty; result: HelperStatusResult };
   "helper.stop": { params: Empty; result: Empty };
+  "helper.stopLinux": { params: Empty; result: Empty };
   "helper.uninstallLinux": { params: Empty; result: Empty };
   "logs.dirInfo": { params: Empty; result: LogsDirInfoResult };
   "logs.export": { params: Empty; result: LogsExportResult };

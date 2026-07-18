@@ -23,3 +23,15 @@ func (h *HelperService) InstallLinux() error {
 func (h *HelperService) UninstallLinux() error {
 	return errors.New("UninstallLinux: only supported on Linux")
 }
+
+func (h *HelperService) StartLinux() error {
+	return errors.New("StartLinux: only supported on Linux")
+}
+
+func (h *HelperService) StopLinux() error {
+	return errors.New("StopLinux: only supported on Linux")
+}
+
+func (h *HelperService) RestartLinux() error {
+	return errors.New("RestartLinux: only supported on Linux")
+}

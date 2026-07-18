@@ -24,7 +24,6 @@ import (
 	"github.com/itg-team/itg-ray/internal/chainctl"
 	"github.com/itg-team/itg-ray/internal/config"
 	"github.com/itg-team/itg-ray/internal/geo"
-	"github.com/itg-team/itg-ray/internal/helper/runtime"
 	"github.com/itg-team/itg-ray/internal/hub"
 	"github.com/itg-team/itg-ray/internal/hwid"
 	"github.com/itg-team/itg-ray/internal/logging"
@@ -252,7 +251,7 @@ func main() {
 		Buffer:      logBuf,
 		StartPoller: func() { logPoller.Start(context.Background()) },
 		StopPoller:  logPoller.Stop,
-		LogDir:      runtime.BasePath(),
+		LogDir:      bridgeLogDir(dataDir),
 	})
 
 	d := dispatcher.New()
@@ -314,6 +313,9 @@ func main() {
 	d.Register("helper.reinstall", helper.Reinstall)
 	d.Register("helper.installLinux", helper.InstallLinux)
 	d.Register("helper.uninstallLinux", helper.UninstallLinux)
+	d.Register("helper.startLinux", helper.StartLinux)
+	d.Register("helper.stopLinux", helper.StopLinux)
+	d.Register("helper.restartLinux", helper.RestartLinux)
 
 	servers := handlers.ServersHandlers{Svc: serversSvc}
 	d.Register("servers.list", servers.List)

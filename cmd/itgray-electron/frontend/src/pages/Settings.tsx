@@ -630,26 +630,45 @@ export function Settings() {
             >
               <div className="flex gap-1.5">
                 {helperPill !== 'running' && helperPill !== 'pending' && (
-                  <button
-                    type="button"
-                    onClick={helper.installLinux}
-                    className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] bg-accent/[0.12] border border-accent/30 text-accent hover:bg-accent/[0.18]"
-                  >
-                    {t('settings.helper.install')}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={helper.installLinux}
+                      className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] bg-accent/[0.12] border border-accent/30 text-accent hover:bg-accent/[0.18]"
+                    >
+                      {t('settings.helper.reinstall')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={helper.startLinux}
+                      className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] border border-white/[0.10] text-white/[0.92] hover:bg-white/[0.05]"
+                    >
+                      {t('settings.helper.start')}
+                    </button>
+                  </>
                 )}
                 {helperPill === 'running' && (
-                  <button
-                    type="button"
-                    onClick={helper.uninstallLinux}
-                    className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] border border-white/[0.10] text-white/[0.92] hover:bg-white/[0.05]"
-                  >
-                    {t('settings.helper.uninstall')}
-                  </button>
+                  <>
+                    <ConfirmButton onConfirm={helper.restartLinux} variant="ghost">{t('common.restart')}</ConfirmButton>
+                    <button
+                      type="button"
+                      onClick={helper.installLinux}
+                      className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] border border-white/[0.10] text-white/[0.92] hover:bg-white/[0.05]"
+                    >
+                      {t('settings.helper.reinstall')}
+                    </button>
+                  </>
                 )}
                 {helperPill === 'pending' && (
                   <span className="px-3.5 py-1.5 text-xs text-white/[0.55]">{t('settings.helper.working')}</span>
                 )}
+                <button
+                  type="button"
+                  onClick={() => navigate('/logs')}
+                  className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] border border-white/[0.10] text-white/[0.92] hover:bg-white/[0.05]"
+                >
+                  {t('settings.helper.viewLog')}
+                </button>
               </div>
             </SettingRow>
             <Reveal show={!!helper.opError}>

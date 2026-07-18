@@ -48,6 +48,18 @@ func (f *fakeHelper) UninstallLinux() error {
 	f.calls = append(f.calls, "uninstallLinux")
 	return f.failOn["uninstallLinux"]
 }
+func (f *fakeHelper) StartLinux() error {
+	f.calls = append(f.calls, "startLinux")
+	return f.failOn["startLinux"]
+}
+func (f *fakeHelper) StopLinux() error {
+	f.calls = append(f.calls, "stopLinux")
+	return f.failOn["stopLinux"]
+}
+func (f *fakeHelper) RestartLinux() error {
+	f.calls = append(f.calls, "restartLinux")
+	return f.failOn["restartLinux"]
+}
 
 func TestHelperLinuxMethods(t *testing.T) {
 	fake := &fakeHelper{}

@@ -414,6 +414,7 @@
       "installed": "Installed",
       "notInstalled": "Not installed",
       "start": "Start",
+      "stop": "Stop",
       "reinstall": "Reinstall",
       "working": "Working…",
       "readingStatus": "Reading status…",
@@ -563,6 +564,7 @@
     "paused": "Auto-scroll paused",
     "jump": "Jump to latest",
     "status": "{{sources}} sources · {{lines}} lines · buffer 2000/source",
+    "olderHidden": "↑ {{count}} earlier lines hidden — use Export for full history",
     "empty": "No log lines yet — connect to start the engine"
   }
 }

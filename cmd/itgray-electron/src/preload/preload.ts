@@ -61,6 +61,9 @@ contextBridge.exposeInMainWorld("itg", {
     reinstall: () => rpc("helper.reinstall"),
     installLinux: () => rpc("helper.installLinux"),
     uninstallLinux: () => rpc("helper.uninstallLinux"),
+    startLinux: () => rpc("helper.startLinux"),
+    stopLinux: () => rpc("helper.stopLinux"),
+    restartLinux: () => rpc("helper.restartLinux"),
   },
   servers: {
     list: () => rpc("servers.list"),

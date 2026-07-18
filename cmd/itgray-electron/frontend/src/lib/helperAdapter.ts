@@ -8,6 +8,9 @@ import {
   Reinstall as HelperReinstall,
   InstallLinux as HelperInstallLinux,
   UninstallLinux as HelperUninstallLinux,
+  StartLinux as HelperStartLinux,
+  StopLinux as HelperStopLinux,
+  RestartLinux as HelperRestartLinux,
 } from '@/lib/itg/HelperService';
 import { Environment } from '@/lib/itg/runtime';
 
@@ -73,6 +76,9 @@ export type UseHelperState = {
   reinstall: () => Promise<void>;
   installLinux: () => Promise<void>;
   uninstallLinux: () => Promise<void>;
+  startLinux: () => Promise<void>;
+  stopLinux: () => Promise<void>;
+  restartLinux: () => Promise<void>;
   dismissError: () => void;
 };
 
@@ -187,6 +193,9 @@ export function useHelperState(): UseHelperState {
     reinstall:      () => runOp(() => HelperReinstall()),
     installLinux:   () => runOp(() => HelperInstallLinux()),
     uninstallLinux: () => runOp(() => HelperUninstallLinux()),
+    startLinux:     () => runOp(() => HelperStartLinux()),
+    stopLinux:      () => runOp(() => HelperStopLinux()),
+    restartLinux:   () => runOp(() => HelperRestartLinux()),
     dismissError:   () => setOpError(null),
   };
 }

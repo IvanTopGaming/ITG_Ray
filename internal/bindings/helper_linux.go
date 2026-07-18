@@ -80,6 +80,20 @@ func (h *HelperService) UninstallLinux() error {
 	return runElevated("pkexec", []string{installedHelperPath, "uninstall"})
 }
 
+const linuxHelperUnit = "itgray-helper.service"
+
+func (h *HelperService) StartLinux() error {
+	return runElevated("pkexec", []string{"systemctl", "start", linuxHelperUnit})
+}
+
+func (h *HelperService) StopLinux() error {
+	return runElevated("pkexec", []string{"systemctl", "stop", linuxHelperUnit})
+}
+
+func (h *HelperService) RestartLinux() error {
+	return runElevated("pkexec", []string{"systemctl", "restart", linuxHelperUnit})
+}
+
 // resolveBundledHelperAndCores locates the bundled itgray-helper and the
 // sing-box/xray cores relative to the running bridge executable. Two
 // layouts are supported:
