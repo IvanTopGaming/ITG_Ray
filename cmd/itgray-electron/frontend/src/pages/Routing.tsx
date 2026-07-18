@@ -19,6 +19,7 @@ import {
 import { Toggle } from "@/components/controls/Toggle";
 import { ConfirmDialog } from "@/components/controls/ConfirmDialog";
 import { ImportRulesModal } from "./ImportRulesModal";
+import { consumePendingImportLink, subscribePendingImport } from "@/lib/deeplinkStore";
 import { cn } from "@/lib/cn";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -117,14 +118,15 @@ export function Routing() {
   const [importInitial, setImportInitial] = useState("");
 
   useEffect(() => {
-    const off = window.itg.on("deeplink", (payload: unknown) => {
-      const url = typeof payload === "string" ? payload : "";
-      if (url.startsWith("itgray://rules/import/")) {
-        setImportInitial(url);
+    const tryOpen = () => {
+      const link = consumePendingImportLink();
+      if (link) {
+        setImportInitial(link);
         setImportOpen(true);
       }
-    });
-    return off;
+    };
+    tryOpen();
+    return subscribePendingImport(tryOpen);
   }, []);
 
   // PointerSensor with a 3px activation threshold: drag starts as soon

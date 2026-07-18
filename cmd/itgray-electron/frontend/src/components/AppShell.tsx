@@ -1,6 +1,6 @@
 import { Suspense, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Outlet } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { TitleBar } from "./TitleBar";
 import {
@@ -14,16 +14,29 @@ import {
   clearDesiredServer,
 } from "@/lib/settings";
 import { dashReconnect, getDashState } from "@/lib/dashStore";
+import { setPendingImportLink } from "@/lib/deeplinkStore";
 import { ReconnectToast } from "./ReconnectToast";
 
 export function AppShell() {
   const reconnectNeeded = useReconnectNeeded();
   const { t, i18n } = useTranslation();
   const [settings] = useSettings();
+  const navigate = useNavigate();
   useEffect(() => {
     if (i18n.language !== settings.language)
       void i18n.changeLanguage(settings.language);
   }, [settings.language, i18n]);
+
+  useEffect(() => {
+    const off = window.itg.on("deeplink", (payload: unknown) => {
+      const url = typeof payload === "string" ? payload : "";
+      if (url.startsWith("itgray://rules/import/")) {
+        setPendingImportLink(url);
+        navigate("/routing");
+      }
+    });
+    return off;
+  }, [navigate]);
 
   const handleReconnect = async () => {
     const snap = getConnectSnapshot();
