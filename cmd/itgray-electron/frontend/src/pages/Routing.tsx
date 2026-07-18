@@ -18,6 +18,7 @@ import {
 } from "@/lib/rulesStore";
 import { Toggle } from "@/components/controls/Toggle";
 import { ConfirmDialog } from "@/components/controls/ConfirmDialog";
+import { ImportRulesModal } from "./ImportRulesModal";
 import { cn } from "@/lib/cn";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -112,6 +113,19 @@ export function Routing() {
 
   const [adding, setAdding] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importInitial, setImportInitial] = useState("");
+
+  useEffect(() => {
+    const off = window.itg.on("deeplink", (payload: unknown) => {
+      const url = typeof payload === "string" ? payload : "";
+      if (url.startsWith("itgray://rules/import/")) {
+        setImportInitial(url);
+        setImportOpen(true);
+      }
+    });
+    return off;
+  }, []);
 
   // PointerSensor with a 3px activation threshold: drag starts as soon
   // as the pointer moves enough to indicate intent, but a stray click
@@ -257,15 +271,26 @@ export function Routing() {
           <h1 className="text-[20px] font-semibold tracking-tight">{t("routing.title")}</h1>
           <p className="mt-1 text-[12px] text-white/55">{t("routing.description")}</p>
         </div>
-        <motion.button
-          type="button"
-          onClick={() => setAdding(true)}
-          whileTap={{ scale: 0.96 }}
-          transition={{ duration: 0.18, ease: SNAP_EASE }}
-          className="flex items-center gap-1.5 rounded-md bg-white/[0.08] px-3 py-1.5 text-[12px] font-medium text-white/85 hover:bg-white/[0.12]"
-        >
-          <Plus className="h-3.5 w-3.5" /> {t("routing.addGroup")}
-        </motion.button>
+        <div className="flex items-center gap-2">
+          <motion.button
+            type="button"
+            onClick={() => { setImportInitial(""); setImportOpen(true); }}
+            whileTap={{ scale: 0.96 }}
+            transition={{ duration: 0.18, ease: SNAP_EASE }}
+            className="flex items-center gap-1.5 rounded-md bg-white/[0.06] px-3 py-1.5 text-[12px] font-medium text-white/75 hover:bg-white/[0.10]"
+          >
+            {t("routing.import")}
+          </motion.button>
+          <motion.button
+            type="button"
+            onClick={() => setAdding(true)}
+            whileTap={{ scale: 0.96 }}
+            transition={{ duration: 0.18, ease: SNAP_EASE }}
+            className="flex items-center gap-1.5 rounded-md bg-white/[0.08] px-3 py-1.5 text-[12px] font-medium text-white/85 hover:bg-white/[0.12]"
+          >
+            <Plus className="h-3.5 w-3.5" /> {t("routing.addGroup")}
+          </motion.button>
+        </div>
       </motion.header>
       {lastError && (
         <motion.div
@@ -333,6 +358,11 @@ export function Routing() {
           ) : null}
         </DragOverlay>
       </DndContext>
+      <ImportRulesModal
+        open={importOpen}
+        initialLink={importInitial}
+        onClose={() => setImportOpen(false)}
+      />
     </motion.div>
   );
 }
