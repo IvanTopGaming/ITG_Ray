@@ -17,6 +17,7 @@ import (
 
 	"github.com/itg-team/itg-ray/internal/config"
 	"github.com/itg-team/itg-ray/internal/hub"
+	"github.com/itg-team/itg-ray/internal/logging"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/sysproxy"
 )
@@ -207,11 +208,14 @@ func (c *Controller) Start(ctx context.Context, serverID string, mode Mode) erro
 			})
 			return
 		}
-		_ = saveSession(c.d.DataDir, sessionRecord{
+		if err := saveSession(c.d.DataDir, sessionRecord{
 			ServerID: srv.ID,
 			Mode:     string(effectiveMode),
 			At:       time.Now(),
-		})
+		}); err != nil {
+			slog.Warn("chainctl session persist failed", slog.String("scope", "chainctl"),
+				slog.String("err", logging.RedactError(err)))
+		}
 		c.d.Hub.Publish(hub.Event{
 			Name: hub.EventVPNStatus,
 			Payload: map[string]any{
@@ -249,7 +253,10 @@ func (c *Controller) Stop(ctx context.Context) error {
 		Name:    hub.EventVPNStatus,
 		Payload: map[string]any{"status": string(hub.StatusIdle)},
 	})
-	_ = clearSession(c.d.DataDir)
+	if err := clearSession(c.d.DataDir); err != nil {
+		slog.Warn("chainctl session clear failed", slog.String("scope", "chainctl"),
+			slog.String("err", logging.RedactError(err)))
+	}
 	return nil
 }
 
@@ -313,7 +320,7 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 	if c.d.BuildConfigs != nil {
 		tBuild := time.Now()
 		singboxJSON, xrayJSON, err = c.d.BuildConfigs(srv, mode, net)
-		slog.Info("chain timing", "step", "buildConfigs", "ms", time.Since(tBuild).Milliseconds(), "ok", err == nil)
+		slog.Info("chain timing", "step", "buildConfigs", "ms", time.Since(tBuild).Milliseconds(), "ok", err == nil, "scope", "chainctl")
 		if err != nil {
 			return mode, config.Network{}, fmt.Errorf("configgen: %w", err)
 		}
@@ -325,47 +332,77 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 			return mode, config.Network{}, fmt.Errorf("RouteSnapshot: %w", err)
 		}
 		if err := c.d.Helper.TunCreate(ctx, tunName, tunCIDR); err != nil {
-			_ = c.d.Helper.RouteRestore(ctx)
+			if rerr := c.d.Helper.RouteRestore(ctx); rerr != nil {
+				slog.Warn("chainctl rollback: route restore failed", slog.String("scope", "chainctl"),
+					slog.String("err", logging.RedactError(rerr)))
+			}
 			return mode, config.Network{}, fmt.Errorf("TunCreate: %w", err)
 		}
-		slog.Info("chain timing", "step", "routeSnapshot+tunCreate", "ms", time.Since(tTun).Milliseconds())
+		slog.Info("chain timing", "step", "routeSnapshot+tunCreate", "ms", time.Since(tTun).Milliseconds(), "scope", "chainctl")
 	}
 
 	tStart := time.Now()
 	if err := c.d.Helper.StartChain(ctx, singboxJSON, xrayJSON, mode); err != nil {
 		if mode == ModeTUN {
-			_ = c.d.Helper.TunDestroy(ctx)
-			_ = c.d.Helper.RouteRestore(ctx)
+			if terr := c.d.Helper.TunDestroy(ctx); terr != nil {
+				slog.Warn("chainctl rollback: tun destroy failed", slog.String("scope", "chainctl"),
+					slog.String("err", logging.RedactError(terr)))
+			}
+			if rerr := c.d.Helper.RouteRestore(ctx); rerr != nil {
+				slog.Warn("chainctl rollback: route restore failed", slog.String("scope", "chainctl"),
+					slog.String("err", logging.RedactError(rerr)))
+			}
 		}
 		return mode, config.Network{}, fmt.Errorf("StartChain: %w", err)
 	}
-	slog.Info("chain timing", "step", "startChain", "ms", time.Since(tStart).Milliseconds())
+	slog.Info("chain timing", "step", "startChain", "ms", time.Since(tStart).Milliseconds(), "scope", "chainctl")
 
 	tPost := time.Now()
 	if mode == ModeTUN {
 		if err := c.d.Helper.RouteAdd(ctx, srv.Vless.Address); err != nil {
-			_ = c.d.Helper.StopChain(ctx)
-			_ = c.d.Helper.TunDestroy(ctx)
-			_ = c.d.Helper.RouteRestore(ctx)
+			if serr := c.d.Helper.StopChain(ctx); serr != nil {
+				slog.Warn("chainctl rollback: stop chain failed", slog.String("scope", "chainctl"),
+					slog.String("err", logging.RedactError(serr)))
+			}
+			if terr := c.d.Helper.TunDestroy(ctx); terr != nil {
+				slog.Warn("chainctl rollback: tun destroy failed", slog.String("scope", "chainctl"),
+					slog.String("err", logging.RedactError(terr)))
+			}
+			if rerr := c.d.Helper.RouteRestore(ctx); rerr != nil {
+				slog.Warn("chainctl rollback: route restore failed", slog.String("scope", "chainctl"),
+					slog.String("err", logging.RedactError(rerr)))
+			}
 			return mode, config.Network{}, fmt.Errorf("RouteAdd: %w", err)
 		}
 		if err := c.d.Helper.DnsSet(ctx, dnsServers); err != nil {
-			_ = c.d.Helper.StopChain(ctx)
-			_ = c.d.Helper.RouteRestore(ctx)
-			_ = c.d.Helper.TunDestroy(ctx)
+			if serr := c.d.Helper.StopChain(ctx); serr != nil {
+				slog.Warn("chainctl rollback: stop chain failed", slog.String("scope", "chainctl"),
+					slog.String("err", logging.RedactError(serr)))
+			}
+			if rerr := c.d.Helper.RouteRestore(ctx); rerr != nil {
+				slog.Warn("chainctl rollback: route restore failed", slog.String("scope", "chainctl"),
+					slog.String("err", logging.RedactError(rerr)))
+			}
+			if terr := c.d.Helper.TunDestroy(ctx); terr != nil {
+				slog.Warn("chainctl rollback: tun destroy failed", slog.String("scope", "chainctl"),
+					slog.String("err", logging.RedactError(terr)))
+			}
 			return mode, config.Network{}, fmt.Errorf("DnsSet: %w", err)
 		}
 	} else {
 		if err := c.d.Sysproxy.Set(sysproxy.Settings{Socks: socksAddr, HTTP: httpAddr}); err != nil {
-			_ = c.d.Helper.StopChain(ctx)
+			if serr := c.d.Helper.StopChain(ctx); serr != nil {
+				slog.Warn("chainctl rollback: stop chain failed", slog.String("scope", "chainctl"),
+					slog.String("err", logging.RedactError(serr)))
+			}
 			return mode, config.Network{}, fmt.Errorf("sysproxy.Set: %w", err)
 		}
 	}
-	slog.Info("chain timing", "step", "routeAdd+dnsSet/sysproxy", "ms", time.Since(tPost).Milliseconds())
+	slog.Info("chain timing", "step", "routeAdd+dnsSet/sysproxy", "ms", time.Since(tPost).Milliseconds(), "scope", "chainctl")
 	c.mu.Lock()
 	c.mode = mode
 	c.mu.Unlock()
-	slog.Info("chain timing", "step", "bringUp TOTAL", "ms", time.Since(bringUpStart).Milliseconds(), "mode", string(mode))
+	slog.Info("chain timing", "step", "bringUp TOTAL", "ms", time.Since(bringUpStart).Milliseconds(), "mode", string(mode), "scope", "chainctl")
 	return mode, net, nil
 }
 
@@ -374,23 +411,38 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 func (c *Controller) tearDown(ctx context.Context, mode Mode) {
 	tearStart := time.Now()
 	if mode == ModeSysProxy {
-		_ = c.d.Sysproxy.Clear()
+		if err := c.d.Sysproxy.Clear(); err != nil {
+			slog.Warn("chainctl teardown: sysproxy clear failed", slog.String("scope", "chainctl"),
+				slog.String("err", logging.RedactError(err)))
+		}
 	}
 	if mode == ModeTUN {
 		tDns := time.Now()
-		_ = c.d.Helper.DnsRestore(ctx)
-		_ = c.d.Helper.RouteRestore(ctx)
-		slog.Info("chain timing", "step", "dnsRestore+routeRestore", "ms", time.Since(tDns).Milliseconds())
+		if err := c.d.Helper.DnsRestore(ctx); err != nil {
+			slog.Warn("chainctl teardown: dns restore failed", slog.String("scope", "chainctl"),
+				slog.String("err", logging.RedactError(err)))
+		}
+		if err := c.d.Helper.RouteRestore(ctx); err != nil {
+			slog.Warn("chainctl teardown: route restore failed", slog.String("scope", "chainctl"),
+				slog.String("err", logging.RedactError(err)))
+		}
+		slog.Info("chain timing", "step", "dnsRestore+routeRestore", "ms", time.Since(tDns).Milliseconds(), "scope", "chainctl")
 	}
 	tStop := time.Now()
-	_ = c.d.Helper.StopChain(ctx)
-	slog.Info("chain timing", "step", "stopChain", "ms", time.Since(tStop).Milliseconds())
+	if err := c.d.Helper.StopChain(ctx); err != nil {
+		slog.Warn("chainctl teardown: stop chain failed", slog.String("scope", "chainctl"),
+			slog.String("err", logging.RedactError(err)))
+	}
+	slog.Info("chain timing", "step", "stopChain", "ms", time.Since(tStop).Milliseconds(), "scope", "chainctl")
 	if mode == ModeTUN {
 		tDestroy := time.Now()
-		_ = c.d.Helper.TunDestroy(ctx)
-		slog.Info("chain timing", "step", "tunDestroy", "ms", time.Since(tDestroy).Milliseconds())
+		if err := c.d.Helper.TunDestroy(ctx); err != nil {
+			slog.Warn("chainctl teardown: tun destroy failed", slog.String("scope", "chainctl"),
+				slog.String("err", logging.RedactError(err)))
+		}
+		slog.Info("chain timing", "step", "tunDestroy", "ms", time.Since(tDestroy).Milliseconds(), "scope", "chainctl")
 	}
-	slog.Info("chain timing", "step", "tearDown TOTAL", "ms", time.Since(tearStart).Milliseconds(), "mode", string(mode))
+	slog.Info("chain timing", "step", "tearDown TOTAL", "ms", time.Since(tearStart).Milliseconds(), "mode", string(mode), "scope", "chainctl")
 }
 
 // Reconcile is called at app boot. It rebinds Controller state to a
@@ -425,7 +477,10 @@ func (c *Controller) Reconcile(ctx context.Context) {
 		}
 		slog.Error("chainctl reconcile failed",
 			slog.String("scope", "chainctl"), slog.String("err", err.Error()))
-		_ = clearSession(c.d.DataDir)
+		if cerr := clearSession(c.d.DataDir); cerr != nil {
+			slog.Warn("chainctl session clear failed", slog.String("scope", "chainctl"),
+				slog.String("err", logging.RedactError(cerr)))
+		}
 		return
 	}
 

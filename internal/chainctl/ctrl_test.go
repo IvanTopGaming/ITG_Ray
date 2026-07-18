@@ -664,6 +664,7 @@ type fakeSysproxy struct {
 	isSetCalls int
 	on         bool
 	last       sysproxy.Settings
+	clearErr   error
 }
 
 func (f *fakeSysproxy) Set(s sysproxy.Settings) error {
@@ -680,7 +681,7 @@ func (f *fakeSysproxy) Clear() error {
 	defer f.mu.Unlock()
 	f.clearCalls++
 	f.on = false
-	return nil
+	return f.clearErr
 }
 
 func (f *fakeSysproxy) IsSet() (bool, error) {

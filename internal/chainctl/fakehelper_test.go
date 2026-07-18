@@ -16,6 +16,16 @@ type fakeHelper struct {
 	lastError string
 	calls     []string
 	gotMode   string // last Mode value received by StartChain
+
+	// Per-op error injection for the best-effort teardown/rollback paths.
+	// Independent of failOn so a test can force several of these calls to
+	// fail simultaneously (failOn only ever matches one op). Zero value
+	// (nil) preserves existing behavior for every test that doesn't set
+	// them.
+	stopErr         error
+	tunDestroyErr   error
+	routeRestoreErr error
+	dnsRestoreErr   error
 }
 
 func newFake() *fakeHelper { return &fakeHelper{} }
@@ -56,18 +66,47 @@ func (f *fakeHelper) StopChain(_ context.Context) error {
 		return err
 	}
 	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.stopErr != nil {
+		return f.stopErr
+	}
 	f.running = false
-	f.mu.Unlock()
 	return nil
 }
 
 func (f *fakeHelper) TunCreate(_ context.Context, _, _ string) error { return f.note("TunCreate") }
-func (f *fakeHelper) TunDestroy(_ context.Context) error             { return f.note("TunDestroy") }
-func (f *fakeHelper) RouteSnapshot(_ context.Context) error          { return f.note("RouteSnapshot") }
-func (f *fakeHelper) RouteAdd(_ context.Context, _ string) error     { return f.note("RouteAdd") }
-func (f *fakeHelper) RouteRestore(_ context.Context) error           { return f.note("RouteRestore") }
-func (f *fakeHelper) DnsSet(_ context.Context, _ []string) error     { return f.note("DnsSet") }
-func (f *fakeHelper) DnsRestore(_ context.Context) error             { return f.note("DnsRestore") }
+
+func (f *fakeHelper) TunDestroy(_ context.Context) error {
+	if err := f.note("TunDestroy"); err != nil {
+		return err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.tunDestroyErr
+}
+
+func (f *fakeHelper) RouteSnapshot(_ context.Context) error      { return f.note("RouteSnapshot") }
+func (f *fakeHelper) RouteAdd(_ context.Context, _ string) error { return f.note("RouteAdd") }
+
+func (f *fakeHelper) RouteRestore(_ context.Context) error {
+	if err := f.note("RouteRestore"); err != nil {
+		return err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.routeRestoreErr
+}
+
+func (f *fakeHelper) DnsSet(_ context.Context, _ []string) error { return f.note("DnsSet") }
+
+func (f *fakeHelper) DnsRestore(_ context.Context) error {
+	if err := f.note("DnsRestore"); err != nil {
+		return err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.dnsRestoreErr
+}
 
 func (f *fakeHelper) ServiceStatus(_ context.Context) (ChainState, error) {
 	f.mu.Lock()
