@@ -15,6 +15,7 @@ import (
 
 	"github.com/itg-team/itg-ray/internal/hub"
 	"github.com/itg-team/itg-ray/internal/rules"
+	"github.com/itg-team/itg-ray/internal/ruleshare"
 )
 
 // RulesService implements the rules.* bindings. List is shipped in
@@ -64,12 +65,13 @@ func (s *RulesService) List() (hub.RulesView, error) {
 	return toRulesView(m), nil
 }
 
-// toRulesView projects a rules.Model onto the hub.RulesView wire shape.
-// The Action enum is widened to a plain string so the TS codegen emits
-// "proxy" / "direct" / "block" literals without a type alias hop.
 func toRulesView(m rules.Model) hub.RulesView {
-	groups := make([]hub.GroupView, 0, len(m.Groups))
-	for _, g := range m.Groups {
+	return hub.RulesView{DefaultAction: string(m.DefaultAction), Groups: groupsToViews(m.Groups)}
+}
+
+func groupsToViews(groups []rules.Group) []hub.GroupView {
+	out := make([]hub.GroupView, 0, len(groups))
+	for _, g := range groups {
 		rs := make([]hub.RuleView, 0, len(g.Rules))
 		for _, r := range g.Rules {
 			rs = append(rs, hub.RuleView{
@@ -80,12 +82,11 @@ func toRulesView(m rules.Model) hub.RulesView {
 				Conditions: r.Conditions,
 			})
 		}
-		groups = append(groups, hub.GroupView{
-			ID: g.ID, Name: g.Name, Locked: g.Locked, Enabled: g.Enabled,
-			Rules: rs,
+		out = append(out, hub.GroupView{
+			ID: g.ID, Name: g.Name, Locked: g.Locked, Enabled: g.Enabled, Rules: rs,
 		})
 	}
-	return hub.RulesView{DefaultAction: string(m.DefaultAction), Groups: groups}
+	return out
 }
 
 // newID returns a fresh ID of shape <prefix><unix-millis>-<hex4>.
@@ -416,4 +417,80 @@ func guardSafetyUnchanged(cur, next rules.Model) error {
 		}
 	}
 	return nil
+}
+
+func (s *RulesService) ImportPreview(link string) (hub.ImportPreview, error) {
+	p, err := ruleshare.Decode(link)
+	if err != nil {
+		return hub.ImportPreview{}, err
+	}
+	var proxy, direct, block int
+	for _, g := range p.Groups {
+		for _, r := range g.Rules {
+			switch r.Action {
+			case rules.ActionProxy:
+				proxy++
+			case rules.ActionDirect:
+				direct++
+			case rules.ActionBlock:
+				block++
+			}
+		}
+	}
+	return hub.ImportPreview{
+		Name:        p.Name,
+		Groups:      groupsToViews(p.Groups),
+		ProxyCount:  proxy,
+		DirectCount: direct,
+		BlockCount:  block,
+	}, nil
+}
+
+func (s *RulesService) ImportApply(link string) error {
+	p, err := ruleshare.Decode(link)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	m, err := s.store.Load()
+	if err != nil {
+		return err
+	}
+	for _, g := range p.Groups {
+		ng := rules.Group{ID: newID("g"), Name: g.Name, Enabled: true}
+		for _, r := range g.Rules {
+			r.ID = newID("r")
+			if err := r.Validate(); err != nil {
+				return err
+			}
+			ng.Rules = append(ng.Rules, r)
+		}
+		m.Groups = append(m.Groups, ng)
+	}
+	if err := s.store.Save(m); err != nil {
+		return err
+	}
+	s.publishChanged()
+	return nil
+}
+
+func (s *RulesService) ExportGroup(groupID string) (string, error) {
+	if groupID == "safety" {
+		return "", errLockedGroup
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	m, err := s.store.Load()
+	if err != nil {
+		return "", err
+	}
+	idx := indexOfGroup(m, groupID)
+	if idx < 0 {
+		return "", fmt.Errorf("group not found: %s", groupID)
+	}
+	if m.Groups[idx].Locked {
+		return "", errLockedGroup
+	}
+	return ruleshare.Encode(m.Groups[idx].Name, []rules.Group{m.Groups[idx]})
 }

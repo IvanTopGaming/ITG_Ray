@@ -195,3 +195,11 @@ type RuleView struct {
 	Action     string           `json:"action"`
 	Conditions rules.Conditions `json:"conditions"`
 }
+
+type ImportPreview struct {
+	Name        string      `json:"name"`
+	Groups      []GroupView `json:"groups"`
+	ProxyCount  int         `json:"proxyCount"`
+	DirectCount int         `json:"directCount"`
+	BlockCount  int         `json:"blockCount"`
+}

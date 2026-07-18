@@ -6,6 +6,7 @@ import (
 
 	"github.com/itg-team/itg-ray/internal/hub"
 	"github.com/itg-team/itg-ray/internal/rules"
+	"github.com/itg-team/itg-ray/internal/ruleshare"
 	"github.com/stretchr/testify/require"
 )
 
@@ -271,4 +272,131 @@ func TestRulesService_ReplaceAll_RejectsSafetyMutation(t *testing.T) {
 	}
 	err := svc.ReplaceAll(tampered)
 	require.ErrorContains(t, err, "safety group is locked")
+}
+
+func TestImportApplyAppendsNewGroup(t *testing.T) {
+	svc, _, _ := newRulesService(t)
+	link, err := ruleshare.Encode("Imported", []rules.Group{{
+		Name:    "Streaming",
+		Enabled: true,
+		Rules: []rules.Rule{{
+			Name:       "Netflix",
+			Enabled:    true,
+			Action:     rules.ActionDirect,
+			Conditions: rules.Conditions{Domains: []rules.DomainMatcher{{Kind: "suffix", Value: "netflix.com"}}},
+		}},
+	}})
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+
+	before, _ := svc.List()
+	nBefore := len(before.Groups)
+
+	if err := svc.ImportApply(link); err != nil {
+		t.Fatalf("ImportApply: %v", err)
+	}
+
+	after, _ := svc.List()
+	if len(after.Groups) != nBefore+1 {
+		t.Fatalf("group count %d, want %d", len(after.Groups), nBefore+1)
+	}
+	added := after.Groups[len(after.Groups)-1]
+	if added.Name != "Streaming" {
+		t.Errorf("added group name = %q", added.Name)
+	}
+	if added.ID == "" || added.Rules[0].ID == "" {
+		t.Errorf("fresh IDs not minted: %q / %q", added.ID, added.Rules[0].ID)
+	}
+	if !added.Enabled {
+		t.Errorf("imported group should be enabled")
+	}
+
+	if err := svc.ImportApply(link); err != nil {
+		t.Fatalf("second ImportApply: %v", err)
+	}
+	after2, _ := svc.List()
+	if len(after2.Groups) != nBefore+2 {
+		t.Errorf("re-import group count %d, want %d", len(after2.Groups), nBefore+2)
+	}
+}
+
+func TestImportApplyLeavesSafetyUntouched(t *testing.T) {
+	svc, _, _ := newRulesService(t)
+	before, _ := svc.List()
+	var safetyBefore *hub.GroupView
+	for i := range before.Groups {
+		if before.Groups[i].ID == "safety" {
+			safetyBefore = &before.Groups[i]
+		}
+	}
+	if safetyBefore == nil {
+		t.Skip("no safety group in default model")
+	}
+	link, _ := ruleshare.Encode("x", []rules.Group{{Name: "g", Rules: []rules.Rule{{
+		Name: "r", Action: rules.ActionProxy, Conditions: rules.Conditions{IPCIDRs: []string{"8.8.8.8/32"}},
+	}}}})
+	_ = svc.ImportApply(link)
+	after, _ := svc.List()
+	for i := range after.Groups {
+		if after.Groups[i].ID == "safety" {
+			if len(after.Groups[i].Rules) != len(safetyBefore.Rules) {
+				t.Errorf("safety rules changed")
+			}
+		}
+	}
+}
+
+func TestImportPreviewCounts(t *testing.T) {
+	svc, _, _ := newRulesService(t)
+	link, _ := ruleshare.Encode("Set", []rules.Group{{Name: "g", Rules: []rules.Rule{
+		{Name: "a", Action: rules.ActionProxy, Conditions: rules.Conditions{IPCIDRs: []string{"1.1.1.1/32"}}},
+		{Name: "b", Action: rules.ActionDirect, Conditions: rules.Conditions{IPCIDRs: []string{"2.2.2.2/32"}}},
+		{Name: "c", Action: rules.ActionBlock, Conditions: rules.Conditions{IPCIDRs: []string{"3.3.3.3/32"}}},
+	}}})
+
+	before, _ := svc.List()
+	pv, err := svc.ImportPreview(link)
+	if err != nil {
+		t.Fatalf("ImportPreview: %v", err)
+	}
+	if pv.Name != "Set" || pv.ProxyCount != 1 || pv.DirectCount != 1 || pv.BlockCount != 1 {
+		t.Errorf("preview = %+v", pv)
+	}
+	after, _ := svc.List()
+	if len(after.Groups) != len(before.Groups) {
+		t.Errorf("ImportPreview mutated the store")
+	}
+}
+
+func TestExportGroupRoundTrips(t *testing.T) {
+	svc, _, _ := newRulesService(t)
+	gid, err := svc.GroupAdd("Sharable")
+	if err != nil {
+		t.Fatalf("GroupAdd: %v", err)
+	}
+	if _, err := svc.RuleAdd(gid, rules.Rule{
+		Name: "r", Enabled: true, Action: rules.ActionProxy,
+		Conditions: rules.Conditions{Domains: []rules.DomainMatcher{{Kind: "keyword", Value: "youtube"}}},
+	}); err != nil {
+		t.Fatalf("RuleAdd: %v", err)
+	}
+	link, err := svc.ExportGroup(gid)
+	if err != nil {
+		t.Fatalf("ExportGroup: %v", err)
+	}
+	p, err := ruleshare.Decode(link)
+	if err != nil {
+		t.Fatalf("Decode exported: %v", err)
+	}
+	if len(p.Groups) != 1 || p.Groups[0].Name != "Sharable" || len(p.Groups[0].Rules) != 1 {
+		t.Errorf("round trip shape = %+v", p.Groups)
+	}
+}
+
+func TestExportGroupRejectsSafety(t *testing.T) {
+	svc, _, _ := newRulesService(t)
+	if _, err := svc.ExportGroup("safety"); err == nil {
+		t.Errorf("expected error exporting safety group")
+	}
 }
