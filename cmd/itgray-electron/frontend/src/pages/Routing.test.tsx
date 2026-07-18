@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
@@ -21,6 +21,7 @@ const rulesRemoveGroupMock = vi.fn();
 const rulesAddRuleMock = vi.fn();
 const rulesMoveRuleMock = vi.fn();
 const rulesRemoveRuleMock = vi.fn();
+const rulesExportGroupMock = vi.fn();
 vi.mock("@/lib/rulesStore", async () => {
   const actual = await vi.importActual<any>("@/lib/rulesStore");
   return {
@@ -32,6 +33,7 @@ vi.mock("@/lib/rulesStore", async () => {
     rulesAddRule: (...a: any[]) => rulesAddRuleMock(...a),
     rulesMoveRule: (...a: any[]) => rulesMoveRuleMock(...a),
     rulesRemoveRule: (...a: any[]) => rulesRemoveRuleMock(...a),
+    rulesExportGroup: (...a: any[]) => rulesExportGroupMock(...a),
   };
 });
 
@@ -88,6 +90,7 @@ describe("Routing page — group actions", () => {
     rulesAddGroupMock.mockReset();
     rulesEditGroupMock.mockReset();
     rulesRemoveGroupMock.mockReset();
+    rulesExportGroupMock.mockReset();
   });
 
   it("Add group flow calls rulesAddGroup", async () => {
@@ -120,6 +123,22 @@ describe("Routing page — group actions", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: /delete/i }));
     await userEvent.click(screen.getByRole("button", { name: /^delete$/i }));
     expect(rulesRemoveGroupMock).toHaveBeenCalledWith("g1");
+  });
+
+  it("shares a group as a link to the clipboard", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    useRulesMock.mockReturnValue({
+      defaultAction: "proxy",
+      groups: [safety, { ...user, id: "g1", name: "Streaming" }],
+      loading: false, lastError: null, bootstrapped: true,
+    });
+    rulesExportGroupMock.mockResolvedValue("itgray://rules/import/xyz");
+    renderRouting();
+    await userEvent.click(screen.getByLabelText(/Streaming menu/i));
+    await userEvent.click(screen.getByRole("menuitem", { name: /share/i }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("itgray://rules/import/xyz"));
+    expect(rulesExportGroupMock).toHaveBeenCalledWith("g1");
   });
 });
 

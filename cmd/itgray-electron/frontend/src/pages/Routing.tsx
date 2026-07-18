@@ -13,6 +13,7 @@ import {
   rulesRemoveGroup,
   rulesRemoveRule,
   rulesReplaceAll,
+  rulesExportGroup,
   type GroupView,
   type RuleView,
 } from "@/lib/rulesStore";
@@ -452,6 +453,7 @@ function GroupCard({ group, dragHandle, allGroups }: { group: GroupView; dragHan
   const menuPopRef = useRef<HTMLDivElement>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  const [shareMsg, setShareMsg] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -481,6 +483,17 @@ function GroupCard({ group, dragHandle, allGroups }: { group: GroupView; dragHan
     // Don't persist a stub on the server — navigate to the editor in
     // "create" mode and let the user Save when they're ready.
     navigate("/routing/new", { state: { mode: "create", groupId: group.id } });
+  }
+
+  async function handleShare() {
+    try {
+      const link = await rulesExportGroup(group.id);
+      await navigator.clipboard.writeText(link);
+      setShareMsg(t("routing.shareCopied"));
+    } catch {
+      setShareMsg(t("routing.shareError"));
+    }
+    setTimeout(() => setShareMsg(null), 2000);
   }
 
   return (
@@ -518,6 +531,7 @@ function GroupCard({ group, dragHandle, allGroups }: { group: GroupView; dragHan
               : <span className="text-[14px] font-medium text-white/90">{group.name}</span>
             }
             <span className="text-[11px] text-white/45">· {t("routing.ruleCount", { count: group.rules.length })}</span>
+            {shareMsg && <span className="text-[11px] text-white/45">{shareMsg}</span>}
           </div>
           <div className="flex items-center gap-2">
             {!group.locked && (
@@ -559,6 +573,14 @@ function GroupCard({ group, dragHandle, allGroups }: { group: GroupView; dragHan
                           onClick={() => { setRenaming(true); setMenuOpen(false); }}
                         >
                           {t("routing.rename")}
+                        </button>
+                        <button
+                          role="menuitem"
+                          type="button"
+                          className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors duration-instant ease-snap text-white/75 hover:bg-white/[0.06] hover:text-white"
+                          onClick={() => { void handleShare(); setMenuOpen(false); }}
+                        >
+                          {t("routing.share")}
                         </button>
                         <button
                           role="menuitem"
