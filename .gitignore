@@ -1,6 +1,9 @@
 .superpowers/
 .worktrees/
 
+# Local planning docs — kept out of the public repo (contain smoke logs).
+docs/superpowers/
+
 # Go
 /bin/
 /dist/

@@ -13,8 +13,8 @@ pkgver=0.1.0
 pkgrel=1
 pkgdesc="ITG Ray - VLESS/sing-box VPN client with a privileged TUN helper (prebuilt)"
 arch=('x86_64')
-url="https://github.com/itg-team/itg-ray"
-license=('custom')
+url="https://github.com/IvanTopGaming/ITG_Ray"
+license=('GPL3')
 depends=('gtk3' 'nss' 'alsa-lib' 'libnotify' 'libxss')
 optdepends=('polkit: privileged actions from the GUI'
             'libappindicator-gtk3: system tray icon')
