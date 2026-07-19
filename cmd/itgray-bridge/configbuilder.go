@@ -58,7 +58,9 @@ func loadRulesFromDataDir(dataDir string, store *rules.Store) rules.Model {
 // buildConfigs is the chainctl.ConfigBuilder closure for the running GUI
 // process. It produces the (singboxJSON, xrayJSON) pair the Helper needs
 // to bring the chain up. Mode mapping:
-//   - chainctl.ModeTUN   → configgen.ModeTun (FakeIP, TunName/CIDR/MTU set)
+//   - chainctl.ModeTUN   → configgen.ModeTun (FakeIP, TunName/CIDR/MTU set,
+//     plus the same loopback socks/http inbounds sysproxy mode exposes so
+//     explicitly-proxy-configured apps have an endpoint to target)
 //   - chainctl.ModeSysProxy → configgen.ModeSysProxy (socks + http inbounds, or mixed fallback)
 //
 // Network values come from chainctl's per-Connect read of config.Network
@@ -95,6 +97,8 @@ func buildConfigs(dataDir, configPath string, store *rules.Store, geoMgr *geo.Ma
 			sbInput = configgen.SingboxInput{
 				Mode:                configgen.ModeTun,
 				FakeIP:              true,
+				SocksInboundPort:    net.SysProxy.SOCKSPort,
+				HTTPInboundPort:     net.SysProxy.HTTPPort,
 				TunName:             defaultTunName,
 				TunIPv4:             net.TUN.IPv4CIDR,
 				MTU:                 chainctl.ClampMTU(net.TUN.MTU),

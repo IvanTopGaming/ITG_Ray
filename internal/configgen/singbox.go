@@ -27,9 +27,13 @@ const (
 // SingboxInput collects everything BuildSingbox needs to emit a sing-box config.
 // TunName and TunIPv4 are only consumed when Mode == ModeTun.
 type SingboxInput struct {
-	Mode             Mode
+	Mode Mode
+	// SocksInboundPort / HTTPInboundPort are the loopback proxy listeners.
+	// In ModeSysProxy they are the only inbounds; in ModeTun they are added
+	// alongside the TUN inbound so apps pointed at an explicit proxy still
+	// have somewhere to connect. 0 → that listener is omitted.
 	SocksInboundPort int
-	HTTPInboundPort  int // Tier 2b: separate http inbound; 0 → no http
+	HTTPInboundPort  int
 	TunName          string
 	TunIPv4          string
 	MTU              int // Tier 2b: TUN interface MTU; 0 → OS default
@@ -552,37 +556,7 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 		}
 		route["rule_set"] = decls
 	}
-	var inbounds []map[string]any
-	switch in.Mode {
-	case ModeTun:
-		inbounds = []map[string]any{inbound}
-	case ModeSysProxy:
-		if in.HTTPInboundPort > 0 && in.HTTPInboundPort != in.SocksInboundPort {
-			inbounds = []map[string]any{
-				{
-					"type":        "socks",
-					"tag":         "in-socks",
-					"listen":      "127.0.0.1",
-					"listen_port": in.SocksInboundPort,
-				},
-				{
-					"type":        "http",
-					"tag":         "in-http",
-					"listen":      "127.0.0.1",
-					"listen_port": in.HTTPInboundPort,
-				},
-			}
-		} else {
-			if in.HTTPInboundPort > 0 && in.HTTPInboundPort == in.SocksInboundPort {
-				slog.Warn("configgen: SocksInboundPort==HTTPInboundPort, falling back to single mixed inbound",
-					slog.String("scope", "configgen.singbox"),
-					slog.Int("port", in.SocksInboundPort))
-			}
-			inbounds = []map[string]any{inbound} // mixed fallback
-		}
-	default:
-		inbounds = []map[string]any{inbound}
-	}
+	inbounds := buildInbounds(in, inbound)
 	doc["inbounds"] = inbounds
 	out, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
@@ -595,4 +569,58 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 	slog.Debug("singbox config built", slog.String("scope", "configgen"),
 		slog.Int("bytes", len(out)), slog.Int("rule_sets", ruleSetCount))
 	return out, nil
+}
+
+// localProxyInbounds emits loopback socks/http listeners for the given ports.
+// A zero port means "not wanted" and yields no inbound for that protocol.
+func localProxyInbounds(socksPort, httpPort int) []map[string]any {
+	var out []map[string]any
+	if socksPort > 0 {
+		out = append(out, map[string]any{
+			"type":        "socks",
+			"tag":         "in-socks",
+			"listen":      "127.0.0.1",
+			"listen_port": socksPort,
+		})
+	}
+	if httpPort > 0 && httpPort != socksPort {
+		out = append(out, map[string]any{
+			"type":        "http",
+			"tag":         "in-http",
+			"listen":      "127.0.0.1",
+			"listen_port": httpPort,
+		})
+	}
+	return out
+}
+
+// buildInbounds selects the inbound list for the mode. `primary` is the
+// mode-specific inbound already assembled by the caller (tun, or the mixed
+// loopback listener for sysproxy).
+func buildInbounds(in *SingboxInput, primary map[string]any) []map[string]any {
+	var inbounds []map[string]any
+	switch in.Mode {
+	case ModeTun:
+		// TUN captures traffic transparently, but apps that are configured
+		// to reach the internet through an explicit proxy (and anything the
+		// TUN cannot capture) still need a loopback endpoint to target. Only
+		// emitted when the caller supplies ports, so configs that leave them
+		// at zero stay byte-identical to the TUN-only shape.
+		inbounds = []map[string]any{primary}
+		inbounds = append(inbounds, localProxyInbounds(in.SocksInboundPort, in.HTTPInboundPort)...)
+	case ModeSysProxy:
+		if in.HTTPInboundPort > 0 && in.HTTPInboundPort != in.SocksInboundPort {
+			inbounds = localProxyInbounds(in.SocksInboundPort, in.HTTPInboundPort)
+		} else {
+			if in.HTTPInboundPort > 0 && in.HTTPInboundPort == in.SocksInboundPort {
+				slog.Warn("configgen: SocksInboundPort==HTTPInboundPort, falling back to single mixed inbound",
+					slog.String("scope", "configgen.singbox"),
+					slog.Int("port", in.SocksInboundPort))
+			}
+			inbounds = []map[string]any{primary} // mixed fallback
+		}
+	default:
+		inbounds = []map[string]any{primary}
+	}
+	return inbounds
 }
