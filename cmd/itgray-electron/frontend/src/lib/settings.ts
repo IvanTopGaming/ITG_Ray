@@ -135,6 +135,7 @@ let activeServerEdited = false;
 // a fresh diff re-arms the toast. Active-edit signal is independent.
 let networkDiffDismissed = false;
 const listeners = new Set<() => void>();
+const connectSnapshotListeners = new Set<() => void>();
 
 function notifyListeners(): void {
   listeners.forEach((cb) => cb());
@@ -254,6 +255,20 @@ export function snapshotFromConnectedPayload(payload: {
   // Fresh snapshot — any prior dismiss is no longer relevant.
   networkDiffDismissed = false;
   notifyListeners();
+  for (const cb of connectSnapshotListeners) cb();
+}
+
+// onConnectSnapshot registers a callback fired whenever a new connect
+// snapshot is taken, i.e. whenever the live config becomes the baseline
+// everything else diffs against. Stores that hold undo state for pending
+// edits (rulesStore) use it to drop what is no longer restorable. Returns an
+// unsubscribe. Kept as a registry rather than a direct import so settings.ts
+// stays free of store dependencies — those stores already import from here.
+export function onConnectSnapshot(cb: () => void): () => void {
+  connectSnapshotListeners.add(cb);
+  return () => {
+    connectSnapshotListeners.delete(cb);
+  };
 }
 
 // seedConnectSnapshotFromSnapshot rebuilds the reconnect snapshot from the

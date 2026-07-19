@@ -14,6 +14,7 @@ import {
   clearDesiredServer,
 } from "@/lib/settings";
 import { dashReconnect, getDashState } from "@/lib/dashStore";
+import { rulesRevertToBaseline } from "@/lib/rulesStore";
 import { setPendingImportLink } from "@/lib/deeplinkStore";
 import { ReconnectToast } from "./ReconnectToast";
 
@@ -82,6 +83,11 @@ export function AppShell() {
     setRulesDismissed();
     dismissNetworkDiff();
     clearDesiredServer();
+    // Rule edits commit to the backend as they are made, so unlike the other
+    // signals "dismiss" would otherwise silently keep them. Roll back to the
+    // model the running tunnel was built from. No-op when the toast was armed
+    // by something other than a rules edit.
+    void rulesRevertToBaseline();
   };
 
   return (

@@ -9,7 +9,11 @@ const {
   importPreviewMock,
   importApplyMock,
   exportGroupMock,
+  connectSnapshotHandlers,
+  replaceAllMock,
 } = vi.hoisted(() => ({
+  connectSnapshotHandlers: new Set<() => void>(),
+  replaceAllMock: vi.fn(),
   eventHandlers: {} as Record<string, (...args: any[]) => void>,
   listMock: vi.fn(),
   addGroupMock: vi.fn(),
@@ -32,7 +36,7 @@ vi.mock("@/lib/itg/runtime", () => ({
 vi.mock("@/lib/itg/RulesService", () => ({
   List: () => listMock(),
   GroupAdd: (params: { name: string }) => addGroupMock(params),
-  ReplaceAll: vi.fn(),
+  ReplaceAll: (params: any) => replaceAllMock(params),
   GroupEdit: vi.fn(),
   GroupRemove: vi.fn(),
   RuleAdd: vi.fn(),
@@ -51,6 +55,12 @@ vi.mock("@/lib/dashStore", () => ({
 
 vi.mock("@/lib/settings", () => ({
   setCurrentRulesSignature: (sig: string) => setCurrentRulesSignatureMock(sig),
+  onConnectSnapshot: (cb: () => void) => {
+    connectSnapshotHandlers.add(cb);
+    return () => {
+      connectSnapshotHandlers.delete(cb);
+    };
+  },
 }));
 
 import {
@@ -62,6 +72,8 @@ import {
   rulesImportApply,
   rulesImportPreview,
   rulesSignature,
+  rulesReplaceAll,
+  rulesRevertToBaseline,
 } from "./rulesStore";
 
 beforeEach(() => {
@@ -73,6 +85,9 @@ beforeEach(() => {
   importPreviewMock.mockReset();
   importApplyMock.mockReset();
   exportGroupMock.mockReset();
+  replaceAllMock.mockReset();
+  replaceAllMock.mockResolvedValue(undefined);
+  connectSnapshotHandlers.clear();
   // Default: chain is idle so mutations do NOT arm the toast unless a
   // test opts in by overriding the dash status.
   getDashStateMock.mockReturnValue({ status: "idle" });
@@ -186,5 +201,101 @@ describe("rules import/export", () => {
     const link = await rulesExportGroup("g1");
     expect(exportGroupMock).toHaveBeenCalledWith({ groupId: "g1" });
     expect(link).toBe("itgray://rules/import/xyz");
+  });
+
+  describe("revert baseline", () => {
+    const reordered = {
+      defaultAction: "proxy" as const,
+      groups: [baseView.groups[1], baseView.groups[0]],
+    };
+
+    it("restores the pre-edit model when the user dismisses the reconnect prompt", async () => {
+      listMock.mockResolvedValue(baseView);
+      await __bootRulesForTest();
+
+      listMock.mockResolvedValue(reordered);
+      await rulesReplaceAll(reordered);
+      expect(getRulesState().groups[0].id).toBe("user");
+
+      listMock.mockResolvedValue(baseView);
+      replaceAllMock.mockClear();
+      const reverted = await rulesRevertToBaseline();
+
+      expect(reverted).toBe(true);
+      expect(replaceAllMock).toHaveBeenCalledWith({
+        model: { default_action: "proxy", groups: baseView.groups },
+      });
+      expect(getRulesState().groups[0].id).toBe("safety");
+    });
+
+    it("captures the baseline once so a run of edits reverts to the original", async () => {
+      listMock.mockResolvedValue(baseView);
+      await __bootRulesForTest();
+
+      listMock.mockResolvedValue(reordered);
+      await rulesReplaceAll(reordered);
+      addGroupMock.mockResolvedValue(undefined);
+      await rulesAddGroup("Another");
+
+      listMock.mockResolvedValue(baseView);
+      replaceAllMock.mockClear();
+      await rulesRevertToBaseline();
+
+      expect(replaceAllMock).toHaveBeenCalledWith({
+        model: { default_action: "proxy", groups: baseView.groups },
+      });
+    });
+
+    it("is a no-op when nothing was edited", async () => {
+      listMock.mockResolvedValue(baseView);
+      await __bootRulesForTest();
+      replaceAllMock.mockClear();
+
+      expect(await rulesRevertToBaseline()).toBe(false);
+      expect(replaceAllMock).not.toHaveBeenCalled();
+    });
+
+    it("republishes the signature so the reconnect toast disarms", async () => {
+      listMock.mockResolvedValue(baseView);
+      await __bootRulesForTest();
+      listMock.mockResolvedValue(reordered);
+      await rulesReplaceAll(reordered);
+
+      listMock.mockResolvedValue(baseView);
+      setCurrentRulesSignatureMock.mockReset();
+      await rulesRevertToBaseline();
+
+      expect(setCurrentRulesSignatureMock).toHaveBeenCalledWith(
+        rulesSignature(getRulesState()),
+      );
+    });
+
+    it("drops the baseline once a reconnect commits the edits", async () => {
+      listMock.mockResolvedValue(baseView);
+      await __bootRulesForTest();
+      listMock.mockResolvedValue(reordered);
+      await rulesReplaceAll(reordered);
+
+      // A fresh connect snapshot means the edited model is now the live one.
+      for (const cb of connectSnapshotHandlers) cb();
+
+      replaceAllMock.mockClear();
+      expect(await rulesRevertToBaseline()).toBe(false);
+      expect(replaceAllMock).not.toHaveBeenCalled();
+    });
+
+    it("reverting twice does not walk further back", async () => {
+      listMock.mockResolvedValue(baseView);
+      await __bootRulesForTest();
+      listMock.mockResolvedValue(reordered);
+      await rulesReplaceAll(reordered);
+
+      listMock.mockResolvedValue(baseView);
+      await rulesRevertToBaseline();
+      replaceAllMock.mockClear();
+
+      expect(await rulesRevertToBaseline()).toBe(false);
+      expect(replaceAllMock).not.toHaveBeenCalled();
+    });
   });
 });

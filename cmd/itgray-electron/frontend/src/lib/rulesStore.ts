@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 
 import * as RulesService from "@/lib/itg/RulesService";
 import { EventsOn } from "@/lib/itg/runtime";
-import { setCurrentRulesSignature } from "@/lib/settings";
+import { onConnectSnapshot, setCurrentRulesSignature } from "@/lib/settings";
 
 // rulesStore mirrors serversStore: a singleton store backed by
 // useSyncExternalStore, lazy-bootstrapped on first hook mount, with a
@@ -87,6 +87,44 @@ function pushRulesSignature(): void {
 let bootInFlight: Promise<void> | null = null;
 let mutationInFlight: Promise<void> | null = null;
 let unsubscribeEvent: (() => void) | null = null;
+let unsubscribeConnectSnapshot: (() => void) | null = null;
+
+// revertBaseline is the model as it stood when the rules last matched the
+// running tunnel — captured lazily before the first mutation that makes them
+// diverge. Every mutation here commits to the backend immediately, so this is
+// the only record of the pre-edit state; the ReconnectToast's dismiss button
+// restores it (see rulesRevertToBaseline). Cleared on reconnect, when the
+// edits become the live config and there is nothing left to undo.
+let revertBaseline: { defaultAction: Action; groups: GroupView[] } | null = null;
+
+function captureRevertBaseline(): void {
+  if (revertBaseline !== null || !state.bootstrapped) return;
+  revertBaseline = structuredClone({
+    defaultAction: state.defaultAction,
+    groups: state.groups,
+  });
+}
+
+export function clearRulesRevertBaseline(): void {
+  revertBaseline = null;
+}
+
+/**
+ * rulesRevertToBaseline restores the model captured before the current run of
+ * edits and returns whether anything was rolled back. A false return means
+ * there was nothing staged — either no edits since the last reconnect, or a
+ * previous revert already consumed the baseline.
+ */
+export async function rulesRevertToBaseline(): Promise<boolean> {
+  const baseline = revertBaseline;
+  if (baseline === null) return false;
+  // Leave revertBaseline set across the write: rulesReplaceAll runs through
+  // applyMutation, whose capture step would otherwise record the *edited*
+  // model as the new baseline. Cleared only once the restore lands.
+  await rulesReplaceAll(baseline);
+  revertBaseline = null;
+  return true;
+}
 
 async function refetch(): Promise<void> {
   try {
@@ -121,6 +159,11 @@ function ensureBoot(): Promise<void> {
         void refetch();
       });
     }
+    if (!unsubscribeConnectSnapshot) {
+      // A fresh connect snapshot means the current model is what the tunnel
+      // is actually running, so the pre-edit state is no longer restorable.
+      unsubscribeConnectSnapshot = onConnectSnapshot(clearRulesRevertBaseline);
+    }
     bootInFlight = refetch()
       .then(() => {
         pushRulesSignature();
@@ -150,6 +193,7 @@ function withSingleFlight<T>(fn: () => Promise<T>): Promise<T> {
 // centralized here so each mutation wrapper stays a one-liner.
 async function applyMutation<T>(op: () => Promise<T>): Promise<T> {
   return withSingleFlight(async () => {
+    captureRevertBaseline();
     const result = await op();
     await refetch();
     pushRulesSignature();
@@ -266,9 +310,14 @@ export function __resetRulesForTest(): void {
   listeners.clear();
   bootInFlight = null;
   mutationInFlight = null;
+  revertBaseline = null;
   if (unsubscribeEvent) {
     unsubscribeEvent();
     unsubscribeEvent = null;
+  }
+  if (unsubscribeConnectSnapshot) {
+    unsubscribeConnectSnapshot();
+    unsubscribeConnectSnapshot = null;
   }
 }
 

@@ -3,8 +3,13 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
-const { dashReconnectMock } = vi.hoisted(() => ({
+const { dashReconnectMock, revertBaselineMock } = vi.hoisted(() => ({
   dashReconnectMock: vi.fn(),
+  revertBaselineMock: vi.fn(),
+}));
+
+vi.mock('@/lib/rulesStore', () => ({
+  rulesRevertToBaseline: () => revertBaselineMock(),
 }));
 
 vi.mock('@/lib/dashStore', () => ({
@@ -81,6 +86,8 @@ describe('AppShell reconnect pill', () => {
     vi.clearAllMocks();
     dashReconnectMock.mockReset();
     dashReconnectMock.mockResolvedValue(undefined);
+    revertBaselineMock.mockReset();
+    revertBaselineMock.mockResolvedValue(false);
     // AppShell's deeplink effects reach for the preload bridge on mount;
     // jsdom has no preload script, so stand one in.
     (window as any).itg = {
@@ -216,6 +223,32 @@ describe('AppShell reconnect pill', () => {
     expect(screen.getByRole('status')).toBeInTheDocument();
     await act(async () => { await user.click(screen.getByRole('button', { name: /dismiss/i })); });
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
+  });
+
+  it('dismiss rolls back the rule edits it declines to apply', async () => {
+    setCurrentRulesSignature('sig-1');
+    snapshotFromConnectedPayload({
+      serverId: 'A', mode: 'tun',
+      network: { tunCidr: '198.18.0.1/15', tunMtu: 1500, socksPort: 1080, httpPort: 8888, allowLan: false, ipv6Mode: 'prefer-v4', dns: { mode: 'auto' } },
+    });
+    setCurrentRulesSignature('sig-2');
+    const user = userEvent.setup();
+    await renderShell();
+    await act(async () => { await user.click(screen.getByRole('button', { name: /dismiss/i })); });
+    expect(revertBaselineMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('Reconnect keeps the rule edits it applies', async () => {
+    setCurrentRulesSignature('sig-1');
+    snapshotFromConnectedPayload({
+      serverId: 'A', mode: 'tun',
+      network: { tunCidr: '198.18.0.1/15', tunMtu: 1500, socksPort: 1080, httpPort: 8888, allowLan: false, ipv6Mode: 'prefer-v4', dns: { mode: 'auto' } },
+    });
+    setCurrentRulesSignature('sig-2');
+    const user = userEvent.setup();
+    await renderShell();
+    await act(async () => { await user.click(screen.getByRole('button', { name: /reconnect/i })); });
+    expect(revertBaselineMock).not.toHaveBeenCalled();
   });
 
   it('Reconnect hides toast armed by an active-server edit', async () => {
