@@ -74,6 +74,7 @@ type GeneralSettings struct {
 	Language       string `json:"language"` // "en" | "ru" | "auto"
 	Autostart      bool   `json:"autostart"`
 	StartMinimized bool   `json:"startMinimized"`
+	AutoConnect    bool   `json:"autoConnect"` // connect the last-used server on launch
 }
 
 // NetworkSettings holds proxy / TUN routing knobs.

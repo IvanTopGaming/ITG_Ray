@@ -34,6 +34,20 @@ export function makeAutostart(makeInstance: () => AutoLaunch): Autostart {
   };
 }
 
+/**
+ * Resolves the executable path to register for autostart. Under an AppImage,
+ * app.getPath("exe") points at the electron binary inside the ephemeral FUSE
+ * mount (/tmp/.mount_*), which no longer exists after a reboot — so the
+ * generated ~/.config/autostart entry would be dead. The AppImage runtime
+ * exports APPIMAGE with the real, stable path to the .AppImage file; prefer it.
+ */
+export function resolveAutostartPath(
+  appImagePath: string | undefined,
+  exePath: string,
+): string {
+  return appImagePath && appImagePath.length > 0 ? appImagePath : exePath;
+}
+
 let prod: Autostart | null = null;
 
 /** Production singleton — wires AutoLaunch with the running Electron app. */
@@ -42,7 +56,7 @@ export function defaultAutostart(): Autostart {
     () =>
       new AutoLaunch({
         name: app.getName(),
-        path: app.getPath("exe"),
+        path: resolveAutostartPath(process.env.APPIMAGE, app.getPath("exe")),
       }),
   ));
 }

@@ -42,6 +42,7 @@ export type Settings = {
   language: Language;
   autostart: boolean;
   startMinimized: boolean;
+  autoConnect: boolean;
   // network
   defaultMode: NetworkMode;
   socksPort: number;
@@ -78,6 +79,7 @@ export const DEFAULTS = {
   language: 'en',
   autostart: false,
   startMinimized: false,
+  autoConnect: false,
   defaultMode: 'tun',
   socksPort: 1080,
   httpPort: 8888,

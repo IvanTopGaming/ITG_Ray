@@ -1,7 +1,7 @@
 // cmd/itgray-electron/src/main/autostart.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeAutostart } from "./autostart";
+import { makeAutostart, resolveAutostartPath } from "./autostart";
 
 type FakeAutoLaunch = {
   isEnabled: () => Promise<boolean>;
@@ -68,4 +68,19 @@ test("reconcile applies when desired differs from OS state", async () => {
   const a = makeAutostart(() => fake as never);
   await a.reconcile(true);
   assert.equal(await fake.isEnabled(), true);
+});
+
+test("resolveAutostartPath prefers APPIMAGE when set", () => {
+  assert.equal(
+    resolveAutostartPath("/home/u/Applications/ITGRay.AppImage", "/tmp/.mount_ITGRayXXXX/itgray-electron"),
+    "/home/u/Applications/ITGRay.AppImage",
+  );
+});
+
+test("resolveAutostartPath falls back to exe path when APPIMAGE unset", () => {
+  assert.equal(resolveAutostartPath(undefined, "/opt/ITGRay/itgray-electron"), "/opt/ITGRay/itgray-electron");
+});
+
+test("resolveAutostartPath ignores empty APPIMAGE", () => {
+  assert.equal(resolveAutostartPath("", "/opt/ITGRay/itgray-electron"), "/opt/ITGRay/itgray-electron");
 });

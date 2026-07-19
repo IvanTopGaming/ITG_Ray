@@ -12,6 +12,7 @@ type General struct {
 	Language       string `json:"language"`
 	Autostart      bool   `json:"autostart"`
 	StartMinimized bool   `json:"start_minimized"`
+	AutoConnect    bool   `json:"auto_connect"`
 }
 
 // TUN holds the TUN-mode adapter parameters.

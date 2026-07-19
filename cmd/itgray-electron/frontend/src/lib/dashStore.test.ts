@@ -659,3 +659,64 @@ describe("probeState", () => {
     expect(s.probeState.get("b")).toBe("error");
   });
 });
+
+describe("dashStore — auto-connect on launch", () => {
+  const LAST_SERVER_KEY = "itg.dashStore.lastServerId";
+
+  it("connects the last server when autoConnect is enabled", async () => {
+    runConnectMock.mockResolvedValue(undefined);
+    localStorage.setItem(LAST_SERVER_KEY, "s1");
+    getSnapshotMock.mockResolvedValue({
+      ...baseSnapshot,
+      status: "idle",
+      helperState: "running",
+      servers: [{ id: "s1", name: "DE", favorite: false, latencyMs: 10 }],
+      settings: { general: { autoConnect: true } },
+    });
+    await __bootstrapForTest();
+    expect(runConnectMock).toHaveBeenCalledWith("s1", "tun");
+  });
+
+  it("does not connect when autoConnect is disabled", async () => {
+    localStorage.setItem(LAST_SERVER_KEY, "s1");
+    getSnapshotMock.mockResolvedValue({
+      ...baseSnapshot,
+      servers: [{ id: "s1", name: "DE", favorite: false, latencyMs: 10 }],
+      settings: { general: { autoConnect: false } },
+    });
+    await __bootstrapForTest();
+    expect(runConnectMock).not.toHaveBeenCalled();
+  });
+
+  it("does not connect when the last server is gone from the list", async () => {
+    runConnectMock.mockResolvedValue(undefined);
+    localStorage.setItem(LAST_SERVER_KEY, "missing");
+    getSnapshotMock.mockResolvedValue({
+      ...baseSnapshot,
+      servers: [{ id: "s1", name: "DE", favorite: false, latencyMs: 10 }],
+      settings: { general: { autoConnect: true } },
+    });
+    await __bootstrapForTest();
+    expect(runConnectMock).not.toHaveBeenCalled();
+  });
+
+  it("does not connect when the helper is not running", async () => {
+    runConnectMock.mockResolvedValue(undefined);
+    localStorage.setItem(LAST_SERVER_KEY, "s1");
+    getSnapshotMock.mockResolvedValue({
+      ...baseSnapshot,
+      helperState: "stopped",
+      servers: [{ id: "s1", name: "DE", favorite: false, latencyMs: 10 }],
+      settings: { general: { autoConnect: true } },
+    });
+    await __bootstrapForTest();
+    expect(runConnectMock).not.toHaveBeenCalled();
+  });
+
+  it("persists the connected server id for the next launch", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    fireEvent("vpn:status", { status: "connected", serverId: "s7", mode: "tun" });
+    expect(localStorage.getItem(LAST_SERVER_KEY)).toBe("s7");
+  });
+});

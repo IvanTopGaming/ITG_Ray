@@ -248,6 +248,13 @@ export function Settings() {
         <SettingRow label={t('settings.general.startMinimized')} hint={t('settings.general.startMinimizedHint')}>
           <Toggle value={s.startMinimized} onChange={(v) => update({ startMinimized: v })} />
         </SettingRow>
+        <SettingRow label={t('settings.general.autoConnect')} hint={t('settings.general.autoConnectHint')}>
+          <Toggle
+            value={s.autoConnect}
+            aria-label={t('settings.general.autoConnect')}
+            onChange={(v) => update({ autoConnect: v })}
+          />
+        </SettingRow>
       </motion.div>
 
       {/* Connection */}

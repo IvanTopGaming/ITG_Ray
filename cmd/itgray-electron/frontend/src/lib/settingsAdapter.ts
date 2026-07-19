@@ -23,6 +23,10 @@ export function backendToFrontend(view: hub.SettingsView): Partial<Settings> {
     patch.startMinimized = view.general.startMinimized;
   }
 
+  if (typeof view.general?.autoConnect === 'boolean') {
+    patch.autoConnect = view.general.autoConnect;
+  }
+
   const defaultMode = view.network?.defaultMode;
   if (defaultMode === 'tun' || defaultMode === 'sysproxy') {
     patch.defaultMode = defaultMode;
@@ -143,6 +147,7 @@ export function frontendToBackend(
   if (patch.language !== undefined) ensure('general').language = patch.language;
   if (patch.autostart !== undefined) ensure('general').autostart = patch.autostart;
   if (patch.startMinimized !== undefined) ensure('general').startMinimized = patch.startMinimized;
+  if (patch.autoConnect !== undefined) ensure('general').autoConnect = patch.autoConnect;
 
   // network
   if (patch.defaultMode !== undefined) ensure('network').defaultMode = patch.defaultMode;

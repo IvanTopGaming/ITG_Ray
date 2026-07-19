@@ -81,6 +81,7 @@ func (s *ConfigStore) toView(c *config.Config) hub.SettingsView {
 			Language:       c.General.Language,
 			Autostart:      c.General.Autostart,
 			StartMinimized: c.General.StartMinimized,
+			AutoConnect:    c.General.AutoConnect,
 		},
 		Network: hub.NetworkSettings{
 			DefaultMode: mode,
@@ -188,6 +189,9 @@ func applyGeneral(g *config.General, p map[string]any) {
 	}
 	if v, ok := p["startMinimized"].(bool); ok {
 		g.StartMinimized = v
+	}
+	if v, ok := p["autoConnect"].(bool); ok {
+		g.AutoConnect = v
 	}
 }
 

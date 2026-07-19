@@ -317,7 +317,9 @@
       "autostart": "Launch on system startup",
       "autostartHint": "Start ITG Ray automatically when you log in.",
       "startMinimized": "Start minimized to tray",
-      "startMinimizedHint": "Open in background, no main window on launch."
+      "startMinimizedHint": "Open in background, no main window on launch.",
+      "autoConnect": "Connect on launch",
+      "autoConnectHint": "Automatically connect to the last-used server when the app starts."
     },
     "connection": {
       "title": "Connection",

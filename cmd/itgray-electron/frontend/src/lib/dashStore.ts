@@ -65,6 +65,32 @@ function persistError(err: DashState["lastError"]): void {
   }
 }
 
+// Last successfully-connected server id, persisted so "connect on start" has a
+// target after a fresh launch (the backend snapshot only carries currentServer
+// while a chain is live, so it is null on an idle boot).
+const LAST_SERVER_KEY = "itg.dashStore.lastServerId";
+
+function loadLastServerId(): string | null {
+  try {
+    return localStorage.getItem(LAST_SERVER_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveLastServerId(id: string): void {
+  if (!id) return;
+  try {
+    localStorage.setItem(LAST_SERVER_KEY, id);
+  } catch {
+    // Storage unavailable — auto-connect just won't have a target next launch.
+  }
+}
+
+// One-shot guard: doBootstrap also runs on mutation events, but auto-connect
+// must fire at most once per app session.
+let autoConnectDone = false;
+
 const initialState = (): DashState => ({
   status: "idle",
   mode: "tun",
@@ -155,6 +181,7 @@ async function doBootstrap(): Promise<void> {
       bootstrapped: true,
     });
     maybeAutoProbe(servers);
+    maybeAutoConnect(snap);
   } catch (err: any) {
     setState({
       ...state,
@@ -184,6 +211,7 @@ function onVpnStatus(payload: any) {
 
   if (nextStatus === "connected") {
     if (typeof payload.serverId === "string") {
+      saveLastServerId(payload.serverId);
       const cached = state.allServers.find(s => s.id === payload.serverId);
       next.currentServer = cached ?? {
         id: payload.serverId,
@@ -319,6 +347,24 @@ function maybeAutoProbe(servers: hub.ServerView[]) {
   if (servers.every((s) => s.latencyMs > 0)) return;
   void TestLatency("").catch(() => {
     /* probe failures are non-fatal; UI shows em-dash for unprobed servers */
+  });
+}
+
+// maybeAutoConnect fires a one-shot connect to the last-used server at launch
+// when the "connect on start" setting is enabled. Runs at most once per app
+// session and only from a clean idle boot with the helper up and a known last
+// server still present in the list. Failures surface via the lastError banner.
+function maybeAutoConnect(snap: Snapshot): void {
+  if (autoConnectDone) return;
+  autoConnectDone = true;
+  if (snap.settings?.general?.autoConnect !== true) return;
+  if (((snap.status as ChainStatus) || "idle") !== "idle") return;
+  if ((snap.helperState as DashState["helperState"]) !== "running") return;
+  const lastId = loadLastServerId();
+  const servers = snap.servers ?? [];
+  if (!lastId || !servers.some((s) => s.id === lastId)) return;
+  void dashConnect(lastId).catch(() => {
+    /* surfaced via lastError */
   });
 }
 
@@ -522,6 +568,7 @@ export function __resetForTest(): void {
   }
   bootstrapInFlight = null;
   connectInFlight = null;
+  autoConnectDone = false;
   registerEventHandlers();
 }
 

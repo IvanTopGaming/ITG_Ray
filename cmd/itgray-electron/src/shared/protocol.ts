@@ -36,6 +36,7 @@ export interface GeneralSettings {
   language: string;
   autostart: boolean;
   startMinimized: boolean;
+  autoConnect: boolean;
 }
 
 export interface GeoSourceSettings {
