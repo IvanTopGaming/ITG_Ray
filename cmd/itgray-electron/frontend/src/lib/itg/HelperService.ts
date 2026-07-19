@@ -16,6 +16,17 @@ export function Status(): Promise<string> {
     return typeof r === "string" ? r : "unknown";
   });
 }
+// StatusPackageManaged reports whether a distribution package (not the in-app
+// installer) owns the helper, so the UI can hide install/reinstall actions.
+// Any failure — old bridge without the field, missing binding — reads as false.
+export function StatusPackageManaged(): Promise<boolean> {
+  const fn = svc().status;
+  if (!fn) return Promise.resolve(false);
+  return fn().then((r) =>
+    !!(r && typeof r === "object" && (r as { packageManaged?: unknown }).packageManaged === true),
+  );
+}
+
 export function Install(): Promise<unknown> { return svc().install?.() ?? Promise.resolve(null); }
 export function Start(): Promise<unknown> { return svc().start?.() ?? Promise.resolve(null); }
 export function Stop(): Promise<unknown> { return svc().stop?.() ?? Promise.resolve(null); }

@@ -170,6 +170,9 @@ export function Settings() {
   const helperPill: HelperState = helper.state;
   const isWindowsHelper = helper.isWindows === true;
   const isLinuxHelper = helper.isLinux === true;
+  // A distro package owns the helper: pacman installs/removes it, so the
+  // in-app reinstall (which writes to /usr/local) must stay hidden.
+  const isPackagedHelper = helper.packageManaged === true;
   const isLoadingPlatform = helper.isWindows === null;
 
   const checkUpdates = async () => {
@@ -633,18 +636,20 @@ export function Settings() {
           <>
             <SettingRow
               label={t('settings.helper.status')}
-              hint={t('settings.helper.linuxHint')}
+              hint={isPackagedHelper ? t('settings.helper.linuxPackagedHint') : t('settings.helper.linuxHint')}
             >
               <div className="flex gap-1.5">
                 {helperPill !== 'running' && helperPill !== 'pending' && (
                   <>
-                    <button
-                      type="button"
-                      onClick={helper.installLinux}
-                      className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] bg-accent/[0.12] border border-accent/30 text-accent hover:bg-accent/[0.18]"
-                    >
-                      {t('settings.helper.reinstall')}
-                    </button>
+                    {!isPackagedHelper && (
+                      <button
+                        type="button"
+                        onClick={helper.installLinux}
+                        className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] bg-accent/[0.12] border border-accent/30 text-accent hover:bg-accent/[0.18]"
+                      >
+                        {t('settings.helper.reinstall')}
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={helper.startLinux}
@@ -657,13 +662,15 @@ export function Settings() {
                 {helperPill === 'running' && (
                   <>
                     <ConfirmButton onConfirm={helper.restartLinux} variant="ghost">{t('common.restart')}</ConfirmButton>
-                    <button
-                      type="button"
-                      onClick={helper.installLinux}
-                      className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] border border-white/[0.10] text-white/[0.92] hover:bg-white/[0.05]"
-                    >
-                      {t('settings.helper.reinstall')}
-                    </button>
+                    {!isPackagedHelper && (
+                      <button
+                        type="button"
+                        onClick={helper.installLinux}
+                        className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] border border-white/[0.10] text-white/[0.92] hover:bg-white/[0.05]"
+                      >
+                        {t('settings.helper.reinstall')}
+                      </button>
+                    )}
                   </>
                 )}
                 {helperPill === 'pending' && (

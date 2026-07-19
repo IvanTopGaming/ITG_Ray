@@ -21,6 +21,7 @@ vi.mock('@/lib/itg/HelperService', () => ({
   Reinstall:      (...args: unknown[]) => reinstallMock(...args),
   InstallLinux:   (...args: unknown[]) => installLinuxMock(...args),
   UninstallLinux: (...args: unknown[]) => uninstallLinuxMock(...args),
+  StatusPackageManaged: () => Promise.resolve(false),
 }));
 vi.mock('@/lib/itg/runtime', () => ({
   Environment: (...args: unknown[]) => envMock(...args),

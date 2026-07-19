@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Status as HelperStatus,
+  StatusPackageManaged,
   Install as HelperInstall,
   Start as HelperStart,
   Stop as HelperStop,
@@ -68,6 +69,9 @@ export type UseHelperState = {
   opError: string | null;
   isWindows: boolean | null;
   isLinux: boolean | null;
+  // True when a distro package owns the helper — the install/reinstall and
+  // uninstall actions target /usr/local and must stay hidden.
+  packageManaged: boolean;
 
   install: () => Promise<void>;
   start: () => Promise<void>;
@@ -92,6 +96,7 @@ export function useHelperState(): UseHelperState {
   const [opError, setOpError] = useState<string | null>(null);
   const [isWindows, setIsWin] = useState<boolean | null>(null);
   const [isLinux, setIsLin]   = useState<boolean | null>(null);
+  const [packageManaged, setPkgManaged] = useState(false);
 
   // stateRef mirrors `state` so the polling tick can read the latest
   // value without re-creating the interval on each setState.
@@ -112,6 +117,13 @@ export function useHelperState(): UseHelperState {
       const isLin = info.platform === 'linux';
       setIsWin(isWin);
       setIsLin(isLin);
+      // Fire-and-forget so the awaited chain below keeps its existing
+      // microtask sequencing; a failure just leaves the flag false.
+      try {
+        void StatusPackageManaged()
+          .then((v) => { if (!cancelled) setPkgManaged(v); })
+          .catch(() => {});
+      } catch { /* binding missing (older bridge) — stay false */ }
       // Both Windows (SCM) and Linux (daemon socket probe) expose a live
       // helper status; other platforms have no helper service to poll.
       if (!isWin && !isLin) return;
@@ -186,6 +198,7 @@ export function useHelperState(): UseHelperState {
     opError,
     isWindows,
     isLinux,
+    packageManaged,
     install:        () => runOp(() => HelperInstall("")),
     start:          () => runOp(() => HelperStart()),
     stop:           () => runOp(() => HelperStop()),

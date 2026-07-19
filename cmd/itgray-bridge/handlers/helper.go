@@ -30,21 +30,28 @@ type HelperHandlers struct {
 // helperStatus is the JSON-RPC result shape for helper.status. Mirrors
 // protocol.HelperStatusResult; owned here to avoid an import cycle into
 // the protocol/codegen package.
+// helperIsPackageManaged is a var so tests can pin it — the real detector
+// probes the host filesystem, which would otherwise make results depend on
+// whether the machine running the tests has the distro package installed.
+var helperIsPackageManaged = detectPackageManagedHelper
+
 type helperStatus struct {
-	State string `json:"state"`
+	State          string `json:"state"`
+	PackageManaged bool   `json:"packageManaged"`
 }
 
 // Status returns the helper service state ("running" / "stopped" / "missing").
 // Nil-safe: returns {state:""} (no error) when Svc is unset.
 func (h HelperHandlers) Status(_ context.Context, _ json.RawMessage) (any, error) {
+	managed := helperIsPackageManaged()
 	if h.Svc == nil {
-		return helperStatus{}, nil
+		return helperStatus{PackageManaged: managed}, nil
 	}
 	state, err := h.Svc.Status()
 	if err != nil {
 		return nil, err
 	}
-	return helperStatus{State: state}, nil
+	return helperStatus{State: state, PackageManaged: managed}, nil
 }
 
 // Install registers the helper service. The bridge always passes an empty

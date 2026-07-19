@@ -1,0 +1,15 @@
+[Unit]
+Description=ITG Ray privileged TUN helper
+After=network.target
+
+[Service]
+Type=simple
+# The helper only serves RPCs from this uid. Default suits a single-user
+# desktop; override without editing the unit by writing
+# /etc/itgray/helper.env  ->  ITGRAY_ALLOW_UID=<your uid>
+Environment=ITGRAY_ALLOW_UID=1000
+EnvironmentFile=-/etc/itgray/helper.env
+ExecStart=/usr/lib/itgray/itgray-helper
+
+[Install]
+WantedBy=multi-user.target

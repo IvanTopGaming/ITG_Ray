@@ -62,6 +62,7 @@ export interface GroupView {
 
 export interface HelperStatusResult {
   state: string;
+  packageManaged: boolean;
 }
 
 export interface ImportPreview {

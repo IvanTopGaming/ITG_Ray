@@ -84,15 +84,39 @@ func TestHelperLinuxErrorsPropagate(t *testing.T) {
 	}
 }
 
+// pinPackageManaged makes the package-managed probe deterministic: the real
+// one stats the host filesystem, so results would otherwise flip depending on
+// whether the machine running the tests has the distro package installed.
+func pinPackageManaged(t *testing.T, v bool) {
+	t.Helper()
+	prev := helperIsPackageManaged
+	helperIsPackageManaged = func() bool { return v }
+	t.Cleanup(func() { helperIsPackageManaged = prev })
+}
+
 func TestHelperStatusReturnsTypedShape(t *testing.T) {
+	pinPackageManaged(t, false)
 	h := HelperHandlers{Svc: &fakeHelper{state: "running"}}
 	result, err := h.Status(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
 	raw, _ := json.Marshal(result)
-	if string(raw) != `{"state":"running"}` {
-		t.Fatalf("got=%s want={\"state\":\"running\"}", raw)
+	if string(raw) != `{"state":"running","packageManaged":false}` {
+		t.Fatalf("got=%s want={\"state\":\"running\",\"packageManaged\":false}", raw)
+	}
+}
+
+func TestHelperStatusSurfacesPackageManaged(t *testing.T) {
+	pinPackageManaged(t, true)
+	h := HelperHandlers{Svc: &fakeHelper{state: "running"}}
+	result, err := h.Status(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	raw, _ := json.Marshal(result)
+	if string(raw) != `{"state":"running","packageManaged":true}` {
+		t.Fatalf("got=%s want packageManaged:true", raw)
 	}
 }
 

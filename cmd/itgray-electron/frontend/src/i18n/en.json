@@ -413,6 +413,7 @@
       "install": "Install",
       "uninstall": "Uninstall",
       "linuxHint": "Privileged systemd helper for TUN mode. Installing prompts once for administrator access via polkit.",
+      "linuxPackagedHint": "The privileged helper runs as a systemd service. It is managed by your package manager (pacman) — install and removal happen with the package.",
       "installed": "Installed",
       "notInstalled": "Not installed",
       "start": "Start",

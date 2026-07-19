@@ -145,6 +145,11 @@ type HelperService interface {
 
 type HelperStatusResult struct {
 	State string `json:"state"`
+	// PackageManaged is true when the helper is owned by the system package
+	// manager rather than the in-app installer. The GUI hides its
+	// install/reinstall/uninstall actions in that case — those write to
+	// /usr/local and would fight the packaged copy.
+	PackageManaged bool `json:"packageManaged"`
 }
 
 // OnboardingService — methods under "onboarding." namespace.

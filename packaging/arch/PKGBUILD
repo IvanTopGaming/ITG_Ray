@@ -1,0 +1,76 @@
+# Maintainer: IvanTopGaming <zjarc0@mail.ru>
+#
+# Packages the artifacts produced by scripts/build-linux.sh. Build them first:
+#     bash scripts/build-linux.sh
+# then, from this directory:
+#     makepkg -f
+#
+# For a real AUR submission, replace _repo/_unpacked with a source=() entry
+# pointing at a released tarball and add the matching sha256sums.
+
+pkgname=itgray-bin
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="ITG Ray - VLESS/sing-box VPN client with a privileged TUN helper (prebuilt)"
+arch=('x86_64')
+url="https://github.com/itg-team/itg-ray"
+license=('custom')
+depends=('gtk3' 'nss' 'alsa-lib' 'libnotify' 'libxss')
+optdepends=('polkit: privileged actions from the GUI'
+            'libappindicator-gtk3: system tray icon')
+provides=('itgray')
+conflicts=('itgray')
+install="${pkgname}.install"
+# Prebuilt Go/Electron binaries: stripping breaks them and there is no debug
+# info to split out.
+options=('!strip' '!debug' '!lto')
+
+_repo="${_repo:-$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../.." && pwd)}"
+_unpacked="${_repo}/cmd/itgray-electron/dist-installer/linux-unpacked"
+
+source=('itgray.desktop' 'itgray-helper.service')
+sha256sums=('SKIP' 'SKIP')
+
+prepare() {
+  if [[ ! -x "${_unpacked}/itgray-electron" ]]; then
+    echo "error: ${_unpacked} not found - run 'bash scripts/build-linux.sh' first" >&2
+    return 1
+  fi
+}
+
+package() {
+  local app="${pkgdir}/usr/lib/itgray"
+
+  install -dm755 "${app}"
+  cp -a "${_unpacked}/." "${app}/"
+
+  # electron-builder leaks the Windows bridge and a build log into the Linux
+  # bundle; neither belongs in a Linux package.
+  rm -f "${app}/resources/bridge/itgray-bridge.exe" \
+        "${app}/resources/bridge/build-errors.log"
+
+  # systemd execs the helper directly, and the helper resolves sing-box/xray as
+  # siblings of its own executable (internal/helper/server/chain_linux.go:
+  # binaryPath). Hardlink them next to it: same inodes, no duplicated bytes,
+  # and unlike symlinks os.Executable() still reports the path we exec.
+  ln "${app}/resources/helper/itgray-helper" "${app}/itgray-helper"
+  ln "${app}/resources/cores/sing-box"       "${app}/sing-box"
+  ln "${app}/resources/cores/xray"           "${app}/xray"
+
+  # Electron's setuid sandbox helper.
+  chmod 4755 "${app}/chrome-sandbox"
+
+  install -dm755 "${pkgdir}/usr/bin"
+  cat > "${pkgdir}/usr/bin/itgray" <<'EOS'
+#!/bin/sh
+exec /usr/lib/itgray/itgray-electron "$@"
+EOS
+  chmod 755 "${pkgdir}/usr/bin/itgray"
+
+  install -Dm644 "${srcdir}/itgray-helper.service" \
+    "${pkgdir}/usr/lib/systemd/system/itgray-helper.service"
+  install -Dm644 "${srcdir}/itgray.desktop" \
+    "${pkgdir}/usr/share/applications/itgray.desktop"
+  install -Dm644 "${_repo}/cmd/itgray-electron/resources/icon.png" \
+    "${pkgdir}/usr/share/icons/hicolor/512x512/apps/itgray.png"
+}

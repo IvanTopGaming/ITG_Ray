@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=ITG Ray
+Comment=ITG Ray VPN client
+Exec=/usr/bin/itgray %U
+Icon=itgray
+Terminal=false
+Categories=Network;
+MimeType=x-scheme-handler/itgray;
+StartupWMClass=ITG Ray
