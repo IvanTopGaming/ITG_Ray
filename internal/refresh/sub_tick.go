@@ -11,10 +11,13 @@ import (
 	"github.com/itg-team/itg-ray/internal/subscription"
 )
 
-// syncOne executes one sync attempt for sub. servers.json is updated only
-// on success. Status meta is written on success and on failure, but skipped
-// when ctx is cancelled mid-call (shutdown is not a sync result).
-func (d *Driver) syncOne(ctx context.Context, sub subscription.Stored) {
+// syncOne executes one sync attempt for sub (with level-1 in-attempt retries
+// on transient failures). servers.json is updated only on success. Status meta
+// is written on success and on failure, but skipped when ctx is cancelled
+// mid-call (shutdown is not a sync result). It returns retryable=true when the
+// attempt failed transiently, so the scheduler can back off to a sooner retry
+// instead of waiting the full update interval.
+func (d *Driver) syncOne(ctx context.Context, sub subscription.Stored) (retryable bool) {
 	start := d.now()
 	d.serversMu.Lock()
 	existing, err := server.Load(d.serversPath)
@@ -26,10 +29,10 @@ func (d *Driver) syncOne(ctx context.Context, sub subscription.Stored) {
 			slog.String("id", sub.ID),
 			slog.String("err", logging.RedactError(err)),
 		)
-		return
+		return true // local IO hiccup — worth a sooner retry
 	}
 
-	merged, meta, syncErr := d.syncFunc(ctx, sub.ToSyncInput(), existing, syncFetchTimeout)
+	merged, meta, syncErr := d.syncWithRetry(ctx, sub, existing)
 	if syncErr == nil {
 		if saveErr := server.Save(d.serversPath, merged); saveErr != nil {
 			d.serversMu.Unlock()
@@ -39,14 +42,14 @@ func (d *Driver) syncOne(ctx context.Context, sub subscription.Stored) {
 				slog.String("id", sub.ID),
 				slog.String("err", logging.RedactError(saveErr)),
 			)
-			return
+			return true // local IO hiccup — worth a sooner retry
 		}
 	}
 	d.serversMu.Unlock()
 
 	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		// Shutdown — do not record this attempt.
-		return
+		return false
 	}
 
 	var ui *subscription.Userinfo
@@ -69,6 +72,47 @@ func (d *Driver) syncOne(ctx context.Context, sub subscription.Stored) {
 	)
 	if d.onSync != nil {
 		d.onSync(sub.ID)
+	}
+	return subscription.IsTransient(syncErr)
+}
+
+// syncWithRetry runs syncFunc, re-attempting on transient failures per the
+// level-1 backoff schedule, and returns the last attempt's result. The caller
+// holds serversMu across this call — consistent with the pre-existing "fetch
+// under lock" behavior — so a flaky sub can delay others by at most the
+// bounded retry window. A server Retry-After hint is honored when longer than
+// the scheduled wait, unless it exceeds maxInAttemptRetryWait (then the attempt
+// gives up and the scheduler backs off instead). Respects ctx cancellation.
+func (d *Driver) syncWithRetry(ctx context.Context, sub subscription.Stored, existing []server.Server) ([]server.Server, subscription.SyncMeta, error) {
+	var (
+		merged  []server.Server
+		meta    subscription.SyncMeta
+		syncErr error
+	)
+	for attempt := 0; ; attempt++ {
+		merged, meta, syncErr = d.syncFunc(ctx, sub.ToSyncInput(), existing, syncFetchTimeout)
+		if syncErr == nil || !subscription.IsTransient(syncErr) || attempt >= len(d.subFetchRetryBackoff) {
+			return merged, meta, syncErr
+		}
+		wait := d.subFetchRetryBackoff[attempt]
+		if ra := subscription.RetryAfterHint(syncErr); ra > wait {
+			if ra > maxInAttemptRetryWait {
+				return merged, meta, syncErr
+			}
+			wait = ra
+		}
+		d.log.Warn("refresh sync: transient failure, retrying",
+			slog.String("scope", "refresh"),
+			slog.String("id", sub.ID),
+			slog.Int("attempt", attempt+1),
+			slog.Duration("wait", wait),
+			slog.String("err", logging.RedactError(syncErr)),
+		)
+		select {
+		case <-ctx.Done():
+			return merged, meta, syncErr
+		case <-time.After(wait):
+		}
 	}
 }
 
@@ -126,17 +170,35 @@ func (d *Driver) runSub(ctx context.Context, s subscription.Stored) {
 	timer := time.NewTimer(first)
 	defer timer.Stop()
 
+	fails := 0
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-timer.C:
-			d.syncOne(ctx, s)
-			next := d.jittered(interval, tickJitterPct)
-			if next <= 0 {
-				next = interval
-			}
-			timer.Reset(next)
+			retryable := d.syncOne(ctx, s)
+			timer.Reset(d.nextTick(interval, retryable, &fails))
 		}
 	}
+}
+
+// nextTick computes the delay until the next sync attempt. On a transient
+// failure it applies the level-2 backoff schedule — the delay grows with the
+// consecutive-failure count (*fails) but never exceeds interval — so a sub that
+// failed recovers in minutes rather than after the full update interval. On
+// success or a permanent failure it resets *fails and returns the full interval.
+// Both cases carry the usual ±tickJitterPct jitter.
+func (d *Driver) nextTick(interval time.Duration, retryable bool, fails *int) time.Duration {
+	base := interval
+	if retryable && len(d.subRetryBackoff) > 0 {
+		base = min(d.subRetryBackoff[min(*fails, len(d.subRetryBackoff)-1)], interval)
+		*fails++
+	} else {
+		*fails = 0
+	}
+	next := d.jittered(base, tickJitterPct)
+	if next <= 0 {
+		next = base
+	}
+	return next
 }

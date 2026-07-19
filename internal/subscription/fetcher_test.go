@@ -112,3 +112,50 @@ func TestFetch_OmitsEmptyIdentityHeaders(t *testing.T) {
 	require.Equal(t, "", got.Get("X-Ver-Os"))
 	require.Equal(t, "", got.Get("X-Device-Model"))
 }
+
+func TestFetch_ClassifiesErrors(t *testing.T) {
+	cases := []struct {
+		name          string
+		status        int
+		retryAfter    string
+		wantTransient bool
+		wantRetryHint time.Duration
+	}{
+		{"500 server error", 500, "", true, 0},
+		{"502 bad gateway", 502, "", true, 0},
+		{"503 with Retry-After", 503, "7", true, 7 * time.Second},
+		{"429 too many", 429, "12", true, 12 * time.Second},
+		{"408 request timeout", 408, "", true, 0},
+		{"404 not found", 404, "", false, 0},
+		{"403 forbidden (bad token)", 403, "", false, 0},
+		{"401 unauthorized", 401, "", false, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				if tc.retryAfter != "" {
+					w.Header().Set("Retry-After", tc.retryAfter)
+				}
+				w.WriteHeader(tc.status)
+			}))
+			defer ts.Close()
+
+			_, err := Fetch(context.Background(), FetchOptions{URL: ts.URL, Timeout: time.Second})
+			require.Error(t, err)
+			require.Equal(t, tc.wantTransient, IsTransient(err), "transient classification for %d", tc.status)
+			require.Equal(t, tc.wantRetryHint, RetryAfterHint(err), "Retry-After hint for %d", tc.status)
+		})
+	}
+}
+
+func TestFetch_TransportErrorIsTransient(t *testing.T) {
+	// Nothing is listening → connection refused, a transient transport error.
+	_, err := Fetch(context.Background(), FetchOptions{URL: "http://127.0.0.1:1", Timeout: time.Second})
+	require.Error(t, err)
+	require.True(t, IsTransient(err), "connection refused must be transient")
+}
+
+func TestIsTransient_NonFetchErrorIsFalse(t *testing.T) {
+	require.False(t, IsTransient(context.Canceled))
+	require.False(t, IsTransient(nil))
+}

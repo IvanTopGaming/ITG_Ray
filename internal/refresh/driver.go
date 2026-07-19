@@ -27,7 +27,23 @@ const (
 	firstProbeDelay   = 5 * time.Second  // probe waits this long before first run
 	syncFetchTimeout  = 30 * time.Second
 	lastStatusMaxLen  = 120
+
+	// maxInAttemptRetryWait caps how long a single scheduled sync will honor a
+	// server Retry-After hint before giving up the in-attempt retry and letting
+	// the scheduler back off instead. Keeps one sync from blocking for minutes.
+	maxInAttemptRetryWait = 30 * time.Second
 )
+
+// defaultSubFetchRetryBackoff is the level-1 (in-attempt) retry schedule: on a
+// transient sync failure the scheduled loop re-fetches after these waits before
+// giving up the attempt. Length = max retries.
+var defaultSubFetchRetryBackoff = []time.Duration{2 * time.Second, 5 * time.Second, 10 * time.Second}
+
+// defaultSubRetryBackoff is the level-2 (scheduler) backoff: after a transient
+// failure the next tick fires after these growing delays instead of the full
+// update interval, capped at the interval. Reset to the interval on success or
+// on a permanent (non-transient) failure.
+var defaultSubRetryBackoff = []time.Duration{1 * time.Minute, 2 * time.Minute, 5 * time.Minute, 10 * time.Minute}
 
 // SyncFn matches subscription.Sync. The driver uses a function-typed field
 // (rather than calling subscription.Sync directly) so tests can inject a fake.
@@ -44,12 +60,20 @@ type Config struct {
 	ProbeFunc          ProbeFn
 	DefaultSubInterval time.Duration
 	FirstSubJitterMax  time.Duration // override the default 30s startup-stagger window (mainly for tests)
-	ProbeInterval      time.Duration
-	ProbeTimeout       time.Duration
-	ProbeConcurrency   int
-	Now                func() time.Time
-	Rand               *rand.Rand
-	Log                *slog.Logger
+	// SubFetchRetryBackoff overrides the level-1 in-attempt retry schedule. A
+	// nil slice applies the package default; a non-nil empty slice disables
+	// in-attempt retries (used by tests to keep them fast).
+	SubFetchRetryBackoff []time.Duration
+	// SubRetryBackoff overrides the level-2 scheduler backoff schedule. A nil
+	// slice applies the package default; a non-nil empty slice disables
+	// backoff (next tick always at the full interval).
+	SubRetryBackoff  []time.Duration
+	ProbeInterval    time.Duration
+	ProbeTimeout     time.Duration
+	ProbeConcurrency int
+	Now              func() time.Time
+	Rand             *rand.Rand
+	Log              *slog.Logger
 	// OnSync, when set, is called with the subscription ID after each
 	// sync attempt completes (success or recorded failure). The Electron
 	// bridge uses it to publish hub events so the UI refreshes live.
@@ -58,19 +82,21 @@ type Config struct {
 
 // Driver owns the background goroutines.
 type Driver struct {
-	subs               subscription.Store
-	serversPath        string
-	syncFunc           SyncFn
-	probeFunc          ProbeFn
-	defaultSubInterval time.Duration
-	firstSubJitterMax  time.Duration
-	probeInterval      time.Duration
-	probeTimeout       time.Duration
-	probeConcurrency   int
-	now                func() time.Time
-	rand               *rand.Rand
-	log                *slog.Logger
-	onSync             func(subID string)
+	subs                 subscription.Store
+	serversPath          string
+	syncFunc             SyncFn
+	probeFunc            ProbeFn
+	defaultSubInterval   time.Duration
+	firstSubJitterMax    time.Duration
+	subFetchRetryBackoff []time.Duration
+	subRetryBackoff      []time.Duration
+	probeInterval        time.Duration
+	probeTimeout         time.Duration
+	probeConcurrency     int
+	now                  func() time.Time
+	rand                 *rand.Rand
+	log                  *slog.Logger
+	onSync               func(subID string)
 
 	serversMu sync.Mutex
 	randMu    sync.Mutex
@@ -81,19 +107,21 @@ type Driver struct {
 // left at its zero value.
 func NewDriver(c Config) *Driver {
 	d := &Driver{
-		subs:               c.Subs,
-		serversPath:        c.ServersPath,
-		syncFunc:           c.SyncFunc,
-		probeFunc:          c.ProbeFunc,
-		defaultSubInterval: c.DefaultSubInterval,
-		firstSubJitterMax:  c.FirstSubJitterMax,
-		probeInterval:      c.ProbeInterval,
-		probeTimeout:       c.ProbeTimeout,
-		probeConcurrency:   c.ProbeConcurrency,
-		now:                c.Now,
-		rand:               c.Rand,
-		log:                c.Log,
-		onSync:             c.OnSync,
+		subs:                 c.Subs,
+		serversPath:          c.ServersPath,
+		syncFunc:             c.SyncFunc,
+		probeFunc:            c.ProbeFunc,
+		defaultSubInterval:   c.DefaultSubInterval,
+		firstSubJitterMax:    c.FirstSubJitterMax,
+		subFetchRetryBackoff: c.SubFetchRetryBackoff,
+		subRetryBackoff:      c.SubRetryBackoff,
+		probeInterval:        c.ProbeInterval,
+		probeTimeout:         c.ProbeTimeout,
+		probeConcurrency:     c.ProbeConcurrency,
+		now:                  c.Now,
+		rand:                 c.Rand,
+		log:                  c.Log,
+		onSync:               c.OnSync,
 	}
 	if d.syncFunc == nil {
 		d.syncFunc = subscription.Sync
@@ -106,6 +134,12 @@ func NewDriver(c Config) *Driver {
 	}
 	if d.firstSubJitterMax <= 0 {
 		d.firstSubJitterMax = firstSubJitterMax
+	}
+	if d.subFetchRetryBackoff == nil {
+		d.subFetchRetryBackoff = defaultSubFetchRetryBackoff
+	}
+	if d.subRetryBackoff == nil {
+		d.subRetryBackoff = defaultSubRetryBackoff
 	}
 	if d.probeInterval == 0 {
 		d.probeInterval = defaultProbeIntv
