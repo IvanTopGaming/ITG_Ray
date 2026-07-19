@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { motion, type Variants } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Dropdown } from "@/components/controls/Dropdown";
 import { ExportLogs, SaveLogs } from "@/lib/itg/LogsService";
@@ -11,6 +12,21 @@ import {
   type LogLevel,
   type LogSource,
 } from "@/lib/logStore";
+
+// Mirrors the entrance animation the other pages define locally (Settings,
+// Routing, RuleEditor) so tab switches feel the same everywhere.
+const pageVariants: Variants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { delayChildren: 0.05, staggerChildren: 0.04 },
+  },
+};
+
+const sectionVariants: Variants = {
+  hidden: { opacity: 0, y: 8 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.24, ease: [0.16, 1, 0.3, 1] } },
+};
 
 const SOURCES: LogSource[] = ["bridge", "sing-box", "xray"];
 const LEVELS: LogLevel[] = ["DEBUG", "INFO", "WARN", "ERROR"];
@@ -118,15 +134,23 @@ export function Logs() {
   const warns = rows.filter((r) => r.level === "WARN").length;
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="mb-4">
+    <motion.section
+      className="flex h-full flex-col"
+      initial="hidden"
+      animate="show"
+      variants={pageVariants}
+    >
+      <motion.div className="mb-4" variants={sectionVariants}>
         <h1 className="text-[22px] font-semibold tracking-tight">
           {t("logs.title")}
         </h1>
         <p className="mt-1 text-[13px] text-white/50">{t("logs.subtitle")}</p>
-      </div>
+      </motion.div>
 
-      <div className="mb-3 flex flex-wrap items-center gap-2.5">
+      <motion.div
+        className="mb-3 flex flex-wrap items-center gap-2.5"
+        variants={sectionVariants}
+      >
         <div className="flex gap-1 rounded-[10px] glass-dim p-1">
           {SOURCES.map((s) => (
             <button
@@ -180,9 +204,12 @@ export function Logs() {
         >
           {t("logs.clear")}
         </button>
-      </div>
+      </motion.div>
 
-      <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl glass-dim">
+      <motion.div
+        className="relative min-h-0 flex-1 overflow-hidden rounded-xl glass-dim"
+        variants={sectionVariants}
+      >
         <div
           ref={scrollRef}
           onScroll={onScroll}
@@ -226,9 +253,12 @@ export function Logs() {
             {t("logs.jump")}
           </button>
         )}
-      </div>
+      </motion.div>
 
-      <div className="flex justify-between px-0.5 pb-1 pt-2 font-mono text-[11px] text-white/40">
+      <motion.div
+        className="flex justify-between px-0.5 pb-1 pt-2 font-mono text-[11px] text-white/40"
+        variants={sectionVariants}
+      >
         <span>
           {t("logs.status", { sources: sources.size, lines: rows.length })}
         </span>
@@ -236,8 +266,8 @@ export function Logs() {
           <span className="text-danger">●</span> {errors} &nbsp;{" "}
           <span className="text-warn">●</span> {warns}
         </span>
-      </div>
-    </div>
+      </motion.div>
+    </motion.section>
   );
 }
 
