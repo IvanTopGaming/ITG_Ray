@@ -81,6 +81,12 @@ describe('AppShell reconnect pill', () => {
     vi.clearAllMocks();
     dashReconnectMock.mockReset();
     dashReconnectMock.mockResolvedValue(undefined);
+    // AppShell's deeplink effects reach for the preload bridge on mount;
+    // jsdom has no preload script, so stand one in.
+    (window as any).itg = {
+      on: vi.fn(() => vi.fn()),
+      app: { getPendingDeeplink: vi.fn().mockResolvedValue(null) },
+    };
     const originalConsoleError = console.error;
     vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
       const msg = args[0];
