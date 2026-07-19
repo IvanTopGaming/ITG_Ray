@@ -8,7 +8,7 @@ import { createTray } from "./tray";
 import { loadState, attachStatePersister } from "./window-state";
 import { defaultAutostart } from "./autostart";
 import { makeNotifier } from "./notifications";
-import { resolveStartMinimized, type StartupSnapshot } from "./startup";
+import { resolveStartMinimized, resolveTrayStatus, type StartupSnapshot } from "./startup";
 import { extractDeeplink } from "./deeplink";
 
 let mainWindow: BrowserWindow | null = null;
@@ -160,6 +160,11 @@ app.whenReady().then(async () => {
     } catch (err) {
       console.warn("startup snapshot read failed:", err);
     }
+    // Tray adopt: the bridge's Reconcile() announces a helper-held tunnel
+    // before wireIPC subscribes, so seed the icon from this pull instead of
+    // waiting for a vpn.status event that already came and went.
+    const adopted = resolveTrayStatus(snap);
+    if (adopted) tray?.setStatus(adopted);
     // Window visibility: show unless the user opted into tray-only launch.
     if (mainWindow && !resolveStartMinimized(snap)) {
       mainWindow.show();
