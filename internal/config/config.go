@@ -127,7 +127,10 @@ func defaults() Config {
 			SendOSVersion:         true,
 			SendDeviceModel:       true,
 		},
-		Notifications: Notifications{Connected: true, Disconnected: true, QuotaLow: true, SubUpdated: true, Sound: true},
+		// SubUpdated defaults off: subscription refreshes run on a timer and
+		// are routine, so a toast per sync is noise rather than signal. The
+		// other events are user-initiated or actionable.
+		Notifications: Notifications{Connected: true, Disconnected: true, QuotaLow: true, SubUpdated: false, Sound: true},
 		Debug:         Debug{LogLevel: "info"},
 	}
 }

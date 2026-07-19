@@ -102,7 +102,7 @@ export const DEFAULTS = {
   onConnected: true,
   onDisconnected: true,
   onQuotaLow: true,
-  onSubSynced: true,
+  onSubSynced: false,
   notifySound: true,
   logLevel: 'info',
 } as const satisfies Settings;
