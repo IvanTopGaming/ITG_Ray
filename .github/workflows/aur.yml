@@ -21,7 +21,9 @@ jobs:
           cat PKGBUILD.out
         env:
           GITHUB_EVENT_RELEASE_TAG: ${{ github.event.release.tag_name }}
-      - uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
+      # Third-party action pinned to a commit SHA: this step receives the AUR
+      # SSH key, so a mutable tag would be a supply-chain risk. SHA = v4.1.1.
+      - uses: KSXGitHub/github-actions-deploy-aur@2ac5a4c1d7035885d46b10e3193393be8460b6f1
         with:
           pkgname: itgray-bin
           pkgbuild: ./PKGBUILD.out

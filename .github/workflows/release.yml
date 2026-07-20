@@ -75,7 +75,9 @@ jobs:
         with:
           name: release-artifacts
           path: out
-      - uses: softprops/action-gh-release@v2
+      # Third-party action pinned to a commit SHA (supply-chain hardening);
+      # SHA = v2 tag at time of pinning.
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
         with:
           draft: true
           prerelease: true
