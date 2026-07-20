@@ -8,7 +8,7 @@ ITG Ray — десктопный VLESS VPN-клиент для Linux и Windows 
 привилегированным helper-демоном, благодаря которому сам GUI никогда не
 запускается от root.
 
-![Главное окно](docs/screenshots/main.png)
+![Главное окно](docs/screenshots/main.ru.png)
 
 ## Возможности
 
@@ -24,6 +24,18 @@ ITG Ray — десктопный VLESS VPN-клиент для Linux и Windows 
 - **Наблюдаемость** — логи ядра в реальном времени, статистика трафика и
   замер задержки.
 - **Двуязычный интерфейс** — английский и русский.
+
+## Скриншоты
+
+| Серверы | Правила маршрутизации |
+| --- | --- |
+| ![Серверы](docs/screenshots/servers.ru.png) | ![Правила маршрутизации](docs/screenshots/routing.ru.png) |
+
+| Подписки | Панель |
+| --- | --- |
+| ![Подписки](docs/screenshots/subscriptions.ru.png) | ![Панель](docs/screenshots/main.ru.png) |
+
+*(На скриншотах — демо-серверы, реальные адреса не показаны.)*
 
 ## Установка
 
@@ -45,7 +57,7 @@ ITG Ray — десктопный VLESS VPN-клиент для Linux и Windows 
 
 ## Сборка из исходников
 
-Требуется: Go 1.23+, Node 22+, npm. Для кросс-сборки установщика Windows дополнительно нужен wine.
+Требуется: Go 1.26+, Node 22+, npm. Для кросс-сборки установщика Windows дополнительно нужен wine.
 
 ```bash
 git clone https://github.com/IvanTopGaming/ITG_Ray
