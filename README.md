@@ -41,7 +41,7 @@ installer registers the helper service and ships the Wintun driver.
 
 ## Build from source
 
-Prerequisites: Go 1.23+, Node 22+, npm.
+Prerequisites: Go 1.23+, Node 22+, npm. Cross-building the Windows installer additionally requires wine.
 
 ```bash
 git clone https://github.com/IvanTopGaming/ITG_Ray

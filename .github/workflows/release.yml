@@ -30,11 +30,13 @@ jobs:
             cmd/itgray-electron/frontend/package-lock.json
       - name: determine version
         id: ver
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
           else
-            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+            echo "version=${INPUT_VERSION}" >> "$GITHUB_OUTPUT"
           fi
       - name: install wine (electron-builder needs it to edit exe resources)
         run: |
@@ -46,7 +48,7 @@ jobs:
           npm --prefix cmd/itgray-electron ci
           npm --prefix cmd/itgray-electron/frontend ci
       - name: stamp package.json version (electron-builder artifact names)
-        run: npm --prefix cmd/itgray-electron version --no-git-tag-version "${{ steps.ver.outputs.version }}"
+        run: npm --prefix cmd/itgray-electron version --no-git-tag-version --allow-same-version "${{ steps.ver.outputs.version }}"
       - name: build linux (binaries + AppImage)
         run: VERSION="v${{ steps.ver.outputs.version }}" bash scripts/build-linux.sh
       - name: assemble linux tarball

@@ -5,8 +5,8 @@
 # then, from this directory:
 #     makepkg -f
 #
-# For a real AUR submission, replace _repo/_unpacked with a source=() entry
-# pointing at a released tarball and add the matching sha256sums.
+# The real AUR package is generated from packaging/aur/PKGBUILD.template by
+# scripts/gen-aur-pkgbuild.sh; this file is for local builds only.
 
 pkgname=itgray-bin
 pkgver=0.1.0
