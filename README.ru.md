@@ -1,85 +1,98 @@
+<div align="center">
+
+<img src="docs/screenshots/logo.png" width="112" alt="Логотип ITG Ray" />
+
 # ITG Ray
 
-[English](README.md)
+**Быстрый современный VLESS VPN-клиент для Linux и Windows.**
 
-ITG Ray — десктопный VLESS VPN-клиент для Linux и Windows на базе
-[sing-box](https://github.com/SagerNet/sing-box) и
-[Xray-core](https://github.com/XTLS/Xray-core), с интерфейсом на Electron и
-привилегированным helper-демоном, благодаря которому сам GUI никогда не
-запускается от root.
+Построен на [sing-box](https://github.com/SagerNet/sing-box) и [Xray-core](https://github.com/XTLS/Xray-core), в аккуратной обёртке Electron — с привилегированным хелпером, чтобы GUI никогда не запускался от root.
 
-![Главное окно](docs/screenshots/main.ru.png)
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-8a63d2)](https://github.com/IvanTopGaming/ITG_Ray/releases)
+[![Release](https://img.shields.io/badge/release-v0.1.0--beta.1-f59e0b)](https://github.com/IvanTopGaming/ITG_Ray/releases)
+[![CI](https://github.com/IvanTopGaming/ITG_Ray/actions/workflows/ci.yml/badge.svg)](https://github.com/IvanTopGaming/ITG_Ray/actions/workflows/ci.yml)
 
-## Возможности
+[English](README.md) · **Русский**
 
-- **VLESS + подписки** — добавляй серверы по ссылкам `vless://` или через
-  URL подписки, с автообновлением.
-- **Режим TUN** — туннелирование всей системы через виртуальный интерфейс с
-  FakeIP DNS; локальные inbound'ы SOCKS (`127.0.0.1:1080`) и HTTP
-  (`127.0.0.1:8888`) остаются доступны.
-- **Режим системного прокси** — более лёгкая альтернатива, которая просто
-  выставляет прокси на уровне ОС.
-- **Правила маршрутизации** — редактор правил с drag-and-drop (домены, IP,
-  GeoIP/Geosite) и действиями proxy/direct/block для каждого правила.
-- **Наблюдаемость** — логи ядра в реальном времени, статистика трафика и
-  замер задержки.
-- **Двуязычный интерфейс** — английский и русский.
+<img src="docs/screenshots/main.ru.png" width="840" alt="Панель ITG Ray" />
 
-## Скриншоты
+</div>
+
+## ✨ Возможности
+
+| | |
+| --- | --- |
+| 🌐 **VLESS + подписки** | Добавляй серверы по `vless://`-ссылкам или URL подписок, с авто-обновлением. |
+| 🛡️ **Режим TUN** | Системный туннель через виртуальный интерфейс с FakeIP DNS. |
+| 🧩 **Режим системного прокси** | Лёгкая альтернатива — просто выставляет прокси ОС. |
+| 🧭 **Правила маршрутизации** | Drag-and-drop редактор — домены, IP, GeoIP/Geosite → proxy / direct / block. |
+| 🔌 **Локальные инбаунды** | SOCKS `127.0.0.1:1080` и HTTP `127.0.0.1:8888` доступны даже в TUN. |
+| 📊 **Наблюдаемость** | Живые логи ядер, статистика трафика и замер задержек. |
+| 🔒 **Разделение привилегий** | Root-хелпер владеет туннелем; GUI общается с ним по локальному API. |
+| 🌍 **Двуязычный интерфейс** | Английский и русский. |
+
+## 🖼️ Скриншоты
+
+<div align="center">
 
 | Серверы | Правила маршрутизации |
-| --- | --- |
-| ![Серверы](docs/screenshots/servers.ru.png) | ![Правила маршрутизации](docs/screenshots/routing.ru.png) |
+| :---: | :---: |
+| <img src="docs/screenshots/servers.ru.png" width="420" alt="Серверы" /> | <img src="docs/screenshots/routing.ru.png" width="420" alt="Правила маршрутизации" /> |
 
-| Подписки | Панель |
-| --- | --- |
-| ![Подписки](docs/screenshots/subscriptions.ru.png) | ![Панель](docs/screenshots/main.ru.png) |
+</div>
 
-*(На скриншотах — демо-серверы, реальные адреса не показаны.)*
+<sub>На скриншотах — демо-серверы, реальные адреса не показаны.</sub>
 
-## Установка
+## 📦 Установка
 
-### Linux
+### 🐧 Linux
 
-- **Arch Linux (AUR):** `yay -S itgray-bin`, затем
-  `sudo systemctl enable --now itgray-helper.service`
-- **AppImage:** возьми `ITGRay-<version>.AppImage` со страницы
-  [Releases](https://github.com/IvanTopGaming/ITG_Ray/releases), сделай его
-  исполняемым и запусти. Для режима TUN требуется, чтобы встроенный helper
-  работал как служба systemd — для TUN рекомендуется установка через
-  AUR/тарболл.
+- **Arch Linux (AUR)**
+  ```bash
+  yay -S itgray-bin
+  sudo systemctl enable --now itgray-helper.service
+  ```
+- **AppImage** — скачай `ITGRay-<version>.AppImage` со страницы
+  [Releases](https://github.com/IvanTopGaming/ITG_Ray/releases), сделай
+  исполняемым и запусти. Режиму TUN нужен хелпер как systemd-сервис — для TUN
+  рекомендуется установка через AUR / tarball.
 
-### Windows
+### 🪟 Windows
 
 Скачай и запусти `ITGRay-Setup-<version>.exe` со страницы
 [Releases](https://github.com/IvanTopGaming/ITG_Ray/releases). Установщик
-регистрирует helper-службу и устанавливает драйвер Wintun.
+регистрирует сервис хелпера и кладёт драйвер Wintun.
 
-## Сборка из исходников
+## 🔨 Сборка из исходников
 
-Требуется: Go 1.26+, Node 22+, npm. Для кросс-сборки установщика Windows дополнительно нужен wine.
+> Требуется: **Go 1.26+**, **Node 22+**, npm. Для кросс-сборки установщика
+> Windows дополнительно нужен **wine**.
 
 ```bash
 git clone https://github.com/IvanTopGaming/ITG_Ray
 cd ITG_Ray
 (cd cmd/itgray-electron && npm ci && cd frontend && npm ci)
-bash scripts/build-linux.sh     # AppImage + binaries in dist/
-bash scripts/build-windows.sh   # NSIS installer (cross-compiled from Linux)
+bash scripts/build-linux.sh     # AppImage + бинарники в dist/
+bash scripts/build-windows.sh   # NSIS-установщик (кросс-сборка с Linux)
 ```
 
-## Архитектура
+## 🏗️ Архитектура
 
 ```
-Electron GUI ──IPC──▶ bridge ──HTTP/unix──▶ itgray-helper (root, systemd/service)
-                                                  │
-                                          spawns sing-box / xray
+┌──────────────┐   IPC    ┌──────────┐  HTTP/unix   ┌─────────────────────────┐
+│  Electron UI │ ───────▶ │  bridge  │ ───────────▶ │  itgray-helper (root)   │
+└──────────────┘          └──────────┘              │  systemd / win service  │
+                                                    └───────────┬─────────────┘
+                                                                │ spawns
+                                                        sing-box / xray
 ```
 
-Helper владеет всем привилегированным (интерфейс TUN, маршруты, DNS); GUI
-общается с ним через локальный API и может перезапускаться независимо —
-активный туннель переживает перезапуск GUI.
+Хелпер владеет всем привилегированным (TUN-интерфейс, маршруты, DNS). GUI
+общается с ним по локальному API и может перезапускаться независимо —
+**активный туннель переживает перезапуск GUI**.
 
-## Лицензия
+## 📄 Лицензия
 
-GPL-3.0 — см. [LICENSE](LICENSE). Список используемых сторонних компонентов
-находится в [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md).
+[GPL-3.0](LICENSE) © IvanTopGaming. Сторонние компоненты перечислены в
+[docs/THIRD_PARTY.md](docs/THIRD_PARTY.md).
