@@ -49,7 +49,7 @@ func (c *Client) Counters(ctx context.Context) (up, down uint64, err error) {
 	up, errU := c.queryCounter(ctx, "outbound>>>proxy>>>traffic>>>uplink")
 	down, errD := c.queryCounter(ctx, "outbound>>>proxy>>>traffic>>>downlink")
 	if errU != nil || errD != nil {
-		c.resetLocked()
+		_ = c.resetLocked()
 		if errU != nil {
 			return 0, 0, errU
 		}

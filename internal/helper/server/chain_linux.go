@@ -27,7 +27,9 @@ import (
 // Unlike Windows (%ProgramData%\ITG Ray\Helper\runtime), Linux has no
 // per-session cleanup dance — sing-box's auto_route owns routes + DNS
 // natively, so there is nothing host-level to preserve across sessions.
-const runtimeDir = "/run/itgray-helper"
+// runtimeDir is a var (not const) so tests can point it at a writable temp
+// directory; in production it is always the root-owned /run path.
+var runtimeDir = "/run/itgray-helper"
 
 // spawnCore is the process spawner, overridable in tests.
 var spawnCore = supervisor.Spawn

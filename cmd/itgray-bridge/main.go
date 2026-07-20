@@ -417,7 +417,7 @@ func main() {
 
 	if err := d.Serve(ctx, os.Stdin, out); err != nil {
 		fmt.Fprintln(os.Stderr, "bridge: serve:", err)
-		os.Exit(1)
+		os.Exit(1) //nolint:gocritic // fatal serve error: process is exiting, graceful drain is unnecessary
 	}
 
 	// Cancel context so the forwarder goroutine exits its drain loop,

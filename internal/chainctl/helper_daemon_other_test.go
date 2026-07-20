@@ -14,16 +14,21 @@ type recordingClient struct {
 	label   string
 }
 
-func (r *recordingClient) StartChain(context.Context, []byte, []byte, Mode) error { r.started = true; return nil }
-func (r *recordingClient) StopChain(context.Context) error                        { r.stopped = true; return nil }
-func (r *recordingClient) TunCreate(context.Context, string, string) error        { return errors.New("x") }
-func (r *recordingClient) TunDestroy(context.Context) error                       { return nil }
-func (r *recordingClient) RouteSnapshot(context.Context) error                    { return errors.New("x") }
-func (r *recordingClient) RouteAdd(context.Context, string) error                 { return errors.New("x") }
-func (r *recordingClient) RouteRestore(context.Context) error                     { return nil }
-func (r *recordingClient) DnsSet(context.Context, []string) error                 { return errors.New("x") }
-func (r *recordingClient) DnsRestore(context.Context) error                       { return nil }
-func (r *recordingClient) ServiceStatus(context.Context) (ChainState, error)      { return ChainState{Running: r.started && !r.stopped}, nil }
+func (r *recordingClient) StartChain(context.Context, []byte, []byte, Mode) error {
+	r.started = true
+	return nil
+}
+func (r *recordingClient) StopChain(context.Context) error                 { r.stopped = true; return nil }
+func (r *recordingClient) TunCreate(context.Context, string, string) error { return errors.New("x") }
+func (r *recordingClient) TunDestroy(context.Context) error                { return nil }
+func (r *recordingClient) RouteSnapshot(context.Context) error             { return errors.New("x") }
+func (r *recordingClient) RouteAdd(context.Context, string) error          { return errors.New("x") }
+func (r *recordingClient) RouteRestore(context.Context) error              { return nil }
+func (r *recordingClient) DnsSet(context.Context, []string) error          { return errors.New("x") }
+func (r *recordingClient) DnsRestore(context.Context) error                { return nil }
+func (r *recordingClient) ServiceStatus(context.Context) (ChainState, error) {
+	return ChainState{Running: r.started && !r.stopped}, nil
+}
 
 func TestModeRouting_TUNGoesToDaemon(t *testing.T) {
 	core := &recordingClient{label: "core"}

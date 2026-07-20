@@ -2,6 +2,7 @@ package refresh
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -85,7 +86,7 @@ func TestDriver_Run_LogsScopedStartupSummary(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	if err := d.Run(ctx); err != nil && err != context.DeadlineExceeded {
+	if err := d.Run(ctx); err != nil && !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Run: %v", err)
 	}
 

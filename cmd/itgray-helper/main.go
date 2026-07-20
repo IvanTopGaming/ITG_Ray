@@ -35,7 +35,7 @@ func main() {
 			var w io.Writer = os.Stderr
 			logPath := filepath.Join(server.RuntimeDir(), "helper.log")
 			if err := os.MkdirAll(filepath.Dir(logPath), 0o750); err == nil {
-				if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o640); err == nil {
+				if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o640); err == nil { //nolint:gosec // path is app-controlled, not attacker-supplied
 					_ = f.Close()
 					w = io.MultiWriter(os.Stderr, logging.NewRotatingWriter(logPath, 5*1024*1024, 3))
 				}

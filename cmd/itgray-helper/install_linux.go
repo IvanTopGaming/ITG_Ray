@@ -35,7 +35,7 @@ func install(uid int) error {
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("install must run as root")
 	}
-	if err := os.MkdirAll(installDir, 0o755); err != nil {
+	if err := os.MkdirAll(installDir, 0o755); err != nil { //nolint:gosec // installed helper assets, root-owned
 		return err
 	}
 	self, err := os.Executable()
@@ -56,7 +56,7 @@ func install(uid int) error {
 			return fmt.Errorf("copy %s: %w", name, err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(unitDir, "itgray-helper.service"), []byte(renderServiceUnit(uid)), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(unitDir, "itgray-helper.service"), []byte(renderServiceUnit(uid)), 0o644); err != nil { //nolint:gosec // installed helper assets, root-owned
 		return err
 	}
 	if err := run("systemctl", "daemon-reload"); err != nil {
@@ -85,7 +85,7 @@ func copyExecutable(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer in.Close() //nolint:errcheck
+	defer in.Close()                                                        //nolint:errcheck
 	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o755) //nolint:gosec
 	if err != nil {
 		return err

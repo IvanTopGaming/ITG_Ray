@@ -45,7 +45,7 @@ func NewReadLogsHandler() Handler {
 				slog.String("stage", "open"), slog.String("name", args.Name), slog.String("err", logging.RedactError(err)))
 			return nil, err
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 
 		info, err := f.Stat()
 		if err != nil {
