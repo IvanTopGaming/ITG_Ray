@@ -22,6 +22,18 @@ privileged helper daemon so the GUI itself never runs as root.
 - **Observability** — live core logs, traffic stats and latency probing.
 - **Bilingual UI** — English and Russian.
 
+## Screenshots
+
+| Servers | Routing rules |
+| --- | --- |
+| ![Servers](docs/screenshots/servers.png) | ![Routing rules](docs/screenshots/routing.png) |
+
+| Subscriptions | Dashboard |
+| --- | --- |
+| ![Subscriptions](docs/screenshots/subscriptions.png) | ![Dashboard](docs/screenshots/main.png) |
+
+*(Screenshots use demo servers — real endpoints are not shown.)*
+
 ## Install
 
 ### Linux
@@ -41,7 +53,7 @@ installer registers the helper service and ships the Wintun driver.
 
 ## Build from source
 
-Prerequisites: Go 1.23+, Node 22+, npm. Cross-building the Windows installer additionally requires wine.
+Prerequisites: Go 1.26+, Node 22+, npm. Cross-building the Windows installer additionally requires wine.
 
 ```bash
 git clone https://github.com/IvanTopGaming/ITG_Ray
