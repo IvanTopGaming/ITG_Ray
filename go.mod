@@ -9,7 +9,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 	github.com/xtls/xray-core v1.260327.0
-	golang.org/x/net v0.54.0
+	golang.org/x/net v0.55.0
 	golang.org/x/sys v0.45.0
 	golang.org/x/tools v0.45.0
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2
