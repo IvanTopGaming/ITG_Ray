@@ -135,6 +135,14 @@ type Controller struct {
 	prevUp   uint64
 	prevDown uint64
 	prevAt   time.Time
+	// wg tracks the single in-flight goroutine that owns c.cancel's
+	// context — Start's bringUp+runPoller, or Reconcile's adopted
+	// runPoller. Stop() waits on it (after canceling that context) before
+	// running its own tearDown, so a bringUp that's still mid-flight when
+	// Stop() lands can never finish and leave a chain nothing tracks
+	// (backend-review Finding 1: cancel used to only reach the poller's
+	// context, never the one bringUp actually ran under).
+	wg sync.WaitGroup
 }
 
 // New constructs a Controller. Defaults: when Deps.Network is nil, it is
@@ -173,13 +181,18 @@ func (c *Controller) Start(ctx context.Context, serverID string, mode Mode) erro
 		return fmt.Errorf("chainctl: server %q not found", serverID)
 	}
 
-	pollCtx, cancel := context.WithCancel(context.Background())
+	// connectCtx (not the caller's ctx) is what bringUp actually runs
+	// under, and it's the same context runPoller consumes afterward —
+	// cancel is stored in c.cancel so Stop() can reach both halves of
+	// this attempt with a single cancel() call.
+	connectCtx, cancel := context.WithCancel(context.Background())
 	c.cancel = cancel
 	c.current = srv
 	c.mode = mode
 	c.prevAt = time.Now()
 	c.prevUp = 0
 	c.prevDown = 0
+	c.wg.Add(1)
 	c.mu.Unlock()
 
 	c.d.Hub.Publish(hub.Event{
@@ -188,7 +201,30 @@ func (c *Controller) Start(ctx context.Context, serverID string, mode Mode) erro
 	})
 
 	go func() {
-		effectiveMode, net, err := c.bringUp(ctx, srv, mode)
+		defer c.wg.Done()
+		effectiveMode, net, err := c.bringUp(connectCtx, srv, mode)
+		// Capture before this goroutine's own error path (below) calls
+		// cancel() itself — at this point a non-nil Err() can only mean
+		// Stop() canceled connectCtx out from under us while bringUp was
+		// still running.
+		stolen := connectCtx.Err() != nil
+		if stolen {
+			// Stop() already reclaimed ownership (cleared c.cancel/
+			// c.current) and is waiting on c.wg before running its own
+			// tearDown — that tearDown will unwind whatever bringUp did
+			// or didn't manage to roll back itself. Don't publish a
+			// transition or touch controller state here: a newer Start()
+			// may already own it by the time we get the lock.
+			if err != nil {
+				slog.Warn("chain connect failed after Stop canceled it; Stop's teardown will finish unwinding",
+					slog.String("scope", "chainctl"), slog.String("mode", string(mode)),
+					slog.String("err", logging.RedactError(err)))
+			} else {
+				slog.Warn("chain connect succeeded after Stop canceled it; discarding, Stop's teardown will unwind it",
+					slog.String("scope", "chainctl"), slog.String("mode", string(effectiveMode)))
+			}
+			return
+		}
 		if err != nil {
 			slog.Error("chain connect failed", slog.String("scope", "chainctl"),
 				slog.String("mode", string(mode)), slog.String("err", logging.RedactError(err)))
@@ -228,7 +264,7 @@ func (c *Controller) Start(ctx context.Context, serverID string, mode Mode) erro
 				"connectedAt": time.Now().UnixMilli(),
 			},
 		})
-		c.runPoller(pollCtx)
+		c.runPoller(connectCtx)
 	}()
 	return nil
 }
@@ -250,6 +286,17 @@ func (c *Controller) Stop(ctx context.Context) error {
 		Name:    hub.EventVPNStatus,
 		Payload: map[string]any{"status": string(hub.StatusDisconnecting)},
 	})
+	// Wait for whatever goroutine owns this attempt (Start's bringUp +
+	// runPoller, or Reconcile's adopted runPoller) to actually observe
+	// the cancel and return. Without this, a bringUp that's still
+	// mid-flight when we cancel it can keep running the helper-RPC
+	// sequence concurrently with our tearDown below and finish
+	// afterward — leaving a live chain that nothing tracks (backend-
+	// review Finding 1). The goroutine detects it lost the race via
+	// ctx.Err() and skips publishing/state changes, so our tearDown here
+	// is the single authoritative cleanup pass for whatever it did or
+	// didn't manage to roll back itself.
+	c.wg.Wait()
 	c.tearDown(ctx, mode)
 	c.d.Hub.Publish(hub.Event{
 		Name:    hub.EventVPNStatus,
@@ -545,6 +592,7 @@ func (c *Controller) Reconcile(ctx context.Context) {
 	c.prevAt = time.Now()
 	c.prevUp = state.UpBytes
 	c.prevDown = state.DownBytes
+	c.wg.Add(1)
 	c.mu.Unlock()
 
 	payload := map[string]any{
@@ -564,5 +612,8 @@ func (c *Controller) Reconcile(ctx context.Context) {
 	slog.Info("chainctl reconcile: adopted running chain", slog.String("scope", "chainctl"),
 		slog.String("server", srv.ID), slog.String("mode", string(mode)))
 
-	go c.runPoller(pollCtx)
+	go func() {
+		defer c.wg.Done()
+		c.runPoller(pollCtx)
+	}()
 }
