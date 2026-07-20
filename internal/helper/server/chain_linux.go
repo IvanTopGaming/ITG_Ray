@@ -208,13 +208,15 @@ func NewStartChainHandler() Handler {
 		// on failure — config bytes carry server credentials and must never
 		// reach the log stream.
 		sbPath := filepath.Join(runtimeDir, "sing-box.json")
-		if err := os.WriteFile(sbPath, a.SingboxConfig, 0o640); err != nil { //nolint:gosec // /run/itgray-helper, root-only
+		sbCfg := sanitizeCoreConfig("sing-box", a.SingboxConfig, runtimeDir)
+		if err := os.WriteFile(sbPath, sbCfg, 0o640); err != nil { //nolint:gosec // /run/itgray-helper, root-only
 			slog.Error("chain start failed", slog.String("scope", "helper"),
 				slog.String("stage", "write-sing-box-config"), slog.String("err", logging.RedactError(err)))
 			return nil, fmt.Errorf("write sing-box config: %w", err)
 		}
 		xrPath := filepath.Join(runtimeDir, "xray.json")
-		if err := os.WriteFile(xrPath, a.XrayConfig, 0o640); err != nil { //nolint:gosec // /run/itgray-helper, root-only
+		xrCfg := sanitizeCoreConfig("xray", a.XrayConfig, runtimeDir)
+		if err := os.WriteFile(xrPath, xrCfg, 0o640); err != nil { //nolint:gosec // /run/itgray-helper, root-only
 			slog.Error("chain start failed", slog.String("scope", "helper"),
 				slog.String("stage", "write-xray-config"), slog.String("err", logging.RedactError(err)))
 			return nil, fmt.Errorf("write xray config: %w", err)

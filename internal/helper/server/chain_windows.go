@@ -236,14 +236,16 @@ func NewStartChainHandler() Handler {
 
 		// Step 2: persist configs.
 		sbPath := runtime.ConfigPath("sing-box.json")
-		if err := os.WriteFile(sbPath, a.SingboxConfig, 0o640); err != nil { //nolint:gosec // %ProgramData%, admin-only
+		sbCfg := sanitizeCoreConfig("sing-box", a.SingboxConfig, runtime.BasePath())
+		if err := os.WriteFile(sbPath, sbCfg, 0o640); err != nil { //nolint:gosec // %ProgramData%, admin-only
 			rollback()
 			slog.Error("chain start failed", slog.String("scope", "helper"),
 				slog.String("stage", "write-sing-box-config"), slog.String("err", logging.RedactError(err)))
 			return nil, fmt.Errorf("write sing-box config: %w", err)
 		}
 		xrPath := runtime.ConfigPath("xray.json")
-		if err := os.WriteFile(xrPath, a.XrayConfig, 0o640); err != nil { //nolint:gosec // %ProgramData%, admin-only
+		xrCfg := sanitizeCoreConfig("xray", a.XrayConfig, runtime.BasePath())
+		if err := os.WriteFile(xrPath, xrCfg, 0o640); err != nil { //nolint:gosec // %ProgramData%, admin-only
 			rollback()
 			slog.Error("chain start failed", slog.String("scope", "helper"),
 				slog.String("stage", "write-xray-config"), slog.String("err", logging.RedactError(err)))
