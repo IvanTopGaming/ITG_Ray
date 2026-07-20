@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Dry-run version (no release created), e.g. 0.0.0-test.1"
+        required: true
+        default: "0.0.0-test.1"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # build scripts derive the version via git describe
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            cmd/itgray-electron/package-lock.json
+            cmd/itgray-electron/frontend/package-lock.json
+      - name: determine version
+        id: ver
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: install wine (electron-builder needs it to edit exe resources)
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends wine wine32:i386
+      - name: install npm deps
+        run: |
+          npm --prefix cmd/itgray-electron ci
+          npm --prefix cmd/itgray-electron/frontend ci
+      - name: stamp package.json version (electron-builder artifact names)
+        run: npm --prefix cmd/itgray-electron version --no-git-tag-version "${{ steps.ver.outputs.version }}"
+      - name: build linux (binaries + AppImage)
+        run: VERSION="v${{ steps.ver.outputs.version }}" bash scripts/build-linux.sh
+      - name: assemble linux tarball
+        run: bash scripts/make-linux-tarball.sh "${{ steps.ver.outputs.version }}"
+      - name: build windows (binaries + NSIS installer)
+        run: VERSION="v${{ steps.ver.outputs.version }}" bash scripts/build-windows.sh
+      - name: collect artifacts + checksums
+        run: |
+          mkdir -p out
+          cp dist/ITGRay-*.AppImage dist/ITGRay-*-linux-x64.tar.gz dist/ITGRay-Setup-*.exe out/
+          (cd out && sha256sum * > sha256sums.txt && cat sha256sums.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: out/*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: out
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          prerelease: true
+          files: out/*
