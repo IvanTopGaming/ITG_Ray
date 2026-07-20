@@ -90,9 +90,17 @@ func logLevelOrDefault(level string) string {
 // buildDNSBlock builds the sing-box dns block in the 1.12+ schema. In TUN
 // mode with FakeIP enabled, it emits a remote+fakeip server pair where the
 // fakeip server type returns synthetic IPs in 198.18.0.0/15 for A/AAAA
-// queries; everything else falls through to route.default_domain_resolver.
-// In any other configuration, it emits a single "default" server. Both
-// shapes also declare a "local" server that the direct outbound's
+// queries; every other query type (e.g. the HTTPS/SVCB queries virtually
+// every modern browser sends) doesn't match dns.rules and is caught by
+// dns.final:"remote" instead. In any other configuration, it emits a single
+// "default" server and sets dns.final to that same tag, since this branch
+// declares no dns.rules at all and every query would otherwise hit final.
+// Without dns.final, sing-box's DNS engine silently falls back to an
+// implicit type:local transport (system resolver, no tunnel, no TLS) for
+// anything final would have caught — that fallback is independent of
+// route.default_domain_resolver, which only governs domain resolution
+// outbound connections trigger, not queries arriving at the DNS engine
+// itself. Both shapes also declare a "local" server that the direct outbound's
 // domain_resolver points at, so direct-routed domains resolve off the
 // physical NIC — correct GeoDNS answers for the user's real region, no proxy
 // leak. Two deliberate choices make that geo-correct:
@@ -148,6 +156,7 @@ func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
 			"rules": []map[string]any{
 				{"query_type": []string{"A", "AAAA"}, "server": "fakeip"},
 			},
+			"final":             "remote",
 			"independent_cache": true,
 			"strategy":          strategy,
 		}
@@ -157,6 +166,7 @@ func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
 			{"tag": "default", "type": "tls", "server": upstreams[0], "detour": "proxy"},
 			{"tag": "local", "type": "tls", "server": localGeoResolver, "detour": "direct"},
 		},
+		"final":    "default",
 		"strategy": strategy,
 	}
 }

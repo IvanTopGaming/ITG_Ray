@@ -3,6 +3,7 @@ package chainctl
 import (
 	"context"
 	"sync"
+	"time"
 )
 
 // fakeHelper implements HelperClient in-memory for tests. Op call order
@@ -26,6 +27,15 @@ type fakeHelper struct {
 	tunDestroyErr   error
 	routeRestoreErr error
 	dnsRestoreErr   error
+
+	// startChainDelay, when set, makes StartChain block for the given
+	// duration before it records the call / flips running — used by the
+	// Start/Stop race test to widen the window where a concurrent Stop()
+	// can land while a connect is still in flight. Deliberately ignores
+	// ctx (mirrors the reviewer's throwaway repro): the fix must not rely
+	// on the helper client honoring cancellation to avoid the orphan, it
+	// must win via the ownership check regardless.
+	startChainDelay time.Duration
 }
 
 func newFake() *fakeHelper { return &fakeHelper{} }
@@ -51,6 +61,14 @@ func (e errStub) Error() string { return string(e) }
 var errFail = errStub("forced failure")
 
 func (f *fakeHelper) StartChain(_ context.Context, _, _ []byte, mode Mode) error {
+	f.mu.Lock()
+	delay := f.startChainDelay
+	f.mu.Unlock()
+	if delay > 0 {
+		// Outside the lock: StopChain/etc. must be able to run
+		// concurrently while this call is "in flight".
+		time.Sleep(delay)
+	}
 	if err := f.note("StartChain"); err != nil {
 		return err
 	}

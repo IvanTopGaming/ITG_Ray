@@ -657,14 +657,27 @@ func TestStart_MTUOutOfRange_PassesRawToBuildConfigs(t *testing.T) {
 // config-driven SOCKS/HTTP ports landing on the manager. Safe for
 // concurrent use because the Controller's bringUp runs on a worker
 // goroutine while the test asserts from the main goroutine.
+//
+// setErr simulates a Set() failure (e.g. a partial/failed registry write
+// or a notifyWinInet hiccup) so backend-review finding 1's rollback gap
+// (bringUp not calling Clear() when Set fails) can be exercised. Mirrors
+// winManager.Set's worst case: a partial write leaves the proxy "on" even
+// though Set returned an error, so Set still flips f.on = true on failure.
+//
+// clearIneffective simulates a Clear() that runs (and may report success)
+// without actually flipping the OS proxy off — mirrors winManager.Clear()
+// swallowing its own SetDWordValue error (finding 5) — so tests can pin
+// that callers verify with IsSet() after Clear() and warn if still set.
 type fakeSysproxy struct {
-	mu         sync.Mutex
-	setCalls   int
-	clearCalls int
-	isSetCalls int
-	on         bool
-	last       sysproxy.Settings
-	clearErr   error
+	mu               sync.Mutex
+	setCalls         int
+	clearCalls       int
+	isSetCalls       int
+	on               bool
+	last             sysproxy.Settings
+	setErr           error
+	clearErr         error
+	clearIneffective bool
 }
 
 func (f *fakeSysproxy) Set(s sysproxy.Settings) error {
@@ -673,14 +686,16 @@ func (f *fakeSysproxy) Set(s sysproxy.Settings) error {
 	f.setCalls++
 	f.on = true
 	f.last = s
-	return nil
+	return f.setErr
 }
 
 func (f *fakeSysproxy) Clear() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.clearCalls++
-	f.on = false
+	if !f.clearIneffective {
+		f.on = false
+	}
 	return f.clearErr
 }
 
@@ -701,4 +716,10 @@ func (f *fakeSysproxy) ClearCalls() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.clearCalls
+}
+
+func (f *fakeSysproxy) IsSetCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.isSetCalls
 }

@@ -10,6 +10,7 @@ package chainctl
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -135,6 +136,20 @@ type Controller struct {
 	prevUp   uint64
 	prevDown uint64
 	prevAt   time.Time
+	// wg tracks the single in-flight goroutine that owns c.cancel's
+	// context — Start's bringUp+runPoller, or Reconcile's adopted
+	// runPoller. Stop() waits on it (after canceling that context) before
+	// running its own tearDown, so a bringUp that's still mid-flight when
+	// Stop() lands can never finish and leave a chain nothing tracks
+	// (backend-review Finding 1: cancel used to only reach the poller's
+	// context, never the one bringUp actually ran under).
+	//
+	// wg is reused across Start/Stop cycles, which is safe only because the
+	// Controller is driven serially: the bridge dispatcher (Serve) handles ops
+	// one at a time and Reconcile runs once at boot, so a Start never Add()s
+	// concurrently with a Stop still inside Wait(). Callers must preserve that
+	// serialization.
+	wg sync.WaitGroup
 }
 
 // New constructs a Controller. Defaults: when Deps.Network is nil, it is
@@ -173,13 +188,18 @@ func (c *Controller) Start(ctx context.Context, serverID string, mode Mode) erro
 		return fmt.Errorf("chainctl: server %q not found", serverID)
 	}
 
-	pollCtx, cancel := context.WithCancel(context.Background())
+	// connectCtx (not the caller's ctx) is what bringUp actually runs
+	// under, and it's the same context runPoller consumes afterward —
+	// cancel is stored in c.cancel so Stop() can reach both halves of
+	// this attempt with a single cancel() call.
+	connectCtx, cancel := context.WithCancel(context.Background())
 	c.cancel = cancel
 	c.current = srv
 	c.mode = mode
 	c.prevAt = time.Now()
 	c.prevUp = 0
 	c.prevDown = 0
+	c.wg.Add(1)
 	c.mu.Unlock()
 
 	c.d.Hub.Publish(hub.Event{
@@ -188,7 +208,30 @@ func (c *Controller) Start(ctx context.Context, serverID string, mode Mode) erro
 	})
 
 	go func() {
-		effectiveMode, net, err := c.bringUp(ctx, srv, mode)
+		defer c.wg.Done()
+		effectiveMode, net, err := c.bringUp(connectCtx, srv, mode)
+		// Capture before this goroutine's own error path (below) calls
+		// cancel() itself — at this point a non-nil Err() can only mean
+		// Stop() canceled connectCtx out from under us while bringUp was
+		// still running.
+		stolen := connectCtx.Err() != nil
+		if stolen {
+			// Stop() already reclaimed ownership (cleared c.cancel/
+			// c.current) and is waiting on c.wg before running its own
+			// tearDown — that tearDown will unwind whatever bringUp did
+			// or didn't manage to roll back itself. Don't publish a
+			// transition or touch controller state here: a newer Start()
+			// may already own it by the time we get the lock.
+			if err != nil {
+				slog.Warn("chain connect failed after Stop canceled it; Stop's teardown will finish unwinding",
+					slog.String("scope", "chainctl"), slog.String("mode", string(mode)),
+					slog.String("err", logging.RedactError(err)))
+			} else {
+				slog.Warn("chain connect succeeded after Stop canceled it; discarding, Stop's teardown will unwind it",
+					slog.String("scope", "chainctl"), slog.String("mode", string(effectiveMode)))
+			}
+			return
+		}
 		if err != nil {
 			slog.Error("chain connect failed", slog.String("scope", "chainctl"),
 				slog.String("mode", string(mode)), slog.String("err", logging.RedactError(err)))
@@ -228,7 +271,7 @@ func (c *Controller) Start(ctx context.Context, serverID string, mode Mode) erro
 				"connectedAt": time.Now().UnixMilli(),
 			},
 		})
-		c.runPoller(pollCtx)
+		c.runPoller(connectCtx)
 	}()
 	return nil
 }
@@ -250,6 +293,17 @@ func (c *Controller) Stop(ctx context.Context) error {
 		Name:    hub.EventVPNStatus,
 		Payload: map[string]any{"status": string(hub.StatusDisconnecting)},
 	})
+	// Wait for whatever goroutine owns this attempt (Start's bringUp +
+	// runPoller, or Reconcile's adopted runPoller) to actually observe
+	// the cancel and return. Without this, a bringUp that's still
+	// mid-flight when we cancel it can keep running the helper-RPC
+	// sequence concurrently with our tearDown below and finish
+	// afterward — leaving a live chain that nothing tracks (backend-
+	// review Finding 1). The goroutine detects it lost the race via
+	// ctx.Err() and skips publishing/state changes, so our tearDown here
+	// is the single authoritative cleanup pass for whatever it did or
+	// didn't manage to roll back itself.
+	c.wg.Wait()
 	c.tearDown(ctx, mode)
 	c.d.Hub.Publish(hub.Event{
 		Name:    hub.EventVPNStatus,
@@ -392,11 +446,26 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 			return mode, config.Network{}, fmt.Errorf("DnsSet: %w", err)
 		}
 	} else {
-		if err := c.d.Sysproxy.Set(sysproxy.Settings{Socks: socksAddr, HTTP: httpAddr}); err != nil {
+		if err := c.d.Sysproxy.Set(sysproxy.Settings{Socks: socksAddr, HTTP: httpAddr}); errors.Is(err, sysproxy.ErrNotifyOnly) {
+			// The registry was written correctly; only the WinINet "settings
+			// changed" broadcast failed. The OS proxy IS pointed at our live
+			// port, so tearing the chain down here would blackhole the user for
+			// a purely cosmetic notification failure. Log and proceed — apps
+			// pick up the new proxy on their next settings refresh regardless.
+			slog.Warn("sysproxy set: notify failed, proxy is set", slog.String("scope", "chainctl"),
+				slog.String("err", logging.RedactError(err)))
+		} else if err != nil {
 			if serr := c.d.Helper.StopChain(ctx); serr != nil {
 				slog.Warn("chainctl rollback: stop chain failed", slog.String("scope", "chainctl"),
 					slog.String("err", logging.RedactError(serr)))
 			}
+			// sysproxy.Set can fail after partially writing the registry
+			// (ProxyEnable=1 with a stale/dead ProxyServer value) — without
+			// this, StopChain above just killed the port the OS proxy now
+			// points at, blackholing the user's traffic. Best-effort: an
+			// already-failed Set is exactly the case where Clear() might
+			// also fail, so this only ever improves on the pre-fix no-op.
+			c.clearSysproxyBestEffort("chainctl rollback")
 			return mode, config.Network{}, fmt.Errorf("sysproxy.Set: %w", err)
 		}
 	}
@@ -408,15 +477,30 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 	return mode, net, nil
 }
 
+// clearSysproxyBestEffort clears the OS sysproxy and re-verifies with
+// IsSet() afterward, logging a Warn if it's still enabled. Clear() itself
+// can swallow a registry-write failure and report success anyway (see
+// sysproxy_windows.go's Clear), so every caller that needs a guarantee the
+// OS proxy doesn't outlive its chain — tearDown, the sysproxy-mode bringUp
+// rollback, and Reconcile's stale-session branch — routes through here
+// rather than calling Sysproxy.Clear() directly. step names the caller for
+// the log line (e.g. "chainctl teardown").
+func (c *Controller) clearSysproxyBestEffort(step string) {
+	if err := c.d.Sysproxy.Clear(); err != nil {
+		slog.Warn(step+": sysproxy clear failed", slog.String("scope", "chainctl"),
+			slog.String("err", logging.RedactError(err)))
+	}
+	if on, err := c.d.Sysproxy.IsSet(); err == nil && on {
+		slog.Warn(step+": sysproxy still enabled after clear", slog.String("scope", "chainctl"))
+	}
+}
+
 // tearDown is best-effort: every step is independent and errors are
 // swallowed so a partial bringup can still be unwound.
 func (c *Controller) tearDown(ctx context.Context, mode Mode) {
 	tearStart := time.Now()
 	if mode == ModeSysProxy {
-		if err := c.d.Sysproxy.Clear(); err != nil {
-			slog.Warn("chainctl teardown: sysproxy clear failed", slog.String("scope", "chainctl"),
-				slog.String("err", logging.RedactError(err)))
-		}
+		c.clearSysproxyBestEffort("chainctl teardown")
 	}
 	if mode == ModeTUN {
 		tDns := time.Now()
@@ -498,6 +582,15 @@ func (c *Controller) Reconcile(ctx context.Context) {
 	}
 	if !state.Running {
 		slog.Info("chainctl reconcile: nothing to recover", slog.String("scope", "chainctl"))
+		// The chain isn't running, but a prior ModeSysProxy session may
+		// have died along with the GUI itself — nothing else runs
+		// tearDown in that case, so the OS proxy can be left stuck
+		// pointing at a now-dead port until the user notices. Clean it
+		// up here so a boot-time Reconcile always leaves sysproxy
+		// consistent with the (non-)running chain it just observed.
+		if rec.Mode == string(ModeSysProxy) {
+			c.clearSysproxyBestEffort("chainctl reconcile")
+		}
 		c.mu.Lock()
 		c.current = srv
 		c.mode = Mode(rec.Mode)
@@ -514,6 +607,7 @@ func (c *Controller) Reconcile(ctx context.Context) {
 	c.prevAt = time.Now()
 	c.prevUp = state.UpBytes
 	c.prevDown = state.DownBytes
+	c.wg.Add(1)
 	c.mu.Unlock()
 
 	payload := map[string]any{
@@ -533,5 +627,8 @@ func (c *Controller) Reconcile(ctx context.Context) {
 	slog.Info("chainctl reconcile: adopted running chain", slog.String("scope", "chainctl"),
 		slog.String("server", srv.ID), slog.String("mode", string(mode)))
 
-	go c.runPoller(pollCtx)
+	go func() {
+		defer c.wg.Done()
+		c.runPoller(pollCtx)
+	}()
 }
