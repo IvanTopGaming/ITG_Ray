@@ -99,18 +99,18 @@ func TestRedact_BareTokenInURLPath(t *testing.T) {
 	// UUID-anchored rules can't catch that on their own. This exercises the
 	// automatic Redact() path directly (not the opt-in RedactError special
 	// case), e.g. what a raw err.Error() string would look like.
-	in := `Get "https://panel.example.com/REDACTED/api/sub/9f8a7b6c5d4e3f2a1b0c": dial tcp: i/o timeout`
+	in := `Get "https://panel.example.com/Ex4mpl3T0k3n/api/sub/9f8a7b6c5d4e3f2a1b0c": dial tcp: i/o timeout`
 	got := Redact(in)
-	require.NotContains(t, got, "REDACTED")
+	require.NotContains(t, got, "Ex4mpl3T0k3n")
 	require.NotContains(t, got, "9f8a7b6c5d4e3f2a1b0c")
 	require.Contains(t, got, "panel.example.com")
 	require.Contains(t, got, "i/o timeout")
 }
 
 func TestRedact_BareTokenInURLQuery(t *testing.T) {
-	in := "fetch failed: https://panel.example.com/sub?k=REDACTEDNoKeywordHere"
+	in := "fetch failed: https://panel.example.com/sub?k=Ex4mpl3T0k3nNoKeywordHere"
 	got := Redact(in)
-	require.NotContains(t, got, "REDACTEDNoKeywordHere")
+	require.NotContains(t, got, "Ex4mpl3T0k3nNoKeywordHere")
 }
 
 func TestRedact_URLWithNoPathIsUnchanged(t *testing.T) {

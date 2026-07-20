@@ -31,7 +31,7 @@ var redactors = []struct {
 // urlWithPathOrQuery matches a scheme://host prefix together with anything
 // following the first '/' or '?' — the part of a URL that can carry a
 // subscription/panel access token as a bare path segment or query value with
-// no recognizable "key=" marker (e.g. https://host/REDACTED/api/sub/<uuid>).
+// no recognizable "key=" marker (e.g. https://host/Ex4mpl3T0k3n/api/sub/<uuid>).
 // The keyword- and UUID-anchored rules below only catch such tokens when
 // they're prefixed by a known key name or dash-grouped like a UUID; a bare
 // opaque token sails through untouched. This is a coarser, defense-in-depth

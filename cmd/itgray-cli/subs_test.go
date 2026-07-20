@@ -49,7 +49,7 @@ func TestSubSync_RedactsTokenFromStdoutAndStore(t *testing.T) {
 	addr := ln.Addr().String()
 	require.NoError(t, ln.Close())
 
-	const token = "REDACTED"
+	const token = "Ex4mpl3T0k3n"
 	subURL := "http://" + addr + "/" + token + "/api/sub/00000000-0000-4000-8000-000000000000"
 
 	st := subsStore()
