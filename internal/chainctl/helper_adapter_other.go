@@ -124,6 +124,8 @@ func (h *coreHelperClient) DnsRestore(context.Context) error                { re
 type modeRoutingHelperClient struct {
 	core   HelperClient
 	daemon HelperClient
+
+	mu     sync.Mutex
 	active HelperClient
 }
 
@@ -134,21 +136,27 @@ func newModeRoutingHelperClient(core, daemon HelperClient) *modeRoutingHelperCli
 // StartChain latches the active backend from the requested mode, then
 // delegates. TUN → daemon (privileged), everything else → core (in-process).
 func (m *modeRoutingHelperClient) StartChain(ctx context.Context, sb, xr []byte, mode Mode) error {
+	m.mu.Lock()
 	if mode == ModeTUN {
 		m.active = m.daemon
 	} else {
 		m.active = m.core
 	}
-	return m.active.StartChain(ctx, sb, xr, mode)
+	active := m.active
+	m.mu.Unlock()
+	return active.StartChain(ctx, sb, xr, mode)
 }
 
 // StopChain delegates to whichever backend StartChain latched. Nil-safe: a
 // StopChain before any StartChain (idle teardown) is a no-op.
 func (m *modeRoutingHelperClient) StopChain(ctx context.Context) error {
-	if m.active == nil {
+	m.mu.Lock()
+	active := m.active
+	m.mu.Unlock()
+	if active == nil {
 		return nil
 	}
-	return m.active.StopChain(ctx)
+	return active.StopChain(ctx)
 }
 
 // ServiceStatus delegates to the active backend once one is latched. Before
@@ -160,15 +168,20 @@ func (m *modeRoutingHelperClient) StopChain(ctx context.Context) error {
 // reachable (dial error) is reported as idle, NOT an error: a SysProxy-only
 // machine must never see a Reconcile error from the boot probe.
 func (m *modeRoutingHelperClient) ServiceStatus(ctx context.Context) (ChainState, error) {
-	if m.active != nil {
-		return m.active.ServiceStatus(ctx)
+	m.mu.Lock()
+	active := m.active
+	m.mu.Unlock()
+	if active != nil {
+		return active.ServiceStatus(ctx)
 	}
 	st, err := m.daemon.ServiceStatus(ctx)
 	if err != nil {
 		return ChainState{}, nil
 	}
 	if st.Running {
+		m.mu.Lock()
 		m.active = m.daemon
+		m.mu.Unlock()
 	}
 	return st, nil
 }
@@ -182,8 +195,11 @@ func (m *modeRoutingHelperClient) TunCreate(context.Context, string, string) err
 // delegate resolves the backend for the remaining granular ops: the latched
 // active backend once StartChain has run, else the core (pre-start default).
 func (m *modeRoutingHelperClient) delegate() HelperClient {
-	if m.active != nil {
-		return m.active
+	m.mu.Lock()
+	active := m.active
+	m.mu.Unlock()
+	if active != nil {
+		return active
 	}
 	return m.core
 }
