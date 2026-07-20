@@ -24,7 +24,10 @@ func TestTCPConnect_Success(t *testing.T) {
 	}()
 	d, err := TCPConnect(context.Background(), ln.Addr().String(), 2*time.Second)
 	require.NoError(t, err)
-	require.Greater(t, d, time.Duration(0))
+	// A loopback connect can complete within the clock's resolution and
+	// measure as exactly 0 (seen on Windows), so only assert it's a
+	// non-negative duration bounded below the timeout — not strictly > 0.
+	require.GreaterOrEqual(t, d, time.Duration(0))
 	require.Less(t, d, 2*time.Second)
 }
 
