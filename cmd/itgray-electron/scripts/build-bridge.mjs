@@ -23,7 +23,20 @@ const targetArch = process.env.TARGET_ARCH || "amd64";
 const ext = targetOS === "windows" ? ".exe" : "";
 
 function resolveVersion() {
-  return process.env.APP_VERSION || process.env.GIT_VERSION || "0.1.0-beta";
+  const fromEnv = process.env.APP_VERSION || process.env.GIT_VERSION;
+  if (fromEnv) return fromEnv;
+  // Match the documented fallback: derive the version from git so a dev build
+  // reports its true describe string and a release checkout (tag + full history)
+  // resolves to the exact tag. Only "dev" when git is unavailable (e.g. a
+  // source tarball with no .git), never a stale hardcoded version — a wrong
+  // version silently breaks the in-app update check's comparison.
+  try {
+    return execFileSync("git", ["describe", "--always", "--tags", "--dirty"], {
+      encoding: "utf8",
+    }).trim();
+  } catch {
+    return "dev";
+  }
 }
 
 const version = resolveVersion();
