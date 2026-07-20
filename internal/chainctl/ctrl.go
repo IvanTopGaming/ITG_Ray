@@ -397,6 +397,13 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 				slog.Warn("chainctl rollback: stop chain failed", slog.String("scope", "chainctl"),
 					slog.String("err", logging.RedactError(serr)))
 			}
+			// sysproxy.Set can fail after partially writing the registry
+			// (ProxyEnable=1 with a stale/dead ProxyServer value) — without
+			// this, StopChain above just killed the port the OS proxy now
+			// points at, blackholing the user's traffic. Best-effort: an
+			// already-failed Set is exactly the case where Clear() might
+			// also fail, so this only ever improves on the pre-fix no-op.
+			c.clearSysproxyBestEffort("chainctl rollback")
 			return mode, config.Network{}, fmt.Errorf("sysproxy.Set: %w", err)
 		}
 	}
@@ -408,15 +415,30 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 	return mode, net, nil
 }
 
+// clearSysproxyBestEffort clears the OS sysproxy and re-verifies with
+// IsSet() afterward, logging a Warn if it's still enabled. Clear() itself
+// can swallow a registry-write failure and report success anyway (see
+// sysproxy_windows.go's Clear), so every caller that needs a guarantee the
+// OS proxy doesn't outlive its chain — tearDown, the sysproxy-mode bringUp
+// rollback, and Reconcile's stale-session branch — routes through here
+// rather than calling Sysproxy.Clear() directly. step names the caller for
+// the log line (e.g. "chainctl teardown").
+func (c *Controller) clearSysproxyBestEffort(step string) {
+	if err := c.d.Sysproxy.Clear(); err != nil {
+		slog.Warn(step+": sysproxy clear failed", slog.String("scope", "chainctl"),
+			slog.String("err", logging.RedactError(err)))
+	}
+	if on, err := c.d.Sysproxy.IsSet(); err == nil && on {
+		slog.Warn(step+": sysproxy still enabled after clear", slog.String("scope", "chainctl"))
+	}
+}
+
 // tearDown is best-effort: every step is independent and errors are
 // swallowed so a partial bringup can still be unwound.
 func (c *Controller) tearDown(ctx context.Context, mode Mode) {
 	tearStart := time.Now()
 	if mode == ModeSysProxy {
-		if err := c.d.Sysproxy.Clear(); err != nil {
-			slog.Warn("chainctl teardown: sysproxy clear failed", slog.String("scope", "chainctl"),
-				slog.String("err", logging.RedactError(err)))
-		}
+		c.clearSysproxyBestEffort("chainctl teardown")
 	}
 	if mode == ModeTUN {
 		tDns := time.Now()
@@ -498,6 +520,15 @@ func (c *Controller) Reconcile(ctx context.Context) {
 	}
 	if !state.Running {
 		slog.Info("chainctl reconcile: nothing to recover", slog.String("scope", "chainctl"))
+		// The chain isn't running, but a prior ModeSysProxy session may
+		// have died along with the GUI itself — nothing else runs
+		// tearDown in that case, so the OS proxy can be left stuck
+		// pointing at a now-dead port until the user notices. Clean it
+		// up here so a boot-time Reconcile always leaves sysproxy
+		// consistent with the (non-)running chain it just observed.
+		if rec.Mode == string(ModeSysProxy) {
+			c.clearSysproxyBestEffort("chainctl reconcile")
+		}
 		c.mu.Lock()
 		c.current = srv
 		c.mode = Mode(rec.Mode)

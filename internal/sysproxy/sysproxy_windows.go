@@ -48,13 +48,25 @@ func (winManager) Set(s Settings) error {
 	if err := k.SetDWordValue("ProxyEnable", 1); err != nil {
 		return fmt.Errorf("sysproxy.Set: ProxyEnable: %w", err)
 	}
+	// From here on, ProxyEnable=1 is committed to disk. Any further
+	// failure below must force it back off before returning — otherwise a
+	// partial write leaves the OS proxy enabled with a stale/empty
+	// ProxyServer value pointing nowhere.
 	if err := k.SetStringValue("ProxyServer", value); err != nil {
+		_ = k.SetDWordValue("ProxyEnable", 0)
 		return fmt.Errorf("sysproxy.Set: ProxyServer: %w", err)
 	}
 	if err := k.SetStringValue("ProxyOverride", "<local>"); err != nil {
+		_ = k.SetDWordValue("ProxyEnable", 0)
 		return fmt.Errorf("sysproxy.Set: ProxyOverride: %w", err)
 	}
-	return notifyWinInet()
+	if err := notifyWinInet(); err != nil {
+		// Registry state is fully correct at this point — only the live
+		// WinINet refresh failed. Wrap with ErrNotifyOnly so callers can
+		// tell this apart from a real write failure via errors.Is.
+		return fmt.Errorf("sysproxy.Set: %w: %w", ErrNotifyOnly, err)
+	}
+	return nil
 }
 
 // Clear sets ProxyEnable=0 and removes ProxyServer/ProxyOverride. If the key
