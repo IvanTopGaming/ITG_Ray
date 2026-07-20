@@ -52,6 +52,20 @@ func (w *RotatingWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
+// Close releases the underlying file handle. It is safe to call more than
+// once. On Windows an open handle blocks deletion of the file, so callers
+// (and tests using t.TempDir) must Close before the file can be removed.
+func (w *RotatingWriter) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.f == nil {
+		return nil
+	}
+	err := w.f.Close()
+	w.f = nil
+	return err
+}
+
 func (w *RotatingWriter) open() error {
 	if err := os.MkdirAll(filepath.Dir(w.path), 0o755); err != nil {
 		return err

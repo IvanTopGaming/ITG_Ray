@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"runtime"
 	"testing"
 
 	"github.com/itg-team/itg-ray/internal/chainctl"
@@ -50,6 +51,17 @@ func tunExcludeAddress(t *testing.T, mode chainctl.Mode) (any, bool) {
 
 func TestBuildConfigs_TUN_SetsServerExclude(t *testing.T) {
 	v, ok := tunExcludeAddress(t, chainctl.ModeTUN)
+
+	// On Windows serverExcludeForTUN deliberately returns nil: the server is
+	// kept out of the tunnel via the helper's route table, not the sing-box
+	// inbound. So route_exclude_address must be present only on non-Windows.
+	if runtime.GOOS == "windows" {
+		if ok {
+			t.Fatalf("route_exclude_address should be absent on Windows, got %v", v)
+		}
+		return
+	}
+
 	if !ok {
 		t.Fatal("expected route_exclude_address present for ModeTUN")
 	}

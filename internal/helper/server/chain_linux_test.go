@@ -14,6 +14,17 @@ import (
 	"github.com/itg-team/itg-ray/internal/logtest"
 )
 
+// useTempRuntimeDir points the package-level runtimeDir at a writable temp
+// directory for the duration of a test, so StartChain can write its core
+// configs without needing the root-owned /run path (which fails on CI runners
+// and any non-root machine).
+func useTempRuntimeDir(t *testing.T) {
+	t.Helper()
+	orig := runtimeDir
+	runtimeDir = t.TempDir()
+	t.Cleanup(func() { runtimeDir = orig })
+}
+
 func TestStartChain_RejectsMissingServer(t *testing.T) {
 	h := NewStartChainHandler()
 	_, err := h(context.Background(), mustJSON(t, StartChainArgs{TunName: "t", Mode: "tun"}))
@@ -23,6 +34,7 @@ func TestStartChain_RejectsMissingServer(t *testing.T) {
 }
 
 func TestStartChain_SpawnFailureRollsBack(t *testing.T) {
+	useTempRuntimeDir(t)
 	orig := spawnCore
 	spawnCore = func(name, exe string, args []string, logPath string) (*supervisor.Child, error) {
 		return nil, errors.New("boom")
@@ -43,6 +55,7 @@ func TestStartChain_SpawnFailureRollsBack(t *testing.T) {
 }
 
 func TestStartChain_RollbackWarnsOnSwallowedCoreStopFailure(t *testing.T) {
+	useTempRuntimeDir(t)
 	buf := logtest.Capture(t)
 
 	origSpawn := spawnCore
