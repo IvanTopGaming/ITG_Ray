@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/itg-team/itg-ray/internal/server"
+	"github.com/itg-team/itg-ray/internal/vless"
 	"github.com/stretchr/testify/require"
 )
 
@@ -83,6 +84,41 @@ func TestSync_FailureSetsErrorStatusAndMessage(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, "error", meta.Status)
 	require.NotEmpty(t, meta.Message, "Message should carry the error detail")
+}
+
+// TestSync_UnrecognizedBodyDoesNotWipeExistingServers is the regression test
+// for backend-review finding H1: a subscription body that Parse cannot
+// recognize at all (an HTML error page, a WAF interstitial, a bare "{}")
+// must NOT be treated as "this subscription now has zero servers." Before
+// the fix, Parse falls through every format stage and returns
+// ParseResult{Configs: nil}, nil (no error) for this input, so Sync called
+// server.Merge(existing, incoming=[], sub.ID) and silently dropped every
+// previously-synced server for this subscription while still reporting
+// meta.Status == "ok".
+func TestSync_UnrecognizedBodyDoesNotWipeExistingServers(t *testing.T) {
+	bodies := map[string]string{
+		"html error page":   "<html><body>502 Bad Gateway</body></html>",
+		"empty json object": "{}",
+	}
+	for name, body := range bodies {
+		t.Run(name, func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(body))
+			}))
+			defer ts.Close()
+
+			sub := Subscription{ID: "sub1", URL: ts.URL}
+			existing := []server.Server{
+				server.New(vless.Config{Address: "h", Port: 443, UUID: "u", Remark: "kept"}, server.OriginSubscription, "sub1"),
+			}
+
+			merged, meta, err := Sync(context.Background(), sub, existing, 5*time.Second)
+
+			require.Error(t, err, "an unrecognized/empty body must be surfaced as a sync failure, not a valid empty subscription")
+			require.Equal(t, "error", meta.Status)
+			require.Nil(t, merged, "Sync must not return a merged (server-wiping) list when nothing was recognized")
+		})
+	}
 }
 
 // keep server import reachable
