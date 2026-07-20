@@ -112,8 +112,11 @@ func newSubCmd() *cobra.Command {
 			for _, s := range subs {
 				merged, meta, err := subscription.Sync(ctx, s.ToSyncInput(), existing, 30*time.Second)
 				if err != nil {
-					fmt.Printf("%s\tERROR: %s\n", s.ID, err.Error())
-					_ = st.UpdateMeta(s.ID, time.Now(), "error", truncate(err.Error(), 120), nil)
+					// meta.Message is already logging.RedactError(err) (see
+					// subscription.Sync) — never fall back to the raw err.Error(),
+					// which can embed the full subscription URL/token.
+					fmt.Printf("%s\tERROR: %s\n", s.ID, meta.Message)
+					_ = st.UpdateMeta(s.ID, time.Now(), "error", truncate(meta.Message, 120), nil)
 					continue
 				}
 				existing = merged

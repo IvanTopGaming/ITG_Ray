@@ -87,12 +87,22 @@ type chainState struct {
 
 	// xrayAPI is the gRPC client to xray-core's StatsService. Created in
 	// NewStartChainHandler after xray spawns successfully; closed in
-	// stopActiveChainLocked. nil before first StartChain.
-	xrayAPI *xrayapi.Client
+	// stopActiveChainLocked. nil before first StartChain. Typed as the
+	// narrow statsClient interface (rather than *xrayapi.Client directly)
+	// so tests can substitute a fake that blocks, simulating a wedged
+	// xray-core without a real gRPC server.
+	xrayAPI statsClient
 	// cachedUp/cachedDown are the last successful counter readings; used
 	// by OpServiceStatus when a transient gRPC error happens.
 	cachedUp   uint64
 	cachedDown uint64
+}
+
+// statsClient is the narrow surface readChainCounters/stopActiveChainLocked
+// need from xray-core's StatsService client. *xrayapi.Client satisfies it.
+type statsClient interface {
+	Counters(ctx context.Context) (up, down uint64, err error)
+	Close() error
 }
 
 var (
@@ -198,13 +208,15 @@ func NewStartChainHandler() Handler {
 		// on failure — config bytes carry server credentials and must never
 		// reach the log stream.
 		sbPath := filepath.Join(runtimeDir, "sing-box.json")
-		if err := os.WriteFile(sbPath, a.SingboxConfig, 0o640); err != nil { //nolint:gosec // /run/itgray-helper, root-only
+		sbCfg := sanitizeCoreConfig("sing-box", a.SingboxConfig, runtimeDir)
+		if err := os.WriteFile(sbPath, sbCfg, 0o640); err != nil { //nolint:gosec // /run/itgray-helper, root-only
 			slog.Error("chain start failed", slog.String("scope", "helper"),
 				slog.String("stage", "write-sing-box-config"), slog.String("err", logging.RedactError(err)))
 			return nil, fmt.Errorf("write sing-box config: %w", err)
 		}
 		xrPath := filepath.Join(runtimeDir, "xray.json")
-		if err := os.WriteFile(xrPath, a.XrayConfig, 0o640); err != nil { //nolint:gosec // /run/itgray-helper, root-only
+		xrCfg := sanitizeCoreConfig("xray", a.XrayConfig, runtimeDir)
+		if err := os.WriteFile(xrPath, xrCfg, 0o640); err != nil { //nolint:gosec // /run/itgray-helper, root-only
 			slog.Error("chain start failed", slog.String("scope", "helper"),
 				slog.String("stage", "write-xray-config"), slog.String("err", logging.RedactError(err)))
 			return nil, fmt.Errorf("write xray config: %w", err)
@@ -425,19 +437,46 @@ func stopActiveChainLocked() []string {
 // readChainCounters returns the latest outbound proxy uplink/downlink
 // counters from xray-core, falling back to the last cached values if a
 // gRPC call fails. Returns (0, 0, false) when no chain is active.
+//
+// chainMu is held only long enough to snapshot the active session's stats
+// client and cached counters, and again afterwards to update the cache —
+// the gRPC round-trip itself runs UNLOCKED, under its own bounded deadline
+// independent of ctx's lifetime (status.go's caller chain threads the
+// daemon's top-level context here, which is otherwise never cancelled
+// until process shutdown). This is backend-review finding H4: without it,
+// a wedged/slow xray-core StatsService blocks this function forever while
+// holding chainMu, which in turn blocks OpStopChain (which also needs
+// chainMu) — the user loses the ability to Disconnect.
 func readChainCounters(ctx context.Context) (up, down uint64, ok bool) {
 	chainMu.Lock()
-	defer chainMu.Unlock()
-	if activeSess == nil || activeSess.xrayAPI == nil {
+	sess := activeSess
+	if sess == nil || sess.xrayAPI == nil {
+		chainMu.Unlock()
 		return 0, 0, false
 	}
-	u, d, err := activeSess.xrayAPI.Counters(ctx)
+	client := sess.xrayAPI
+	cachedUp, cachedDown := sess.cachedUp, sess.cachedDown
+	chainMu.Unlock()
+
+	rctx, cancel := context.WithTimeout(ctx, 1*time.Second)
+	defer cancel()
+	u, d, err := client.Counters(rctx)
 	if err != nil {
-		// Transient failure (xray API not yet up, conn blip). Return
+		// Transient failure (xray API not yet up, conn blip, or the
+		// bounded deadline above expired against a wedged core). Return
 		// cached values without raising; they'll refresh next tick.
-		return activeSess.cachedUp, activeSess.cachedDown, true
+		return cachedUp, cachedDown, true
 	}
-	activeSess.cachedUp = u
-	activeSess.cachedDown = d
+
+	chainMu.Lock()
+	// Identity guard: only cache into the session this reading belongs to.
+	// If StopChain or a newer StartChain already swapped activeSess while
+	// this call was in flight unlocked, don't resurrect stale counters
+	// into whatever is active now.
+	if activeSess == sess {
+		sess.cachedUp = u
+		sess.cachedDown = d
+	}
+	chainMu.Unlock()
 	return u, d, true
 }

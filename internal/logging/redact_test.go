@@ -93,6 +93,32 @@ func TestRedact_NoFalsePositiveOnSID(t *testing.T) {
 	require.Contains(t, got, "session-abc-not-a-secret")
 }
 
+func TestRedact_BareTokenInURLPath(t *testing.T) {
+	// Panel subscription URLs commonly carry the access token as a bare,
+	// non-UUID path segment with no "key=" marker — the keyword- and
+	// UUID-anchored rules can't catch that on their own. This exercises the
+	// automatic Redact() path directly (not the opt-in RedactError special
+	// case), e.g. what a raw err.Error() string would look like.
+	in := `Get "https://panel.example.com/48Lki5P5I5gv/api/sub/9f8a7b6c5d4e3f2a1b0c": dial tcp: i/o timeout`
+	got := Redact(in)
+	require.NotContains(t, got, "48Lki5P5I5gv")
+	require.NotContains(t, got, "9f8a7b6c5d4e3f2a1b0c")
+	require.Contains(t, got, "panel.example.com")
+	require.Contains(t, got, "i/o timeout")
+}
+
+func TestRedact_BareTokenInURLQuery(t *testing.T) {
+	in := "fetch failed: https://panel.example.com/sub?k=48Lki5P5I5gvNoKeywordHere"
+	got := Redact(in)
+	require.NotContains(t, got, "48Lki5P5I5gvNoKeywordHere")
+}
+
+func TestRedact_URLWithNoPathIsUnchanged(t *testing.T) {
+	in := "connecting to https://api.ipify.org for public IP"
+	got := Redact(in)
+	require.Equal(t, in, got)
+}
+
 func TestRedactError_DropsURLFromURLError(t *testing.T) {
 	err := &url.Error{
 		Op:  "Get",

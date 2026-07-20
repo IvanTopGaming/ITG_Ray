@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/itg-team/itg-ray/internal/helper/client"
 	"github.com/itg-team/itg-ray/internal/helper/protocol"
@@ -42,8 +43,10 @@ import (
 // supplies its own xray config, and the adapter never needs to be
 // rebuilt when the user switches servers.
 type HelperAdapter struct {
-	c         *client.Client
-	tunName   string
+	c       *client.Client
+	tunName string
+
+	mu        sync.Mutex
 	sessionID string // populated on first successful StartChain
 }
 
@@ -111,19 +114,26 @@ func (a *HelperAdapter) StartChain(ctx context.Context, singboxJSON, xrayJSON []
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("decode StartChain result: %w", err)
 	}
+	a.mu.Lock()
 	a.sessionID = res.SessionID
+	a.mu.Unlock()
 	return nil
 }
 
 // StopChain addresses the captured session id (if any) so a stale GUI
 // can't tear down a chain it didn't start.
 func (a *HelperAdapter) StopChain(ctx context.Context) error {
-	args, err := json.Marshal(helperserver.StopChainArgs{SessionID: a.sessionID})
+	a.mu.Lock()
+	sid := a.sessionID
+	a.mu.Unlock()
+	args, err := json.Marshal(helperserver.StopChainArgs{SessionID: sid})
 	if err != nil {
 		return fmt.Errorf("marshal StopChain: %w", err)
 	}
 	_, err = a.c.Call(ctx, protocol.OpStopChain, args)
+	a.mu.Lock()
 	a.sessionID = ""
+	a.mu.Unlock()
 	return err
 }
 
