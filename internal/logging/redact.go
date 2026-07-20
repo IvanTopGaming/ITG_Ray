@@ -28,12 +28,40 @@ var redactors = []struct {
 	{regexp.MustCompile(`(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`), `***redacted***`},
 }
 
+// urlWithPathOrQuery matches a scheme://host prefix together with anything
+// following the first '/' or '?' — the part of a URL that can carry a
+// subscription/panel access token as a bare path segment or query value with
+// no recognizable "key=" marker (e.g. https://host/48Lki5P5I5gv/api/sub/<uuid>).
+// The keyword- and UUID-anchored rules below only catch such tokens when
+// they're prefixed by a known key name or dash-grouped like a UUID; a bare
+// opaque token sails through untouched. This is a coarser, defense-in-depth
+// net: it deliberately keeps scheme+host (useful for triage — which panel
+// failed) and blanks everything after it, rather than trying to guess which
+// path segments "look like" secrets.
+var urlWithPathOrQuery = regexp.MustCompile(`(?i)\bhttps?://[^\s"'<>/?]+[/?][^\s"'<>]*`)
+
 // Redact replaces known secret patterns in s with "***redacted***".
 func Redact(s string) string {
+	s = urlWithPathOrQuery.ReplaceAllStringFunc(s, redactURLPath)
 	for _, r := range redactors {
 		s = r.re.ReplaceAllString(s, r.repl)
 	}
 	return s
+}
+
+// redactURLPath collapses a matched scheme://host/path?query string down to
+// scheme://host/***redacted-path***. It re-parses the match with net/url
+// (rather than trying to split scheme/host out via regex capture groups) so
+// that authority-section credentials (https://user:pass@host/...) and IPv6
+// hosts are handled correctly too. On parse failure (regex over-match on
+// something that isn't actually a valid URL) it returns match unchanged —
+// erring toward not mangling non-URL text rather than guessing.
+func redactURLPath(match string) string {
+	u, err := url.Parse(match)
+	if err != nil || u.Host == "" {
+		return match
+	}
+	return u.Scheme + "://" + u.Host + "/***redacted-path***"
 }
 
 // RedactError renders err for logging with secrets removed. It strips the
