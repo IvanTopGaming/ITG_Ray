@@ -47,3 +47,28 @@ jobs:
         env:
           ITGRAY_E2E: "1"
         run: go test -tags e2e -race -timeout 120s ./cmd/itgray-cli/...
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cmd/itgray-electron
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            cmd/itgray-electron/package-lock.json
+            cmd/itgray-electron/frontend/package-lock.json
+      - name: install deps
+        run: npm ci && npm --prefix frontend ci
+      - name: typecheck main + preload
+        run: npm run build:main && npm run build:preload
+      - name: main-process tests
+        run: node --test dist-main/main/*.test.js
+      - name: frontend tests
+        run: npm --prefix frontend test
+      - name: frontend build
+        run: npm --prefix frontend run build
