@@ -6,8 +6,33 @@ import {
   compareVersions,
   pickLatestRelease,
   checkForUpdate,
+  safeReleasesURL,
+  RELEASES_PAGE_URL,
   type GithubRelease,
 } from "./updates";
+
+// ── safeReleasesURL (shell.openExternal gate) ─────────────────────────
+
+test("safeReleasesURL passes through an https github.com release URL", () => {
+  const u = "https://github.com/IvanTopGaming/ITG_Ray/releases/tag/v0.1.0-beta.1";
+  assert.equal(safeReleasesURL(u), u);
+});
+
+test("safeReleasesURL falls back for off-domain, non-https, and hostile schemes", () => {
+  for (const bad of [
+    "http://github.com/x",              // not https
+    "https://evil.com/x",               // off-domain
+    "https://github.com.evil.com/x",    // lookalike host
+    "file:///etc/passwd",               // file scheme
+    "smb://attacker/share",             // smb scheme
+    "javascript:alert(1)",              // js scheme
+    "not a url",                         // unparseable
+    "",                                  // empty
+    undefined,                           // missing
+  ]) {
+    assert.equal(safeReleasesURL(bad as string | undefined), RELEASES_PAGE_URL);
+  }
+});
 
 // ── parseVersion ──────────────────────────────────────────────────────
 

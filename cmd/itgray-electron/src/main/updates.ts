@@ -12,6 +12,25 @@ const REPO_OWNER = "IvanTopGaming";
 const REPO_NAME = "ITG_Ray";
 const RELEASES_API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases?per_page=10`;
 export const RELEASES_PAGE_URL = `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases`;
+
+// safeReleasesURL gates whatever the renderer hands us before it reaches
+// shell.openExternal — a known Electron footgun. Only https URLs on github.com
+// are allowed through; anything else (file://, smb://, a custom scheme, an
+// off-domain host, or garbage) falls back to our own releases page. This holds
+// even if the renderer is compromised or a release payload is hostile.
+export function safeReleasesURL(candidate?: string): string {
+  if (typeof candidate === "string" && candidate.trim()) {
+    try {
+      const u = new URL(candidate);
+      if (u.protocol === "https:" && (u.hostname === "github.com" || u.hostname.endsWith(".github.com"))) {
+        return u.toString();
+      }
+    } catch {
+      // Unparseable URL — fall through to the default.
+    }
+  }
+  return RELEASES_PAGE_URL;
+}
 const FETCH_TIMEOUT_MS = 8_000;
 
 // Only the fields we actually read from the GitHub API response. `tag_name`
@@ -196,6 +215,6 @@ export function registerUpdateIPC(): void {
   });
 
   ipcMain.handle("update.openReleases", async (_event, htmlUrl?: string) => {
-    await shell.openExternal(htmlUrl && htmlUrl.trim() ? htmlUrl : RELEASES_PAGE_URL);
+    await shell.openExternal(safeReleasesURL(htmlUrl));
   });
 }
