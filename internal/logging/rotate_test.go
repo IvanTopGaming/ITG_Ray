@@ -23,6 +23,7 @@ func TestRotatingWriter_RotatesAndKeeps(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "app.log")
 	w := NewRotatingWriter(p, 10, 2)
+	t.Cleanup(func() { _ = w.Close() })
 	for i := 0; i < 5; i++ {
 		_, err := w.Write([]byte("0123456789\n"))
 		require.NoError(t, err)
@@ -37,6 +38,7 @@ func TestRotatingWriter_CreatesDir(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "logs", "app.log")
 	w := NewRotatingWriter(p, 1000, 1)
+	t.Cleanup(func() { _ = w.Close() })
 	_, err := w.Write([]byte("hello\n"))
 	require.NoError(t, err)
 	b, err := os.ReadFile(p)

@@ -18,7 +18,6 @@ type fakeSubs struct {
 	editOut    hub.SubView
 	editErr    error
 	removeErr  error
-	syncOneOut hub.SubView
 	syncOneErr error
 	syncAllErr error
 

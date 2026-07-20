@@ -57,8 +57,13 @@ func TestSpawnRunsInLogDir(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "child.log")
 	// The child writes a RELATIVE file; with cmd.Dir set to the log's dir it
-	// must land in `dir`, not the test process CWD.
-	c, err := Spawn("writer", "/bin/sh", []string{"-c", "echo ok > relout.txt"}, logPath)
+	// must land in `dir`, not the test process CWD. Pick a shell per platform
+	// so the test exercises cmd.Dir on both Linux and Windows.
+	bin, args := "/bin/sh", []string{"-c", "echo ok > relout.txt"}
+	if runtime.GOOS == "windows" {
+		bin, args = "cmd.exe", []string{"/C", "echo ok > relout.txt"}
+	}
+	c, err := Spawn("writer", bin, args, logPath)
 	if err != nil {
 		t.Fatalf("Spawn: %v", err)
 	}

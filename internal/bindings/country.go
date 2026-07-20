@@ -23,8 +23,8 @@ func extractLeadingFlagEmoji(name string) (country, clean string) {
 	if r2 < regionalIndicatorMin || r2 > regionalIndicatorMax {
 		return "", name
 	}
-	code := string(rune('A'+(r1-regionalIndicatorMin))) +
-		string(rune('A'+(r2-regionalIndicatorMin)))
+	code := string('A'+(r1-regionalIndicatorMin)) +
+		string('A'+(r2-regionalIndicatorMin))
 	rest := name[sz1+sz2:]
 	rest = strings.TrimPrefix(rest, " ")
 	return code, rest

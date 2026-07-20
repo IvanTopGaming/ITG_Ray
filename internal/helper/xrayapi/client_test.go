@@ -4,7 +4,6 @@ import (
 	"context"
 	"net"
 	"testing"
-	"time"
 
 	statsservice "github.com/xtls/xray-core/app/stats/command"
 	"google.golang.org/grpc"
@@ -35,12 +34,12 @@ func newTestClient(t *testing.T, srv *fakeStatsServer) (*Client, func()) {
 	go gs.Serve(lis)
 
 	dialer := func(_ context.Context, _ string) (net.Conn, error) { return lis.Dial() }
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	conn, err := grpc.DialContext(ctx, "bufnet",
+	// passthrough:/// keeps grpc.NewClient from running the default dns
+	// resolver on the fake "bufnet" target; the custom dialer handles the
+	// bufconn listener directly.
+	conn, err := grpc.NewClient("passthrough:///bufnet",
 		grpc.WithContextDialer(dialer),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
 	)
 	if err != nil {
 		t.Fatalf("dial: %v", err)

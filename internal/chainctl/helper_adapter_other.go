@@ -187,11 +187,21 @@ func (m *modeRoutingHelperClient) delegate() HelperClient {
 	}
 	return m.core
 }
-func (m *modeRoutingHelperClient) TunDestroy(ctx context.Context) error         { return m.delegate().TunDestroy(ctx) }
-func (m *modeRoutingHelperClient) RouteAdd(ctx context.Context, d string) error { return m.delegate().RouteAdd(ctx, d) }
-func (m *modeRoutingHelperClient) RouteRestore(ctx context.Context) error       { return m.delegate().RouteRestore(ctx) }
-func (m *modeRoutingHelperClient) DnsSet(ctx context.Context, s []string) error { return m.delegate().DnsSet(ctx, s) }
-func (m *modeRoutingHelperClient) DnsRestore(ctx context.Context) error         { return m.delegate().DnsRestore(ctx) }
+func (m *modeRoutingHelperClient) TunDestroy(ctx context.Context) error {
+	return m.delegate().TunDestroy(ctx)
+}
+func (m *modeRoutingHelperClient) RouteAdd(ctx context.Context, d string) error {
+	return m.delegate().RouteAdd(ctx, d)
+}
+func (m *modeRoutingHelperClient) RouteRestore(ctx context.Context) error {
+	return m.delegate().RouteRestore(ctx)
+}
+func (m *modeRoutingHelperClient) DnsSet(ctx context.Context, s []string) error {
+	return m.delegate().DnsSet(ctx, s)
+}
+func (m *modeRoutingHelperClient) DnsRestore(ctx context.Context) error {
+	return m.delegate().DnsRestore(ctx)
+}
 
 // NewRoutingHelperClient is the bridge entrypoint: SysProxy → in-process
 // core, TUN → unix-socket daemon.

@@ -73,12 +73,12 @@ func (m *Manager) fetchRunetfreedom(ctx context.Context, tags []string, force bo
 		}
 		var b bytes.Buffer
 		if _, err := b.ReadFrom(rc); err != nil {
-			rc.Close()
+			_ = rc.Close()
 			skipped = append(skipped, tag)
 			slog.Warn("geo: read tag from zip failed", slog.String("scope", "geo"), slog.String("tag", tag), slog.String("err", err.Error()))
 			continue
 		}
-		rc.Close()
+		_ = rc.Close()
 		p, err := m.writeCache(PresetRunetfreedom, tag, b.Bytes())
 		if err != nil {
 			skipped = append(skipped, tag)

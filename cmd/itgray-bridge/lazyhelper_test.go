@@ -28,14 +28,14 @@ func (f *fakeHelper) rec(op string) error {
 func (f *fakeHelper) StartChain(_ context.Context, _, _ []byte, _ chainctl.Mode) error {
 	return f.rec("StartChain")
 }
-func (f *fakeHelper) StopChain(_ context.Context) error                { return f.rec("StopChain") }
-func (f *fakeHelper) TunCreate(_ context.Context, _, _ string) error   { return f.rec("TunCreate") }
-func (f *fakeHelper) TunDestroy(_ context.Context) error               { return f.rec("TunDestroy") }
-func (f *fakeHelper) RouteSnapshot(_ context.Context) error            { return f.rec("RouteSnapshot") }
-func (f *fakeHelper) RouteAdd(_ context.Context, _ string) error       { return f.rec("RouteAdd") }
-func (f *fakeHelper) RouteRestore(_ context.Context) error             { return f.rec("RouteRestore") }
-func (f *fakeHelper) DnsSet(_ context.Context, _ []string) error       { return f.rec("DnsSet") }
-func (f *fakeHelper) DnsRestore(_ context.Context) error               { return f.rec("DnsRestore") }
+func (f *fakeHelper) StopChain(_ context.Context) error              { return f.rec("StopChain") }
+func (f *fakeHelper) TunCreate(_ context.Context, _, _ string) error { return f.rec("TunCreate") }
+func (f *fakeHelper) TunDestroy(_ context.Context) error             { return f.rec("TunDestroy") }
+func (f *fakeHelper) RouteSnapshot(_ context.Context) error          { return f.rec("RouteSnapshot") }
+func (f *fakeHelper) RouteAdd(_ context.Context, _ string) error     { return f.rec("RouteAdd") }
+func (f *fakeHelper) RouteRestore(_ context.Context) error           { return f.rec("RouteRestore") }
+func (f *fakeHelper) DnsSet(_ context.Context, _ []string) error     { return f.rec("DnsSet") }
+func (f *fakeHelper) DnsRestore(_ context.Context) error             { return f.rec("DnsRestore") }
 func (f *fakeHelper) ServiceStatus(_ context.Context) (chainctl.ChainState, error) {
 	if err := f.rec("ServiceStatus"); err != nil {
 		return chainctl.ChainState{}, err

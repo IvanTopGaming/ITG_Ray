@@ -6,5 +6,5 @@ import "os/exec"
 
 // Dir opens path in the user's file manager via xdg-open.
 func Dir(path string) error {
-	return exec.Command("xdg-open", path).Start()
+	return exec.Command("xdg-open", path).Start() //nolint:gosec // fixed argv0; path is an app-controlled log/config location
 }

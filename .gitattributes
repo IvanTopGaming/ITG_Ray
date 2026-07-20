@@ -1,0 +1,14 @@
+# Normalize all text to LF in the working tree on every platform. Go tooling,
+# shell scripts and golden test fixtures (e.g. internal/bridge/codegen
+# testdata) all expect LF; without this, git's autocrlf on Windows CI rewrites
+# checked-out files to CRLF and byte-exact golden comparisons fail.
+* text=auto eol=lf
+
+# Binary assets must never be treated as text.
+*.png binary
+*.ico binary
+*.dll binary
+*.zst binary
+*.woff binary
+*.woff2 binary
+*.ttf binary

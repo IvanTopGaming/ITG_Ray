@@ -17,7 +17,7 @@ func readCombinedLogs(path string, keep int) string {
 			b.Write(data)
 		}
 	}
-	if data, err := os.ReadFile(path); err == nil {
+	if data, err := os.ReadFile(path); err == nil { //nolint:gosec // path is app-controlled, not attacker-supplied
 		b.Write(data)
 	}
 	return b.String()
