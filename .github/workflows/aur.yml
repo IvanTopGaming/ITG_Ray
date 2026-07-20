@@ -1,0 +1,32 @@
+name: AUR
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: render PKGBUILD from the published release
+        id: gen
+        run: |
+          TAGVER="${GITHUB_EVENT_RELEASE_TAG#v}"
+          URL="https://github.com/${{ github.repository }}/releases/download/v${TAGVER}/ITGRay-${TAGVER}-linux-x64.tar.gz"
+          curl -fsSL -o release.tar.gz "$URL"
+          SHA256=$(sha256sum release.tar.gz | cut -d' ' -f1)
+          bash scripts/gen-aur-pkgbuild.sh "$TAGVER" "$SHA256" > PKGBUILD.out
+          cp packaging/arch/itgray-bin.install .
+          cat PKGBUILD.out
+        env:
+          GITHUB_EVENT_RELEASE_TAG: ${{ github.event.release.tag_name }}
+      - uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
+        with:
+          pkgname: itgray-bin
+          pkgbuild: ./PKGBUILD.out
+          assets: ./itgray-bin.install
+          commit_username: ${{ secrets.AUR_USERNAME }}
+          commit_email: ${{ secrets.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to ${{ github.event.release.tag_name }}"
