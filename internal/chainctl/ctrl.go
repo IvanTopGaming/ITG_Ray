@@ -10,6 +10,7 @@ package chainctl
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -142,6 +143,12 @@ type Controller struct {
 	// Stop() lands can never finish and leave a chain nothing tracks
 	// (backend-review Finding 1: cancel used to only reach the poller's
 	// context, never the one bringUp actually ran under).
+	//
+	// wg is reused across Start/Stop cycles, which is safe only because the
+	// Controller is driven serially: the bridge dispatcher (Serve) handles ops
+	// one at a time and Reconcile runs once at boot, so a Start never Add()s
+	// concurrently with a Stop still inside Wait(). Callers must preserve that
+	// serialization.
 	wg sync.WaitGroup
 }
 
@@ -439,7 +446,15 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 			return mode, config.Network{}, fmt.Errorf("DnsSet: %w", err)
 		}
 	} else {
-		if err := c.d.Sysproxy.Set(sysproxy.Settings{Socks: socksAddr, HTTP: httpAddr}); err != nil {
+		if err := c.d.Sysproxy.Set(sysproxy.Settings{Socks: socksAddr, HTTP: httpAddr}); errors.Is(err, sysproxy.ErrNotifyOnly) {
+			// The registry was written correctly; only the WinINet "settings
+			// changed" broadcast failed. The OS proxy IS pointed at our live
+			// port, so tearing the chain down here would blackhole the user for
+			// a purely cosmetic notification failure. Log and proceed — apps
+			// pick up the new proxy on their next settings refresh regardless.
+			slog.Warn("sysproxy set: notify failed, proxy is set", slog.String("scope", "chainctl"),
+				slog.String("err", logging.RedactError(err)))
+		} else if err != nil {
 			if serr := c.d.Helper.StopChain(ctx); serr != nil {
 				slog.Warn("chainctl rollback: stop chain failed", slog.String("scope", "chainctl"),
 					slog.String("err", logging.RedactError(serr)))

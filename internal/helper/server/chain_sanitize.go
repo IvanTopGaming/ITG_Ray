@@ -22,6 +22,15 @@ import (
 // doesn't parse as a JSON object is returned as-is: the field-based primitive
 // requires structured JSON, and the core rejects malformed input itself.
 //
+// SCOPE: this is a best-effort denylist of the highest-value, top-level
+// file-writing fields — not a complete sandbox. sing-box/xray expose other
+// path-bearing knobs nested inside inbound/outbound TLS settings (e.g.
+// tls.acme.data_directory) that this does not walk. It meaningfully reduces
+// the "compromised same-uid GUI → arbitrary root file write" surface but does
+// not eliminate it; a caller that has already defeated the peer-uid auth gate
+// is inside the trust boundary. Full containment (an OS-level sandbox/firewall
+// around the spawned cores) is tracked as a separate hardening item.
+//
 // kind is "sing-box" or "xray".
 func sanitizeCoreConfig(kind string, raw []byte, runtimeDir string) []byte {
 	var doc map[string]any
