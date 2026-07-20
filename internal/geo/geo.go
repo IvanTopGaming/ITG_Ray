@@ -90,11 +90,11 @@ func (m *Manager) cached(preset, tag string) (string, bool) {
 
 func (m *Manager) writeCache(preset, tag string, data []byte) (string, error) {
 	p := m.cachePath(preset, tag)
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil { //nolint:gosec // geo cache is non-secret data
 		return "", err
 	}
 	tmp := p + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, 0o644); err != nil { //nolint:gosec // geo cache is non-secret data
 		return "", err
 	}
 	if err := os.Rename(tmp, p); err != nil {

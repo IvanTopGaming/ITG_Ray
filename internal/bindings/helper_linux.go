@@ -155,7 +155,7 @@ func copyFileMode(src, dst string, mode os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	defer in.Close() //nolint:errcheck
+	defer in.Close()                                                       //nolint:errcheck
 	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode) //nolint:gosec
 	if err != nil {
 		return err

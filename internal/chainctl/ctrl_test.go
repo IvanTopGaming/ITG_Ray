@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itg-team/itg-ray/internal/hub"
 	"github.com/itg-team/itg-ray/internal/config"
+	"github.com/itg-team/itg-ray/internal/hub"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/sysproxy"
 	"github.com/itg-team/itg-ray/internal/vless"

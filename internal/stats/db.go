@@ -59,22 +59,22 @@ func Open(path string) (*sql.DB, error) {
 		"PRAGMA foreign_keys=ON;",
 	} {
 		if _, err := db.Exec(p); err != nil {
-			db.Close()
+			_ = db.Close()
 			return nil, fmt.Errorf("pragma %q: %w", p, err)
 		}
 	}
 	if _, err := db.Exec(schema); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 	var count int
 	if err := db.QueryRow("SELECT COUNT(*) FROM schema_version").Scan(&count); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 	if count == 0 {
 		if _, err := db.Exec("INSERT INTO schema_version(v) VALUES(?)", schemaVersion); err != nil {
-			db.Close()
+			_ = db.Close()
 			return nil, err
 		}
 	}

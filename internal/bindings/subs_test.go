@@ -277,8 +277,8 @@ func TestSubsService_Edit_URLChange_CascadesServersAndResetsMeta(t *testing.T) {
 	require.NoError(t, server.Save(srvPath, []server.Server{
 		mkSrv("a", "s1"),
 		mkSrv("b", "s1"),
-		mkSrv("c", "s2"),    // belongs to a different sub — must survive
-		mkSrv("d", ""),       // manual entry — must survive
+		mkSrv("c", "s2"), // belongs to a different sub — must survive
+		mkSrv("d", ""),   // manual entry — must survive
 	}))
 
 	view, err := svc.Edit("s1", "https://new.example/sub", "renamed", "")

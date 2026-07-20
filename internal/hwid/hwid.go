@@ -59,7 +59,7 @@ func Get(configDir string) (string, error) {
 }
 
 func readCache(path string) (string, error) {
-	b, err := os.ReadFile(path)
+	b, err := os.ReadFile(path) //nolint:gosec // path is app-controlled, not attacker-supplied
 	if err != nil {
 		return "", err
 	}

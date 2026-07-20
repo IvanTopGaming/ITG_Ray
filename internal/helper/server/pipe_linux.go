@@ -21,7 +21,7 @@ func Listen(ctx context.Context, path string, d *Dispatcher, allowedUID uint32) 
 	if err != nil {
 		return fmt.Errorf("listen unix %q: %w", path, err)
 	}
-	if err := os.Chmod(path, 0o660); err != nil {
+	if err := os.Chmod(path, 0o660); err != nil { //nolint:gosec // runtime dir/file must be readable by the desktop user driving the helper
 		_ = ln.Close()
 		return fmt.Errorf("chmod %q: %w", path, err)
 	}

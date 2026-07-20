@@ -37,7 +37,7 @@ func (b *Buffer) Add(source, level, message string, t time.Time) {
 	b.mu.Lock()
 	b.seq++
 	e := Entry{Seq: b.seq, Time: t, Level: level, Source: source, Message: logging.Redact(message)}
-	ring := append(b.perSrc[source], e)
+	ring := append(b.perSrc[source], e) //nolint:gocritic // intentional: bounded append into a temp, capped, then stored back
 	if len(ring) > b.cap {
 		ring = ring[len(ring)-b.cap:]
 	}

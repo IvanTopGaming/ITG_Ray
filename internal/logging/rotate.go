@@ -67,10 +67,10 @@ func (w *RotatingWriter) Close() error {
 }
 
 func (w *RotatingWriter) open() error {
-	if err := os.MkdirAll(filepath.Dir(w.path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(w.path), 0o755); err != nil { //nolint:gosec // runtime dir/file must be readable by the desktop user driving the helper
 		return err
 	}
-	f, err := os.OpenFile(w.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o640)
+	f, err := os.OpenFile(w.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o640) //nolint:gosec // runtime dir/file must be readable by the desktop user driving the helper
 	if err != nil {
 		return err
 	}
