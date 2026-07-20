@@ -10,6 +10,11 @@ on:
         required: true
         default: "0.0.0-test.1"
 
+# Least-privilege default; the build job only reads the checkout. The release
+# job overrides this with contents: write to publish the draft release.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
