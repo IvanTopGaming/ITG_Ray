@@ -34,7 +34,10 @@ func newTestClient(t *testing.T, srv *fakeStatsServer) (*Client, func()) {
 	go gs.Serve(lis)
 
 	dialer := func(_ context.Context, _ string) (net.Conn, error) { return lis.Dial() }
-	conn, err := grpc.NewClient("bufnet",
+	// passthrough:/// keeps grpc.NewClient from running the default dns
+	// resolver on the fake "bufnet" target; the custom dialer handles the
+	// bufconn listener directly.
+	conn, err := grpc.NewClient("passthrough:///bufnet",
 		grpc.WithContextDialer(dialer),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
