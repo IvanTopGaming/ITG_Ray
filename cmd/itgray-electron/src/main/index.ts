@@ -10,6 +10,7 @@ import { defaultAutostart } from "./autostart";
 import { makeNotifier } from "./notifications";
 import { resolveStartMinimized, resolveTrayStatus, type StartupSnapshot } from "./startup";
 import { extractDeeplink } from "./deeplink";
+import { registerUpdateIPC } from "./updates";
 
 let mainWindow: BrowserWindow | null = null;
 let supervisor: BridgeSupervisor | null = null;
@@ -114,6 +115,7 @@ app.whenReady().then(async () => {
     },
   );
   wireIPC(supervisor, () => mainWindow, (s) => tray?.setStatus(s));
+  registerUpdateIPC();
 
   ipcMain.handle("deeplink.getPending", () => {
     const url = pendingDeeplink;

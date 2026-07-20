@@ -81,7 +81,8 @@ export function Settings() {
     { id: 'about', label: t('settings.sections.about') },
   ];
   const [logDir, setLogDir] = useState<{ path: string; sizeBytes: number }>({ path: '', sizeBytes: 0 });
-  const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'uptodate'>('idle');
+  const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'uptodate' | 'available' | 'error'>('idle');
+  const [updateInfo, setUpdateInfo] = useState<{ latest?: string; htmlUrl?: string }>({});
   const [stuck, setStuck] = useState(false);
   const [about, setAbout] = useState<hub.AboutSettings | null>(null);
   const [tunAdvancedOpen, setTunAdvancedOpen] = useState(false);
@@ -175,11 +176,27 @@ export function Settings() {
   const isPackagedHelper = helper.packageManaged === true;
   const isLoadingPlatform = helper.isWindows === null;
 
+  // checkUpdates queries the Electron main process (which talks to the
+  // GitHub releases API — see src/main/updates.ts), never the network
+  // directly from the renderer. Check-only: on 'available' we just show
+  // the new version and a link, we never download or install anything.
   const checkUpdates = async () => {
     setUpdateState('checking');
-    await new Promise((r) => setTimeout(r, 1500));
-    setUpdateState('uptodate');
+    try {
+      const result = await window.itg.update.check(about?.version ?? '');
+      const status = (result as { status?: 'uptodate' | 'available' | 'error' })?.status ?? 'error';
+      setUpdateInfo({
+        latest: (result as { latest?: string })?.latest,
+        htmlUrl: (result as { htmlUrl?: string })?.htmlUrl,
+      });
+      setUpdateState(status);
+    } catch {
+      setUpdateInfo({});
+      setUpdateState('error');
+    }
   };
+
+  const openReleases = () => void window.itg.update.openReleases(updateInfo.htmlUrl);
 
   const geo = useGeoProgress();
   const updateGeoDatabases = async () => {
@@ -827,27 +844,47 @@ export function Settings() {
           <dt className="text-white/[0.45]">{t('settings.about.build')}</dt><dd className="text-white/[0.92] tabular-nums">{buildLabel}</dd>
           <dt className="text-white/[0.45]">{t('settings.about.backend')}</dt><dd className="text-white/[0.92] tabular-nums">{about?.backend || '—'}</dd>
           <dt className="text-white/[0.45]">{t('settings.about.helper')}</dt><dd className="text-white/[0.92] tabular-nums">{versionLabel}</dd>
-          <dt className="text-white/[0.45]">{t('settings.about.license')}</dt><dd className="text-white/[0.92]">MIT</dd>
+          <dt className="text-white/[0.45]">{t('settings.about.license')}</dt><dd className="text-white/[0.92]">GPL-3.0</dd>
         </dl>
         <SettingRow
           label={t('settings.about.checkForUpdates')}
           hint={
-            updateState === 'uptodate'
+            updateState === 'available'
+              ? t('settings.about.updateAvailable', { version: updateInfo.latest ?? '' })
+              : updateState === 'error'
+              ? t('settings.about.updateError')
+              : updateState === 'uptodate'
               ? t('settings.about.upToDate')
               : updateState === 'checking'
               ? t('settings.about.checking')
               : t('settings.about.lastChecked')
           }
         >
-          <button
-            type="button"
-            onClick={checkUpdates}
-            disabled={updateState === 'checking'}
-            className="px-3.5 py-1.5 text-xs font-semibold rounded-[10px] bg-gradient-to-b from-accent-start to-accent-mid text-white disabled:opacity-60"
-          >
-            {updateState === 'checking' ? t('settings.about.checking') : t('settings.about.checkNow')}
-          </button>
+          <div className="flex items-center gap-2">
+            {updateState === 'available' && (
+              <button
+                type="button"
+                onClick={openReleases}
+                className="px-3.5 py-1.5 text-xs font-medium rounded-[10px] border border-white/[0.10] text-white/[0.92] hover:bg-white/[0.05]"
+              >
+                {isPackagedHelper ? t('settings.about.openReleases') : t('settings.about.download')}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={checkUpdates}
+              disabled={updateState === 'checking'}
+              className="px-3.5 py-1.5 text-xs font-semibold rounded-[10px] bg-gradient-to-b from-accent-start to-accent-mid text-white disabled:opacity-60"
+            >
+              {updateState === 'checking' ? t('settings.about.checking') : t('settings.about.checkNow')}
+            </button>
+          </div>
         </SettingRow>
+        {updateState === 'available' && isPackagedHelper && (
+          <p className="text-[11.5px] leading-snug text-white/[0.45] -mt-1">
+            {t('settings.about.updateAurHint')}
+          </p>
+        )}
       </motion.div>
     </motion.section>
   );
