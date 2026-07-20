@@ -182,6 +182,48 @@ func TestBuildSingbox_NoFakeIPInSysProxy(t *testing.T) {
 	}
 }
 
+func TestBuildSingbox_DNSFinal_FakeIP(t *testing.T) {
+	in := SingboxInput{
+		Mode:          ModeTun,
+		FakeIP:        true,
+		TunName:       "ITGRay-TUN",
+		TunIPv4:       "198.18.0.1/15",
+		XraySOCKSHost: "127.0.0.1",
+		XraySOCKSPort: 1081,
+		Rules:         rules.Model{DefaultAction: rules.ActionProxy},
+	}
+	b, err := BuildSingbox(&in)
+	require.NoError(t, err)
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(b, &doc))
+
+	dns := doc["dns"].(map[string]any)
+	final, ok := dns["final"].(string)
+	require.True(t, ok, "dns.final must be set so query types the DNS rules don't match (e.g. HTTPS/SVCB, sent by every modern browser) don't fall through to sing-box's implicit type:local fallback, which leaks the query in cleartext to the OS/ISP resolver")
+	require.Equal(t, "remote", final, "dns.final must point at the tunnelled remote (proxy-detoured) DoT server in FakeIP mode")
+	require.True(t, dnsServerTags(dns)[final], "dns.final must reference a tag that actually exists in dns.servers, or the config is internally inconsistent")
+}
+
+func TestBuildSingbox_DNSFinal_NonFakeIP(t *testing.T) {
+	in := SingboxInput{
+		Mode:             ModeSysProxy,
+		SocksInboundPort: 1080,
+		XraySOCKSHost:    "127.0.0.1",
+		XraySOCKSPort:    1081,
+		Rules:            rules.Model{DefaultAction: rules.ActionProxy},
+	}
+	b, err := BuildSingbox(&in)
+	require.NoError(t, err)
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(b, &doc))
+
+	dns := doc["dns"].(map[string]any)
+	final, ok := dns["final"].(string)
+	require.True(t, ok, "dns.final must be set — this branch emits no dns.rules at all, so without final EVERY query falls through to sing-box's implicit type:local fallback and leaks in cleartext to the OS/ISP resolver")
+	require.Equal(t, "default", final, "dns.final must point at the tunnelled default (proxy-detoured) DoT server outside FakeIP mode")
+	require.True(t, dnsServerTags(dns)[final], "dns.final must reference a tag that actually exists in dns.servers, or the config is internally inconsistent")
+}
+
 func TestBuildSingbox_TunMode_KillswitchBlock(t *testing.T) {
 	in := SingboxInput{
 		Mode:          ModeTun,
