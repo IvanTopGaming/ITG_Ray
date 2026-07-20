@@ -249,6 +249,7 @@ vi.mock('@/lib/itg/runtime', () => ({
 
 vi.mock('@/lib/itg/HelperService', () => ({
   Status: vi.fn().mockResolvedValue({ state: 'unsupported' }),
+  StatusPackageManaged: vi.fn().mockResolvedValue(false),
   Install: vi.fn(),
   Start: vi.fn(),
   Stop: vi.fn(),
@@ -267,6 +268,7 @@ import { Settings as SettingsPage } from './Settings';
 import { __resetForTests } from '@/lib/settings';
 import * as SettingsService from '@/lib/itg/SettingsService';
 import * as AppService from '@/lib/itg/AppService';
+import * as HelperService from '@/lib/itg/HelperService';
 
 class MockIntersectionObserver {
   observe = vi.fn();
@@ -482,5 +484,148 @@ describe('Settings — Autostart toggle', () => {
       await new Promise<void>((r) => setTimeout(r, 0));
     });
     expect(setAutostartMock).toHaveBeenCalledWith(true);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────
+//  Update check (About section)
+// ──────────────────────────────────────────────────────────────────────
+//
+// checkUpdates() calls window.itg.update.check(version) — the real IPC
+// bridge to the Electron main process (src/main/updates.ts), which in turn
+// queries the GitHub releases API. These tests stub that bridge call and
+// assert the Settings page renders each resulting status correctly, plus
+// the AUR (packageManaged) messaging variant.
+
+type UpdateCheckMock = ReturnType<typeof vi.fn>;
+
+function mockItgUpdate(): { check: UpdateCheckMock; openReleases: UpdateCheckMock } {
+  const update = { check: vi.fn(), openReleases: vi.fn().mockResolvedValue(undefined) };
+  (window as unknown as { itg: Record<string, unknown> }).itg = {
+    logs: {
+      dirInfo: vi.fn().mockResolvedValue({ path: '', sizeBytes: 0 }),
+      openFolder: vi.fn().mockResolvedValue(null),
+    },
+    update,
+  };
+  return update;
+}
+
+describe('Settings — Update check', () => {
+  beforeEach(() => {
+    (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver =
+      MockIntersectionObserver as unknown as typeof IntersectionObserver;
+    (window as unknown as { go: object }).go = {};
+    mockItgUpdate();
+    __resetForTests();
+    vi.clearAllMocks();
+    (SettingsService.Get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      general: { language: 'en', autostart: false, startMinimized: false },
+      network: {
+        defaultMode: 'tun',
+        socksPort: 1080,
+        httpPort: 8888,
+        allowLan: false,
+        ipv6Mode: 'prefer-v4',
+        tunCidr: '198.18.0.1/15',
+        tunMtu: 1500,
+        dns: { mode: 'auto', servers: [] },
+      },
+      killSwitch: { enabled: true, alwaysOn: false },
+      subscriptions: {
+        defaultUpdateInterval: 3600,
+        userAgent: 'ITGRay/0.1',
+        hwidEnabled: true,
+        sendDeviceOS: true,
+        sendOSVersion: true,
+        sendDeviceModel: true,
+      },
+      notifications: {
+        onConnected: true,
+        onDisconnected: true,
+        quotaLow: true,
+        onSubSynced: true,
+        sound: true,
+      },
+      debug: { logLevel: 'info' },
+      about: { version: '0.1.0', gitRev: '', buildDate: '' },
+      security: { method: 'Unencrypted' },
+    });
+    (HelperService.StatusPackageManaged as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+  });
+
+  afterEach(() => {
+    __resetForTests();
+    delete (window as unknown as { go?: object }).go;
+    delete (window as unknown as { itg?: object }).itg;
+  });
+
+  const clickCheckNow = async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Check now' }));
+    await act(async () => {
+      await new Promise<void>((r) => setTimeout(r, 0));
+    });
+  };
+
+  it('renders the license as GPL-3.0, not MIT', async () => {
+    await renderSettings();
+    expect(screen.getByText('GPL-3.0')).toBeInTheDocument();
+    expect(screen.queryByText('MIT')).toBeNull();
+  });
+
+  it('checkNow -> uptodate shows the up-to-date hint', async () => {
+    const update = (window as unknown as { itg: { update: { check: UpdateCheckMock } } }).itg.update;
+    update.check.mockResolvedValue({ status: 'uptodate' });
+    await renderSettings();
+    await clickCheckNow();
+    expect(update.check).toHaveBeenCalledWith('0.1.0');
+    expect(screen.getByText("You're up to date.")).toBeInTheDocument();
+  });
+
+  it('checkNow -> available shows the new version and a Download button', async () => {
+    const update = (window as unknown as { itg: { update: { check: UpdateCheckMock } } }).itg.update;
+    update.check.mockResolvedValue({ status: 'available', latest: '0.2.0', htmlUrl: 'https://example/release' });
+    await renderSettings();
+    await clickCheckNow();
+    expect(screen.getByText('Update available: 0.2.0')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument();
+  });
+
+  it('the Download button opens the release page via update.openReleases', async () => {
+    const update = (window as unknown as {
+      itg: { update: { check: UpdateCheckMock; openReleases: UpdateCheckMock } };
+    }).itg.update;
+    update.check.mockResolvedValue({ status: 'available', latest: '0.2.0', htmlUrl: 'https://example/release' });
+    await renderSettings();
+    await clickCheckNow();
+    await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+    expect(update.openReleases).toHaveBeenCalledWith('https://example/release');
+  });
+
+  it('checkNow -> error shows an error hint instead of throwing', async () => {
+    const update = (window as unknown as { itg: { update: { check: UpdateCheckMock } } }).itg.update;
+    update.check.mockResolvedValue({ status: 'error' });
+    await renderSettings();
+    await clickCheckNow();
+    expect(screen.getByText("Couldn't check for updates.")).toBeInTheDocument();
+  });
+
+  it('a rejected update.check also surfaces the error hint', async () => {
+    const update = (window as unknown as { itg: { update: { check: UpdateCheckMock } } }).itg.update;
+    update.check.mockRejectedValue(new Error('ipc failure'));
+    await renderSettings();
+    await clickCheckNow();
+    expect(screen.getByText("Couldn't check for updates.")).toBeInTheDocument();
+  });
+
+  it('AUR/package-managed installs show "Open releases page" + a pacman hint instead of Download', async () => {
+    (HelperService.StatusPackageManaged as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    const update = (window as unknown as { itg: { update: { check: UpdateCheckMock } } }).itg.update;
+    update.check.mockResolvedValue({ status: 'available', latest: '0.2.0', htmlUrl: 'https://example/release' });
+    await renderSettings();
+    await clickCheckNow();
+    expect(screen.getByRole('button', { name: 'Open releases page' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Download' })).toBeNull();
+    expect(screen.getByText(/installed from the aur/i)).toBeInTheDocument();
   });
 });

@@ -452,7 +452,12 @@
       "upToDate": "У вас актуальная версия.",
       "checking": "Проверка…",
       "lastChecked": "Последняя проверка 12 минут назад.",
-      "checkNow": "Проверить"
+      "checkNow": "Проверить",
+      "updateAvailable": "Доступно обновление: {{version}}",
+      "updateError": "Не удалось проверить обновления.",
+      "download": "Скачать",
+      "openReleases": "Открыть страницу релизов",
+      "updateAurHint": "Установлено из AUR — обновляйте через пакетный менеджер (pacman)."
     }
   },
   "subscriptions": {

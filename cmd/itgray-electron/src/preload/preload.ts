@@ -113,5 +113,15 @@ contextBridge.exposeInMainWorld("itg", {
       rpc("run.connect", params),
     disconnect: () => rpc("run.disconnect"),
   },
+  update: {
+    check: (currentVersion: string) =>
+      ipcRenderer.invoke("update.check", { currentVersion }) as Promise<{
+        status: "uptodate" | "available" | "error";
+        latest?: string;
+        htmlUrl?: string;
+      }>,
+    openReleases: (htmlUrl?: string) =>
+      ipcRenderer.invoke("update.openReleases", htmlUrl) as Promise<void>,
+  },
   on,
 });

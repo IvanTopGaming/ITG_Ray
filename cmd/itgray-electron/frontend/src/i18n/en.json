@@ -451,7 +451,12 @@
       "upToDate": "You're up to date.",
       "checking": "Checking…",
       "lastChecked": "Last checked 12 minutes ago.",
-      "checkNow": "Check now"
+      "checkNow": "Check now",
+      "updateAvailable": "Update available: {{version}}",
+      "updateError": "Couldn't check for updates.",
+      "download": "Download",
+      "openReleases": "Open releases page",
+      "updateAurHint": "Installed from the AUR — update via your package manager (pacman)."
     }
   },
   "subscriptions": {
