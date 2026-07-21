@@ -3,13 +3,15 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
-const { dashReconnectMock, revertBaselineMock } = vi.hoisted(() => ({
+const { dashReconnectMock, revertBaselineMock, hasRevertBaselineMock } = vi.hoisted(() => ({
   dashReconnectMock: vi.fn(),
   revertBaselineMock: vi.fn(),
+  hasRevertBaselineMock: vi.fn(),
 }));
 
 vi.mock('@/lib/rulesStore', () => ({
   rulesRevertToBaseline: () => revertBaselineMock(),
+  rulesHasRevertBaseline: () => hasRevertBaselineMock(),
 }));
 
 vi.mock('@/lib/dashStore', () => ({
@@ -88,6 +90,8 @@ describe('AppShell reconnect pill', () => {
     dashReconnectMock.mockResolvedValue(undefined);
     revertBaselineMock.mockReset();
     revertBaselineMock.mockResolvedValue(false);
+    hasRevertBaselineMock.mockReset();
+    hasRevertBaselineMock.mockReturnValue(false);
     // AppShell's deeplink effects reach for the preload bridge on mount;
     // jsdom has no preload script, so stand one in.
     (window as any).itg = {
@@ -225,7 +229,8 @@ describe('AppShell reconnect pill', () => {
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
   });
 
-  it('dismiss rolls back the rule edits it declines to apply', async () => {
+  it('asks for confirmation before reverting staged rule edits', async () => {
+    hasRevertBaselineMock.mockReturnValue(true);
     setCurrentRulesSignature('sig-1');
     snapshotFromConnectedPayload({
       serverId: 'A', mode: 'tun',
@@ -234,8 +239,30 @@ describe('AppShell reconnect pill', () => {
     setCurrentRulesSignature('sig-2');
     const user = userEvent.setup();
     await renderShell();
-    await act(async () => { await user.click(screen.getByRole('button', { name: /dismiss/i })); });
-    expect(revertBaselineMock).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: 'Discard changes' }));
+    });
+    expect(screen.getByText('Discard rule changes?')).toBeInTheDocument();
+    expect(revertBaselineMock).not.toHaveBeenCalled();
+    const confirms = screen.getAllByRole('button', { name: 'Discard changes' });
+    await act(async () => { await user.click(confirms[confirms.length - 1]); });
+    await waitFor(() => expect(revertBaselineMock).toHaveBeenCalledTimes(1));
+  });
+
+  it('dismisses silently when no rule edits are staged', async () => {
+    snapshotFromConnectedPayload({
+      serverId: 'A', mode: 'tun',
+      network: { tunCidr: '198.18.0.1/15', tunMtu: 1500, socksPort: 1080, httpPort: 8888, allowLan: false, ipv6Mode: 'prefer-v4', dns: { mode: 'auto' } },
+    });
+    setDesiredServer('B');
+    const user = userEvent.setup();
+    await renderShell();
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+    });
+    expect(screen.queryByText('Discard rule changes?')).not.toBeInTheDocument();
+    expect(revertBaselineMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(getDesiredServer()).toBeNull());
   });
 
   it('Reconnect keeps the rule edits it applies', async () => {
