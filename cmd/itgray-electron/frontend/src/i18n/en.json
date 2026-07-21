@@ -32,7 +32,11 @@
     "restore": "Restore"
   },
   "appShell": {
-    "reconnectMessage": "Settings changed — reconnect to apply."
+    "reconnectMessage": "Settings changed — reconnect to apply.",
+    "discardChanges": "Discard changes",
+    "discardRulesTitle": "Discard rule changes?",
+    "discardRulesDescription": "The routing rules you edited since the last connect will be rolled back to the model the running tunnel was built from. This cannot be undone.",
+    "discardRulesConfirm": "Discard changes"
   },
   "dashboard": {
     "title": "Dashboard",
