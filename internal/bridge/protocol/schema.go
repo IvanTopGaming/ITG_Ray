@@ -93,14 +93,16 @@ type SubsService interface {
 }
 
 type SubsAddParams struct {
-	URL  string `json:"url"`
-	Name string `json:"name"`
+	URL       string `json:"url"`
+	Name      string `json:"name"`
+	UserAgent string `json:"userAgent,omitempty"`
 }
 
 type SubsEditParams struct {
-	ID   string `json:"id"`
-	URL  string `json:"url"`
-	Name string `json:"name"`
+	ID        string `json:"id"`
+	URL       string `json:"url"`
+	Name      string `json:"name"`
+	UserAgent string `json:"userAgent,omitempty"`
 }
 
 type SubsRemoveParams struct {

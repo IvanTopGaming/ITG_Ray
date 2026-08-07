@@ -78,6 +78,12 @@ type Config struct {
 	// sync attempt completes (success or recorded failure). The Electron
 	// bridge uses it to publish hub events so the UI refreshes live.
 	OnSync func(subID string)
+	// ServersLock, when set, guards this driver's read-modify-write cycles
+	// over ServersPath. The bridge passes the same lock its RPC services use,
+	// so a background refresh and a user-triggered sync or edit can't each
+	// write back a list that predates the other. A nil value gets a private
+	// lock, which only serializes this driver against itself.
+	ServersLock sync.Locker
 }
 
 // Driver owns the background goroutines.
@@ -98,7 +104,7 @@ type Driver struct {
 	log                  *slog.Logger
 	onSync               func(subID string)
 
-	serversMu sync.Mutex
+	serversMu sync.Locker
 	randMu    sync.Mutex
 	wg        sync.WaitGroup
 }
@@ -122,6 +128,10 @@ func NewDriver(c Config) *Driver {
 		rand:                 c.Rand,
 		log:                  c.Log,
 		onSync:               c.OnSync,
+		serversMu:            c.ServersLock,
+	}
+	if d.serversMu == nil {
+		d.serversMu = &sync.Mutex{}
 	}
 	if d.syncFunc == nil {
 		d.syncFunc = subscription.Sync

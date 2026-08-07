@@ -203,6 +203,65 @@ func TestSubsService_SyncOne_PreservesUserinfoOnSaveFailure(t *testing.T) {
 	require.Equal(t, "error", got[0].LastStatus, "status reflects disk failure")
 }
 
+// Two subscriptions syncing at the same time must (a) have their HTTP fetches
+// overlap rather than queue behind one another, and (b) both end up in
+// servers.json. Loading `existing` before the fetch and saving after means
+// each sync merges into a snapshot taken before the other one wrote, so the
+// later Save silently drops the earlier subscription's servers. That's a
+// file-level lost update — the race detector cannot see it, hence this test.
+func TestSubsService_SyncOne_ConcurrentSyncsKeepBothSubscriptions(t *testing.T) {
+	entered := make(chan struct{}, 2)
+	release := make(chan struct{})
+	subHandler := func(uuid, label string) http.HandlerFunc {
+		return func(w http.ResponseWriter, _ *http.Request) {
+			entered <- struct{}{}
+			<-release // hold the fetch open so both syncs are in flight
+			_, _ = w.Write([]byte("vless://" + uuid + "@1.2.3.4:443?type=tcp&security=tls&sni=x#" + label + "\n"))
+		}
+	}
+	ts1 := httptest.NewServer(subHandler("11111111-1111-1111-1111-111111111111", "A"))
+	t.Cleanup(ts1.Close)
+	ts2 := httptest.NewServer(subHandler("22222222-2222-2222-2222-222222222222", "B"))
+	t.Cleanup(ts2.Close)
+
+	dir := t.TempDir()
+	svc, subStore := newSubsServiceForTest(t, dir)
+	require.NoError(t, subStore.Save([]subscription.Stored{
+		{ID: "s1", Name: "first", URL: ts1.URL},
+		{ID: "s2", Name: "second", URL: ts2.URL},
+	}))
+
+	done := make(chan error, 2)
+	go func() { done <- svc.SyncOne("s1") }()
+	go func() { done <- svc.SyncOne("s2") }()
+
+	for i := range 2 {
+		select {
+		case <-entered:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("only %d of 2 subscription fetches were in flight: syncs are serialized", i)
+		}
+	}
+	close(release)
+	for range 2 {
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+		case <-time.After(5 * time.Second):
+			t.Fatal("SyncOne did not return")
+		}
+	}
+
+	list, err := server.Load(filepath.Join(dir, "servers.json"))
+	require.NoError(t, err)
+	bySource := map[string]int{}
+	for i := range list {
+		bySource[list[i].SourceID]++
+	}
+	require.Equal(t, 1, bySource["s1"], "servers from the first subscription survived the concurrent sync")
+	require.Equal(t, 1, bySource["s2"], "servers from the second subscription survived the concurrent sync")
+}
+
 func TestSubsService_Edit_RenameOnly_PreservesServersAndLastSync(t *testing.T) {
 	dir := t.TempDir()
 	svc, subStore := newSubsServiceForTest(t, dir)

@@ -15,13 +15,29 @@ import (
 // is *Error it's returned verbatim; otherwise it's wrapped as Internal.
 type Handler func(ctx context.Context, params json.RawMessage) (any, error)
 
+// maxConcurrentRequests caps how many handlers may run at once. Requests
+// beyond it queue at the read loop (backpressure) rather than spawning
+// unbounded goroutines. Generous on purpose: the only client is our own UI,
+// and the slow methods (subs.syncOne at up to 30s per fetch) must not starve
+// quick ones like rules.list.
+const maxConcurrentRequests = 32
+
 // Dispatcher serves JSON-RPC requests from a Reader to a Writer. Safe for
-// concurrent registration before Serve is called; Serve itself is single-
-// threaded (one request at a time, response written before next read) which
-// matches the stdin/stdout transport's natural ordering guarantees.
+// concurrent registration before Serve is called. Serve runs handlers
+// concurrently (up to maxConcurrentRequests): responses carry the request id,
+// so the client matches them without relying on arrival order, and a slow
+// method must not hold up everything queued behind it.
+//
+// Handlers therefore must be safe to call concurrently. Today they are: the
+// chain controller, the rules service, the config store and the log buffer
+// each hold their own lock, and the two unsynchronized read-modify-write
+// paths (servers.json / subscriptions.json) are serialized by the shared
+// bindings.StoreLock.
 type Dispatcher struct {
 	mu       sync.RWMutex
 	handlers map[string]Handler
+	// Observer, when set, is called once per handled request. It runs on the
+	// handler's goroutine, so it must be safe for concurrent use.
 	Observer func(method string, params json.RawMessage, err error, dur time.Duration)
 }
 
@@ -41,26 +57,68 @@ func (d *Dispatcher) Register(method string, h Handler) {
 	d.handlers[method] = h
 }
 
-// Serve reads newline-delimited JSON-RPC requests from r and writes responses
-// to w. Returns nil on EOF. Returns the underlying read error on non-EOF
-// failure. Each line is one Request; malformed JSON produces a parse-error
-// Response with id null per JSON-RPC spec.
+// Serve reads newline-delimited JSON-RPC requests from r and dispatches each
+// to its handler in its own goroutine, writing responses to w as they finish.
+// Returns nil on EOF, once every in-flight handler has completed and its
+// response has been written. Returns the underlying read error on non-EOF
+// failure, or the first response-write error. Each line is one Request;
+// malformed JSON produces a parse-error Response with id null per JSON-RPC
+// spec.
+//
+// Responses are emitted in completion order, not request order — the id in
+// each Response is what pairs it with its request.
 func (d *Dispatcher) Serve(ctx context.Context, r io.Reader, w io.Writer) error {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024) // 1 MiB max line
 	enc := json.NewEncoder(w)
+
+	var (
+		wg    sync.WaitGroup
+		encMu sync.Mutex // guards enc and writeErr
+		// writeErr holds the first failed response write (a closed stdout,
+		// typically). The read loop stops at the next line so the bridge
+		// winds down instead of spinning on a dead pipe.
+		writeErr error
+	)
+	sem := make(chan struct{}, maxConcurrentRequests)
+
 	for scanner.Scan() {
+		encMu.Lock()
+		stop := writeErr != nil
+		encMu.Unlock()
+		if stop {
+			break
+		}
 		line := scanner.Bytes()
 		if len(line) == 0 {
 			continue
 		}
-		resp := d.handle(ctx, line)
-		if resp == nil { // notification — no response
-			continue
-		}
-		if err := enc.Encode(resp); err != nil {
-			return err
-		}
+		// scanner reuses its buffer on the next Scan, so the handler
+		// goroutine needs its own copy of the request bytes.
+		req := make([]byte, len(line))
+		copy(req, line)
+
+		sem <- struct{}{} // backpressure once maxConcurrentRequests are busy
+		wg.Go(func() {
+			defer func() { <-sem }()
+			resp := d.handle(ctx, req)
+			if resp == nil { // notification — no response
+				return
+			}
+			encMu.Lock()
+			defer encMu.Unlock()
+			if writeErr != nil {
+				return
+			}
+			if err := enc.Encode(resp); err != nil {
+				writeErr = err
+			}
+		})
+	}
+	wg.Wait()
+
+	if writeErr != nil {
+		return writeErr
 	}
 	if err := scanner.Err(); err != nil && !errors.Is(err, io.EOF) {
 		return err

@@ -46,15 +46,27 @@ type ServersDeps struct {
 	// as "manual", must be deletable). nil → orphans can't be detected, so
 	// all subscription servers stay read-only (pre-orphan-fix behavior).
 	SubStore SubStore
+
+	// StoreLock serializes read-modify-write cycles over the shared stores.
+	// main.go passes the same instance to SubsService so a subscription sync
+	// and a server edit can't overwrite each other; when nil, the constructor
+	// creates a private one.
+	StoreLock *StoreLock
 }
 
 // ServersService implements the Servers.* Wails bindings.
 type ServersService struct{ d ServersDeps }
 
 // NewServersService constructs a new ServersService. ServersDeps is taken by
-// value because the struct is small (two interface/pointer fields) and the
-// constructor is invoked once at process start.
-func NewServersService(d ServersDeps) *ServersService { return &ServersService{d: d} }
+// value because the struct is small (a few interface/pointer fields) and the
+// constructor is invoked once at process start. A nil StoreLock is replaced
+// by a private one so a service is never silently left unsynchronized.
+func NewServersService(d ServersDeps) *ServersService {
+	if d.StoreLock == nil {
+		d.StoreLock = NewStoreLock()
+	}
+	return &ServersService{d: d}
+}
 
 // List returns every known server as a DTO. Frontend sorts/filters
 // client-side. Subscriptions list is not loaded here — the Origin column
@@ -69,30 +81,34 @@ func (s *ServersService) List() ([]hub.ServerView, error) {
 }
 
 // ToggleFavorite flips the favorite flag for the given server id and
-// persists the full list back through the store. Read-modify-write is not
-// transactional. server.Save's atomic rename keeps the file structurally
-// consistent, but two concurrent ToggleFavorite calls on the same id can
-// race on the load → mutate window and lose one update. Today only the
-// main window invokes this binding so collisions are unlikely; once tray
-// favorites land (C.T13) a per-store mutex should be added.
+// persists the full list back through the store. The read-modify-write runs
+// under the shared store lock, so two concurrent toggles (or a toggle racing
+// a subscription sync) can't lose an update in the load → mutate window.
 func (s *ServersService) ToggleFavorite(id string) error {
-	list, err := s.d.ServerStore.Load()
-	if err != nil {
-		return fmt.Errorf("server.Load: %w", err)
-	}
-	idx := -1
-	for i := range list {
-		if list[i].ID == id {
-			idx = i
-			break
+	if err := func() error {
+		s.d.StoreLock.Lock()
+		defer s.d.StoreLock.Unlock()
+		list, err := s.d.ServerStore.Load()
+		if err != nil {
+			return fmt.Errorf("server.Load: %w", err)
 		}
-	}
-	if idx < 0 {
-		return ErrServerNotFound
-	}
-	list[idx].Favorite = !list[idx].Favorite
-	if err := s.d.ServerStore.Save(list); err != nil {
-		return fmt.Errorf("server.Save: %w", err)
+		idx := -1
+		for i := range list {
+			if list[i].ID == id {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			return ErrServerNotFound
+		}
+		list[idx].Favorite = !list[idx].Favorite
+		if err := s.d.ServerStore.Save(list); err != nil {
+			return fmt.Errorf("server.Save: %w", err)
+		}
+		return nil
+	}(); err != nil {
+		return err
 	}
 	// Publish servers:changed so the frontend's serversStore refetches
 	// — favorite is a persisted, list-visible flag; without this the
@@ -135,7 +151,11 @@ func (s *ServersService) TestLatency(id string) error {
 		}
 	}
 
+	// Probing runs outside the store lock: a full sweep costs up to
+	// probeTimeout per unreachable server, and holding the lock for that
+	// would stall every subscription sync and server edit behind it.
 	results := make([]map[string]any, 0, len(targets))
+	latencyByID := make(map[string]int, len(targets))
 	for _, i := range targets {
 		r := probeOne(ctx, &list[i])
 		results = append(results, r)
@@ -143,14 +163,33 @@ func (s *ServersService) TestLatency(id string) error {
 			continue
 		}
 		if ms, ok := r["latencyMs"].(int); ok {
-			latency := ms
-			list[i].LatencyMS = &latency
+			latencyByID[list[i].ID] = ms
 		}
 	}
-	// Persist updated latencies. Best-effort: if Save fails the in-memory
-	// probe results still ship to the frontend so the UI is at least live.
-	if err := s.d.ServerStore.Save(list); err != nil {
-		return fmt.Errorf("server.Save: %w", err)
+
+	// Persist updated latencies against a fresh read: the list loaded before
+	// the sweep may be stale by now, and writing it back would revert
+	// whatever a concurrent sync or edit persisted meanwhile. Latencies are
+	// applied by id rather than by index for the same reason.
+	if err := func() error {
+		s.d.StoreLock.Lock()
+		defer s.d.StoreLock.Unlock()
+		current, lerr := s.d.ServerStore.Load()
+		if lerr != nil {
+			return fmt.Errorf("server.Load: %w", lerr)
+		}
+		for i := range current {
+			if ms, ok := latencyByID[current[i].ID]; ok {
+				latency := ms
+				current[i].LatencyMS = &latency
+			}
+		}
+		if serr := s.d.ServerStore.Save(current); serr != nil {
+			return fmt.Errorf("server.Save: %w", serr)
+		}
+		return nil
+	}(); err != nil {
+		return err
 	}
 	s.d.Hub.Publish(hub.Event{
 		Name:    hub.EventProbeResult,
@@ -246,13 +285,19 @@ func (s *ServersService) Add(rawURI, name string) (hub.ServerView, error) {
 		Vless:  cfg,
 	}
 
-	list, err := s.d.ServerStore.Load()
-	if err != nil {
-		return hub.ServerView{}, fmt.Errorf("server.Load: %w", err)
-	}
-	list = append(list, srv)
-	if err := s.d.ServerStore.Save(list); err != nil {
-		return hub.ServerView{}, fmt.Errorf("server.Save: %w", err)
+	if err := func() error {
+		s.d.StoreLock.Lock()
+		defer s.d.StoreLock.Unlock()
+		list, lerr := s.d.ServerStore.Load()
+		if lerr != nil {
+			return fmt.Errorf("server.Load: %w", lerr)
+		}
+		if serr := s.d.ServerStore.Save(append(list, srv)); serr != nil {
+			return fmt.Errorf("server.Save: %w", serr)
+		}
+		return nil
+	}(); err != nil {
+		return hub.ServerView{}, err
 	}
 
 	s.d.Hub.Publish(hub.Event{Name: hub.EventServersChanged})
@@ -264,34 +309,41 @@ func (s *ServersService) Add(rawURI, name string) (hub.ServerView, error) {
 //   - Origin != OriginManual                  (read-only)
 //   - id == active session id                 (disconnect first)
 func (s *ServersService) Remove(id string) error {
-	list, err := s.d.ServerStore.Load()
-	if err != nil {
-		return fmt.Errorf("server.Load: %w", err)
-	}
-	idx := -1
-	for i := range list {
-		if list[i].ID == id {
-			idx = i
-			break
-		}
-	}
-	if idx == -1 {
-		return ErrServerNotFound
-	}
-	// Manual servers are always deletable. A subscription server is
-	// normally read-only (managed by sync) — but once its parent
-	// subscription is gone it becomes an orphan (the UI resolves its origin
-	// to "manual"), and an orphan that can't be deleted is a dead end.
-	if list[idx].Origin != server.OriginManual && !s.isOrphanSubServer(list[idx]) {
-		return errors.New("only manual servers can be deleted")
-	}
-	if s.d.ActiveServer != nil && s.d.ActiveServer.ActiveServerID() == id {
-		return errors.New("disconnect first to delete this server")
-	}
+	if err := func() error {
+		s.d.StoreLock.Lock()
+		defer s.d.StoreLock.Unlock()
 
-	list = append(list[:idx], list[idx+1:]...)
-	if err := s.d.ServerStore.Save(list); err != nil {
-		return fmt.Errorf("server.Save: %w", err)
+		list, err := s.d.ServerStore.Load()
+		if err != nil {
+			return fmt.Errorf("server.Load: %w", err)
+		}
+		idx := -1
+		for i := range list {
+			if list[i].ID == id {
+				idx = i
+				break
+			}
+		}
+		if idx == -1 {
+			return ErrServerNotFound
+		}
+		// Manual servers are always deletable. A subscription server is
+		// normally read-only (managed by sync) — but once its parent
+		// subscription is gone it becomes an orphan (the UI resolves its origin
+		// to "manual"), and an orphan that can't be deleted is a dead end.
+		if list[idx].Origin != server.OriginManual && !s.isOrphanSubServer(list[idx]) {
+			return errors.New("only manual servers can be deleted")
+		}
+		if s.d.ActiveServer != nil && s.d.ActiveServer.ActiveServerID() == id {
+			return errors.New("disconnect first to delete this server")
+		}
+
+		if err := s.d.ServerStore.Save(append(list[:idx], list[idx+1:]...)); err != nil {
+			return fmt.Errorf("server.Save: %w", err)
+		}
+		return nil
+	}(); err != nil {
+		return err
 	}
 
 	s.d.Hub.Publish(hub.Event{Name: hub.EventServersChanged})
@@ -336,45 +388,58 @@ func (s *ServersService) Edit(id, rawURI, name string) (hub.ServerView, bool, er
 	}
 	name = strings.TrimSpace(name)
 
-	list, err := s.d.ServerStore.Load()
-	if err != nil {
-		return hub.ServerView{}, false, fmt.Errorf("server.Load: %w", err)
-	}
-	idx := -1
-	for i := range list {
-		if list[i].ID == id {
-			idx = i
-			break
+	var (
+		view         hub.ServerView
+		vlessChanged bool
+	)
+	if err := func() error {
+		s.d.StoreLock.Lock()
+		defer s.d.StoreLock.Unlock()
+
+		list, err := s.d.ServerStore.Load()
+		if err != nil {
+			return fmt.Errorf("server.Load: %w", err)
 		}
-	}
-	if idx == -1 {
-		return hub.ServerView{}, false, ErrServerNotFound
-	}
-	if list[idx].Origin != server.OriginManual {
-		return hub.ServerView{}, false, errors.New("only manual servers can be edited")
-	}
+		idx := -1
+		for i := range list {
+			if list[i].ID == id {
+				idx = i
+				break
+			}
+		}
+		if idx == -1 {
+			return ErrServerNotFound
+		}
+		if list[idx].Origin != server.OriginManual {
+			return errors.New("only manual servers can be edited")
+		}
 
-	oldVless := list[idx].Vless
-	vlessChanged := !reflect.DeepEqual(oldVless, cfg)
+		oldVless := list[idx].Vless
+		vlessChanged = !reflect.DeepEqual(oldVless, cfg)
 
-	displayName := name
-	if displayName == "" {
-		displayName = cfg.Remark
-	}
-	if displayName == "" {
-		displayName = net.JoinHostPort(cfg.Address, strconv.Itoa(int(cfg.Port)))
-	}
+		displayName := name
+		if displayName == "" {
+			displayName = cfg.Remark
+		}
+		if displayName == "" {
+			displayName = net.JoinHostPort(cfg.Address, strconv.Itoa(int(cfg.Port)))
+		}
 
-	list[idx].Name = displayName
-	list[idx].Remark = cfg.Remark
-	list[idx].Vless = cfg
-	// Favorite, Disabled, Tags, LatencyMS preserved by skipping them.
+		list[idx].Name = displayName
+		list[idx].Remark = cfg.Remark
+		list[idx].Vless = cfg
+		// Favorite, Disabled, Tags, LatencyMS preserved by skipping them.
 
-	if err := s.d.ServerStore.Save(list); err != nil {
-		return hub.ServerView{}, false, fmt.Errorf("server.Save: %w", err)
+		if err := s.d.ServerStore.Save(list); err != nil {
+			return fmt.Errorf("server.Save: %w", err)
+		}
+		view = toServerViews([]server.Server{list[idx]}, nil)[0]
+		return nil
+	}(); err != nil {
+		return hub.ServerView{}, false, err
 	}
 
 	s.d.Hub.Publish(hub.Event{Name: hub.EventServersChanged})
 
-	return toServerViews([]server.Server{list[idx]}, nil)[0], vlessChanged, nil
+	return view, vlessChanged, nil
 }

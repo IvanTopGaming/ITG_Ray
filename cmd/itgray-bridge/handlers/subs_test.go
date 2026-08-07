@@ -74,18 +74,32 @@ func TestSubsListPropagatesError(t *testing.T) {
 	}
 }
 
-func TestSubsAddPassesEmptyUserAgent(t *testing.T) {
+func TestSubsAddForwardsUserAgent(t *testing.T) {
 	fake := &fakeSubs{addOut: hub.SubView{ID: "u1"}}
 	h := SubsHandlers{Svc: fake}
-	params := json.RawMessage(`{"url":"https://x/y","name":"P"}`)
+	params := json.RawMessage(`{"url":"https://x/y","name":"P","userAgent":"Custom/1.0"}`)
 	if _, err := h.Add(context.Background(), params); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
 	if fake.gotAddURL != "https://x/y" || fake.gotAddName != "P" {
 		t.Fatalf("forwarded: url=%q name=%q", fake.gotAddURL, fake.gotAddName)
 	}
+	if fake.gotAddUA != "Custom/1.0" {
+		t.Fatalf("userAgent not forwarded: got %q, want %q", fake.gotAddUA, "Custom/1.0")
+	}
+}
+
+func TestSubsAddOmittedUserAgentIsEmpty(t *testing.T) {
+	// No userAgent in params → "" so the bindings layer inherits the
+	// settings.subscriptions.userAgent default.
+	fake := &fakeSubs{addOut: hub.SubView{ID: "u1"}}
+	h := SubsHandlers{Svc: fake}
+	params := json.RawMessage(`{"url":"https://x/y","name":"P"}`)
+	if _, err := h.Add(context.Background(), params); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
 	if fake.gotAddUA != "" {
-		t.Fatalf("expected empty userAgent (binding falls back to settings default), got %q", fake.gotAddUA)
+		t.Fatalf("expected empty userAgent, got %q", fake.gotAddUA)
 	}
 }
 
@@ -96,10 +110,10 @@ func TestSubsAddInvalidParams(t *testing.T) {
 	}
 }
 
-func TestSubsEditPassesEmptyUserAgent(t *testing.T) {
+func TestSubsEditForwardsUserAgent(t *testing.T) {
 	fake := &fakeSubs{editOut: hub.SubView{ID: "u9"}}
 	h := SubsHandlers{Svc: fake}
-	params := json.RawMessage(`{"id":"u9","url":"https://x/y","name":"Renamed"}`)
+	params := json.RawMessage(`{"id":"u9","url":"https://x/y","name":"Renamed","userAgent":"Custom/2.0"}`)
 	got, err := h.Edit(context.Background(), params)
 	if err != nil {
 		t.Fatalf("Edit: %v", err)
@@ -109,6 +123,20 @@ func TestSubsEditPassesEmptyUserAgent(t *testing.T) {
 	}
 	if fake.gotEditID != "u9" || fake.gotEditURL != "https://x/y" || fake.gotEditName != "Renamed" {
 		t.Fatalf("forwarded: id=%q url=%q name=%q", fake.gotEditID, fake.gotEditURL, fake.gotEditName)
+	}
+	if fake.gotEditUA != "Custom/2.0" {
+		t.Fatalf("userAgent not forwarded: got %q, want %q", fake.gotEditUA, "Custom/2.0")
+	}
+}
+
+func TestSubsEditOmittedUserAgentIsEmpty(t *testing.T) {
+	// Empty userAgent is a valid value: it clears any per-sub override so the
+	// subscription inherits the global settings default.
+	fake := &fakeSubs{editOut: hub.SubView{ID: "u9"}}
+	h := SubsHandlers{Svc: fake}
+	params := json.RawMessage(`{"id":"u9","url":"https://x/y","name":"Renamed"}`)
+	if _, err := h.Edit(context.Background(), params); err != nil {
+		t.Fatalf("Edit: %v", err)
 	}
 	if fake.gotEditUA != "" {
 		t.Fatalf("expected empty userAgent, got %q", fake.gotEditUA)
