@@ -5,6 +5,7 @@ vi.mock("@/lib/itg/runtime", () => ({
 }));
 vi.mock("@/lib/itg/AppService", () => ({
   GetSnapshot: () => Promise.resolve({}),
+  ClaimAutoConnect: () => Promise.resolve(false),
 }));
 vi.mock("@/lib/itg/RunService", () => ({
   Connect: () => {},
