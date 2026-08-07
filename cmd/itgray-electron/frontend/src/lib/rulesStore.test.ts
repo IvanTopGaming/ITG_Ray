@@ -143,6 +143,79 @@ describe("rulesStore", () => {
     expect(addGroupMock).toHaveBeenCalledWith({ name: "Streaming" });
   });
 
+  // The first load can land before the bridge subprocess is accepting calls
+  // ("bridge: not started"). Treating that failure as a completed boot left
+  // the Routing tab permanently stuck on the error, because nothing re-reads
+  // the model afterwards — the tab only ever looked loaded.
+  it("retries the initial load after it fails", async () => {
+    listMock.mockRejectedValueOnce(new Error("bridge: not started"));
+    await __bootRulesForTest();
+    expect(getRulesState().bootstrapped).toBe(false);
+    expect(getRulesState().lastError).toContain("bridge: not started");
+
+    vi.useFakeTimers();
+    vi.advanceTimersByTime(5000);
+    listMock.mockResolvedValue(baseView);
+    await __bootRulesForTest();
+
+    expect(getRulesState().bootstrapped).toBe(true);
+    expect(getRulesState().lastError).toBeNull();
+    expect(getRulesState().groups).toHaveLength(baseView.groups.length);
+  });
+
+  it("does not hammer the bridge while the load keeps failing", async () => {
+    listMock.mockRejectedValue(new Error("bridge: not started"));
+    await __bootRulesForTest();
+    await __bootRulesForTest();
+    await __bootRulesForTest();
+
+    expect(listMock).toHaveBeenCalledTimes(1);
+  });
+
+  // Saving used to cost two serial round-trips before the editor would even
+  // navigate back: the mutation, then a full rules.list to re-read what was
+  // just written. The write is what has to be awaited; re-reading the model
+  // can settle on its own.
+  it("resolves a mutation without waiting for the follow-up refetch", async () => {
+    listMock.mockResolvedValue(baseView);
+    await __bootRulesForTest();
+    addGroupMock.mockResolvedValue({ id: "g3" });
+
+    let releaseList: (v: unknown) => void = () => {};
+    listMock.mockImplementationOnce(() => new Promise((res) => { releaseList = res; }));
+
+    let settled = false;
+    const p = rulesAddGroup("Streaming").then(() => { settled = true; });
+    // Drain the microtask queue. rules.list is still hanging, so the mutation
+    // can only have settled if it isn't waiting on it.
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(settled).toBe(true);
+    releaseList(baseView);
+    await p;
+  });
+
+  // The backend publishes rules:changed for the same write the store just
+  // made, so the store would re-read the model twice for one edit.
+  it("does not run overlapping refetches for a single change", async () => {
+    listMock.mockResolvedValue(baseView);
+    await __bootRulesForTest();
+    addGroupMock.mockResolvedValue({ id: "g3" });
+
+    let releaseList: (v: unknown) => void = () => {};
+    listMock.mockReset();
+    listMock.mockImplementation(() => new Promise((res) => { releaseList = res; }));
+
+    await rulesAddGroup("Streaming");
+    // Backend echo for the write that just happened.
+    eventHandlers["rules:changed"]?.();
+    await Promise.resolve();
+
+    expect(listMock).toHaveBeenCalledTimes(1);
+    releaseList(baseView);
+    await new Promise((r) => setTimeout(r, 0));
+  });
+
   it("rulesAddGroup republishes the canonical rules signature", async () => {
     listMock.mockResolvedValue(baseView);
     await __bootRulesForTest();

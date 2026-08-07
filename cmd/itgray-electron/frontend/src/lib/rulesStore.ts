@@ -126,7 +126,26 @@ export async function rulesRevertToBaseline(): Promise<boolean> {
   return true;
 }
 
-async function refetch(): Promise<void> {
+let refetchInFlight: Promise<void> | null = null;
+
+// Each local mutation makes the backend publish rules:changed for the very
+// write we just made. applyMutation already re-reads the model, so acting on
+// that echo would only duplicate the read — swallow exactly one echo per
+// local write, and still refetch for changes made anywhere else.
+let pendingSelfEchoes = 0;
+
+// refetch coalesces: a read already in flight was started after the last
+// write, so it will observe it, and a second concurrent rules.list would
+// return the same model.
+function refetch(): Promise<void> {
+  if (refetchInFlight) return refetchInFlight;
+  refetchInFlight = doRefetch().finally(() => {
+    refetchInFlight = null;
+  });
+  return refetchInFlight;
+}
+
+async function doRefetch(): Promise<void> {
   try {
     const v = (await RulesService.List()) as
       | { defaultAction: Action; groups: GroupView[] }
@@ -139,23 +158,40 @@ async function refetch(): Promise<void> {
       bootstrapped: true,
     });
   } catch (err: any) {
+    // bootstrapped stays as it was. A first load that fails — typically
+    // "bridge: not started", when the tab opens before the subprocess is
+    // accepting calls — must not count as loaded: nothing else re-reads the
+    // model, so the tab would sit on that error for the rest of the session.
+    lastLoadFailureAt = Date.now();
     setState({
       ...state,
       loading: false,
       lastError: err?.message ?? String(err),
-      bootstrapped: true,
     });
   }
 }
 
+// How long to wait before another attempt at the initial load. useRules calls
+// ensureBoot on every render, and a failure re-renders, so without this a
+// failing bridge would be retried in a tight loop.
+const BOOT_RETRY_COOLDOWN_MS = 2000;
+let lastLoadFailureAt = 0;
+
 function ensureBoot(): Promise<void> {
   if (state.bootstrapped) return Promise.resolve();
+  if (lastLoadFailureAt !== 0 && Date.now() - lastLoadFailureAt < BOOT_RETRY_COOLDOWN_MS) {
+    return Promise.resolve();
+  }
   if (!bootInFlight) {
     // Subscribe inside boot (not at module load) so __resetRulesForTest can
     // tear down the subscription and a fresh boot will re-register. Mirrors
     // the serversStore pattern.
     if (!unsubscribeEvent) {
       unsubscribeEvent = EventsOn("rules:changed", () => {
+        if (pendingSelfEchoes > 0) {
+          pendingSelfEchoes--;
+          return;
+        }
         void refetch();
       });
     }
@@ -187,16 +223,22 @@ function withSingleFlight<T>(fn: () => Promise<T>): Promise<T> {
   return p;
 }
 
-// applyMutation wraps every mutation in the single-flight mutex, refetches
-// the authoritative model from the backend, then republishes the canonical
-// rules signature so the ReconnectToast diff picks up the change. This is
+// applyMutation wraps every mutation in the single-flight mutex, re-reads the
+// authoritative model from the backend, then republishes the canonical rules
+// signature so the ReconnectToast diff picks up the change. This is
 // centralized here so each mutation wrapper stays a one-liner.
+//
+// The re-read is deliberately not awaited. The write is already committed
+// once op() resolves, and callers — the rule editor's Save, in particular —
+// were sitting through a second full round-trip just to read back what they
+// had written before the UI would respond. The model still settles from the
+// same refetch, a moment later.
 async function applyMutation<T>(op: () => Promise<T>): Promise<T> {
   return withSingleFlight(async () => {
     captureRevertBaseline();
     const result = await op();
-    await refetch();
-    pushRulesSignature();
+    pendingSelfEchoes++;
+    void refetch().then(pushRulesSignature);
     return result;
   });
 }
@@ -310,6 +352,9 @@ export function __resetRulesForTest(): void {
   listeners.clear();
   bootInFlight = null;
   mutationInFlight = null;
+  refetchInFlight = null;
+  pendingSelfEchoes = 0;
+  lastLoadFailureAt = 0;
   revertBaseline = null;
   if (unsubscribeEvent) {
     unsubscribeEvent();
