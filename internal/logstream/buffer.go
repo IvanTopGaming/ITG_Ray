@@ -71,6 +71,21 @@ func (b *Buffer) Snapshot() []Entry {
 	return all
 }
 
+// Tail returns the n most recent entries across all sources, oldest first.
+// A non-positive n means "everything", matching Snapshot.
+//
+// The Logs tab opens with a tail rather than the full buffer: four sources at
+// capPerSource each add up to thousands of entries, and shipping all of them
+// over the bridge on every open only to render the last screenful is wasted
+// work on both ends.
+func (b *Buffer) Tail(n int) []Entry {
+	all := b.Snapshot()
+	if n <= 0 || len(all) <= n {
+		return all
+	}
+	return all[len(all)-n:]
+}
+
 func (b *Buffer) Subscribe() int {
 	b.mu.Lock()
 	defer b.mu.Unlock()

@@ -1,6 +1,7 @@
 package logstream
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
@@ -26,6 +27,57 @@ func TestBufferEvictsPerSourceAndSnapshotsOrdered(t *testing.T) {
 	}
 	if snap[len(snap)-1].Message != "b3" {
 		t.Fatalf("newest bridge line should survive, got %q", snap[len(snap)-1].Message)
+	}
+}
+
+// Opening the Logs tab must not ship the whole buffer at once — with four
+// sources at 2000 lines each that is up to 8000 entries over the bridge, all
+// of them held in the renderer. Tail returns just the newest slice.
+func TestBufferTailReturnsNewestInOrder(t *testing.T) {
+	b := New(hub.New(), 100)
+	ts := time.Unix(0, 0)
+	for i := range 50 {
+		b.Add("bridge", "INFO", "b"+strconv.Itoa(i), ts)
+		b.Add("sing-box", "INFO", "s"+strconv.Itoa(i), ts)
+	}
+
+	tail := b.Tail(10)
+	if len(tail) != 10 {
+		t.Fatalf("want 10 entries, got %d", len(tail))
+	}
+	for i := 1; i < len(tail); i++ {
+		if tail[i].Seq <= tail[i-1].Seq {
+			t.Fatalf("tail not Seq-ordered: %v", tail)
+		}
+	}
+	// The newest line overall is the last one added.
+	full := b.Snapshot()
+	if tail[len(tail)-1].Seq != full[len(full)-1].Seq {
+		t.Fatalf("tail must end at the newest entry: got seq %d, want %d",
+			tail[len(tail)-1].Seq, full[len(full)-1].Seq)
+	}
+	// And it must be the *newest* 10, not the oldest.
+	if tail[0].Seq != full[len(full)-10].Seq {
+		t.Fatalf("tail must start 10 back from the newest: got seq %d, want %d",
+			tail[0].Seq, full[len(full)-10].Seq)
+	}
+}
+
+func TestBufferTailShorterThanRequested(t *testing.T) {
+	b := New(hub.New(), 100)
+	b.Add("bridge", "INFO", "only", time.Unix(0, 0))
+	if got := b.Tail(500); len(got) != 1 {
+		t.Fatalf("want the 1 available entry, got %d", len(got))
+	}
+}
+
+func TestBufferTailNonPositiveReturnsEverything(t *testing.T) {
+	b := New(hub.New(), 100)
+	ts := time.Unix(0, 0)
+	b.Add("bridge", "INFO", "a", ts)
+	b.Add("bridge", "INFO", "b", ts)
+	if got := b.Tail(0); len(got) != 2 {
+		t.Fatalf("Tail(0) should not truncate, got %d", len(got))
 	}
 }
 
