@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { eventHandlers, getSnapshotMock, runConnectMock, runDisconnectMock, testLatencyMock } = vi.hoisted(() => ({
+const { eventHandlers, getSnapshotMock, runConnectMock, runDisconnectMock, testLatencyMock, claimAutoConnectMock } = vi.hoisted(() => ({
   eventHandlers: {} as Record<string, (...args: any[]) => void>,
   getSnapshotMock: vi.fn(),
   runConnectMock: vi.fn(),
   runDisconnectMock: vi.fn(),
   testLatencyMock: vi.fn(),
+  claimAutoConnectMock: vi.fn(),
 }));
 
 vi.mock("@/lib/itg/runtime", () => ({
@@ -17,6 +18,7 @@ vi.mock("@/lib/itg/runtime", () => ({
 
 vi.mock("@/lib/itg/AppService", () => ({
   GetSnapshot: () => getSnapshotMock(),
+  ClaimAutoConnect: () => claimAutoConnectMock(),
 }));
 
 vi.mock("@/lib/itg/RunService", () => ({
@@ -67,6 +69,9 @@ beforeEach(() => {
   runDisconnectMock.mockReset();
   testLatencyMock.mockReset();
   testLatencyMock.mockResolvedValue(undefined);
+  claimAutoConnectMock.mockReset();
+  // Default: main grants this launch its one auto-connect.
+  claimAutoConnectMock.mockResolvedValue(true);
   localStorage.clear();
   __resetForTest();
 });
@@ -813,5 +818,42 @@ describe("dashStore — auto-connect on launch", () => {
     await __bootstrapForTest();
     fireEvent("vpn:status", { status: "connected", serverId: "s7", mode: "tun" });
     expect(localStorage.getItem(LAST_SERVER_KEY)).toBe("s7");
+  });
+
+  // Closing the window to the tray destroys the renderer, so re-opening it
+  // re-runs this module from scratch and its once-per-session flag resets.
+  // Auto-connect is meant to fire when the app launches, not every time the
+  // window comes back, so the one-shot belongs to main — which outlives the
+  // window and reports the claim as already spent.
+  it("does not connect when main reports the launch already used its auto-connect", async () => {
+    claimAutoConnectMock.mockResolvedValue(false);
+    localStorage.setItem(LAST_SERVER_KEY, "s1");
+    getSnapshotMock.mockResolvedValue({
+      ...baseSnapshot,
+      status: "idle",
+      helperState: "running",
+      servers: [{ id: "s1", name: "DE", favorite: false, latencyMs: 10 }],
+      settings: { general: { autoConnect: true } },
+    });
+    await __bootstrapForTest();
+    await Promise.resolve();
+    expect(runConnectMock).not.toHaveBeenCalled();
+  });
+
+  it("claims the launch's auto-connect exactly once", async () => {
+    runConnectMock.mockResolvedValue(undefined);
+    localStorage.setItem(LAST_SERVER_KEY, "s1");
+    getSnapshotMock.mockResolvedValue({
+      ...baseSnapshot,
+      status: "idle",
+      helperState: "running",
+      servers: [{ id: "s1", name: "DE", favorite: false, latencyMs: 10 }],
+      settings: { general: { autoConnect: true } },
+    });
+    await __bootstrapForTest();
+    fireEvent("servers:changed", {});
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(claimAutoConnectMock).toHaveBeenCalledTimes(1);
   });
 });

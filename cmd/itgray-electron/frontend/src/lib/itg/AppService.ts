@@ -21,3 +21,12 @@ export function SetAutostart(enabled: boolean): Promise<boolean> {
 export function GetAutostart(): Promise<boolean> {
   return (itgApp().getAutostart?.() as Promise<boolean>) ?? Promise.resolve(false);
 }
+
+// ClaimAutoConnect asks main whether this app launch may still auto-connect,
+// consuming the claim. Main answers true once per launch; a renderer that was
+// re-created (window closed to tray and re-opened) gets false. Falls back to
+// false when the binding is missing, so a stale preload can't reconnect the
+// user behind their back.
+export function ClaimAutoConnect(): Promise<boolean> {
+  return (itgApp().claimAutoConnect?.() as Promise<boolean>) ?? Promise.resolve(false);
+}

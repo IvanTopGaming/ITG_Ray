@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { GetSnapshot } from "@/lib/itg/AppService";
+import { ClaimAutoConnect, GetSnapshot } from "@/lib/itg/AppService";
 import { Connect, Disconnect } from "@/lib/itg/RunService";
 import { Update as UpdateSettings } from "@/lib/itg/SettingsService";
 import { seedConnectSnapshotFromSnapshot } from "@/lib/settings";
@@ -189,7 +189,9 @@ async function doBootstrap(): Promise<void> {
       bootstrapped: true,
     });
     maybeAutoProbe(servers);
-    maybeAutoConnect(snap);
+    // Detached from bootstrap: auto-connect is best-effort and must never
+    // take the snapshot down with it (connect failures land in lastError).
+    void maybeAutoConnect(snap).catch(() => {});
   } catch (err: any) {
     setState({
       ...state,
@@ -384,11 +386,20 @@ function maybeAutoProbe(servers: hub.ServerView[]) {
 
 // maybeAutoConnect fires a one-shot connect to the last-used server at launch
 // when the "connect on start" setting is enabled. Runs at most once per app
-// session and only from a clean idle boot with the helper up and a known last
+// launch and only from a clean idle boot with the helper up and a known last
 // server still present in the list. Failures surface via the lastError banner.
-function maybeAutoConnect(snap: Snapshot): void {
+//
+// The once-per-launch decision is main's, not this module's: closing the
+// window to the tray destroys the renderer, so re-opening it reset the local
+// guard and the app connected again — even though that is not a launch. The
+// local flag stays as a cheap guard against re-entry within one renderer.
+async function maybeAutoConnect(snap: Snapshot): Promise<void> {
   if (autoConnectDone) return;
   autoConnectDone = true;
+  // Claimed before the checks below so a launch that can't auto-connect (the
+  // setting is off, the helper isn't up yet) still spends its one shot: this
+  // is meant to happen at startup or not at all.
+  if (!(await ClaimAutoConnect())) return;
   if (snap.settings?.general?.autoConnect !== true) return;
   if (((snap.status as ChainStatus) || "idle") !== "idle") return;
   if ((snap.helperState as DashState["helperState"]) !== "running") return;

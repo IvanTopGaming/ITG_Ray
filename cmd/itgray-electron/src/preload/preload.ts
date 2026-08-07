@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld("itg", {
     getSnapshot: () => rpc("app.getSnapshot"),
     getPublicIP: () => rpc("app.getPublicIP"),
     quit: () => ipcRenderer.invoke("app.quit"),
+    claimAutoConnect: () => ipcRenderer.invoke("app.claimAutoConnect") as Promise<boolean>,
     getAutostart: () => ipcRenderer.invoke("app.getAutostart") as Promise<boolean>,
     setAutostart: (enabled: boolean) => ipcRenderer.invoke("app.setAutostart", enabled) as Promise<boolean>,
     getPendingDeeplink: () => ipcRenderer.invoke("deeplink.getPending") as Promise<string | null>,

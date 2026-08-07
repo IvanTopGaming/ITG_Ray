@@ -4,6 +4,7 @@ import { writeFile } from "node:fs/promises";
 import type { BridgeSupervisor } from "./bridge";
 import type { RpcMethod, EventTopic } from "../shared/protocol";
 import { defaultAutostart } from "./autostart";
+import { createAutoConnectClaim } from "./autoconnect";
 
 // Topics emitted by the bridge subprocess (not the supervisor itself).
 // `bridge.state` is supervisor-driven and forwarded separately below.
@@ -18,6 +19,11 @@ const BRIDGE_TOPICS: Exclude<EventTopic, "bridge.state">[] = [
   "vpn.speed",
   "vpn.status",
 ];
+
+// This launch's single auto-connect. Lives in main because the renderer is
+// re-created whenever the window is closed to the tray and re-opened, which
+// resets any guard held there. See autoconnect.ts.
+const claimAutoConnect = createAutoConnectClaim();
 
 /**
  * Registers the renderer ↔ bridge IPC handlers. The renderer calls
@@ -38,6 +44,11 @@ export function wireIPC(
   ipcMain.handle("app.quit", () => {
     app.quit();
   });
+
+  // Returns true to the first caller of this app launch and false to every
+  // one after it, so auto-connect fires once per launch no matter how often
+  // the renderer is re-created.
+  ipcMain.handle("app.claimAutoConnect", () => claimAutoConnect());
 
   // Window controls — drive the custom frameless title bar.
   ipcMain.handle("window.minimise", () => {
