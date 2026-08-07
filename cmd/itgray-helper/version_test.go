@@ -3,6 +3,7 @@ package main
 import (
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -15,7 +16,14 @@ func TestVersionIsOverridableByLdflags(t *testing.T) {
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skip("go toolchain not available")
 	}
-	bin := filepath.Join(t.TempDir(), "itgray-helper-test")
+	// Windows needs the .exe suffix: with an explicit -o the toolchain writes
+	// exactly the name given, and exec then refuses to run an extension-less
+	// file.
+	name := "itgray-helper-test"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	bin := filepath.Join(t.TempDir(), name)
 	const want = "v9.9.9-ldflags-probe"
 
 	build := exec.Command("go", "build", "-ldflags", "-X main.Version="+want, "-o", bin, ".")
