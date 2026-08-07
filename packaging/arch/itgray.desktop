@@ -7,4 +7,4 @@ Icon=itgray
 Terminal=false
 Categories=Network;
 MimeType=x-scheme-handler/itgray;
-StartupWMClass=ITG Ray
+StartupWMClass=itgray-electron
