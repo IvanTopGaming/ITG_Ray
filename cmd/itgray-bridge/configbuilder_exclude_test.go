@@ -49,6 +49,25 @@ func tunExcludeAddress(t *testing.T, mode chainctl.Mode) (any, bool) {
 	return nil, false
 }
 
+// excludeSet decodes a tun route_exclude_address value (a JSON array of CIDR
+// strings) into a set for order-independent membership assertions.
+func excludeSet(t *testing.T, v any) map[string]bool {
+	t.Helper()
+	raw, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("marshal route_exclude_address: %v", err)
+	}
+	var cidrs []string
+	if err := json.Unmarshal(raw, &cidrs); err != nil {
+		t.Fatalf("route_exclude_address is not a string array: %s", raw)
+	}
+	set := make(map[string]bool, len(cidrs))
+	for _, c := range cidrs {
+		set[c] = true
+	}
+	return set
+}
+
 func TestBuildConfigs_TUN_SetsServerExclude(t *testing.T) {
 	v, ok := tunExcludeAddress(t, chainctl.ModeTUN)
 
@@ -65,9 +84,28 @@ func TestBuildConfigs_TUN_SetsServerExclude(t *testing.T) {
 	if !ok {
 		t.Fatal("expected route_exclude_address present for ModeTUN")
 	}
-	got, _ := json.Marshal(v)
-	if string(got) != `["203.0.113.7/32"]` {
-		t.Fatalf("route_exclude_address = %s, want [\"203.0.113.7/32\"]", got)
+	got := excludeSet(t, v)
+
+	// The VPN server's own IP must stay out of the tunnel (otherwise the
+	// entry-node handshake would loop back through the proxied path).
+	if !got["203.0.113.7/32"] {
+		t.Errorf("route_exclude_address missing server /32; got %v", got)
+	}
+
+	// RFC1918 + IPv4 link-local must be excluded so the OS routes LAN traffic
+	// over the physical NIC instead of the TUN. Without this, reply packets
+	// from host-local services (SSH, samba, web) to LAN clients get pulled
+	// into the TUN and dropped by gvisor (src != tun addr) — incoming LAN
+	// connections time out while the tunnel is up. See bug #8.
+	for _, cidr := range []string{
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"169.254.0.0/16",
+	} {
+		if !got[cidr] {
+			t.Errorf("route_exclude_address missing LAN range %s; got %v", cidr, got)
+		}
 	}
 }
 
