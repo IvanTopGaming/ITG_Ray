@@ -10,6 +10,14 @@ import (
 	"github.com/itg-team/itg-ray/internal/sysopen"
 )
 
+// startTailLimit bounds how much history Start hands back when the Logs tab
+// opens. The buffer holds up to capPerSource lines per source, which across
+// bridge/sing-box/xray/helper is thousands of entries; sending all of them
+// over the bridge and keeping them in the renderer only to display the newest
+// screenful is pure overhead. Live lines keep arriving via log:line, and the
+// full history is still reachable through logs.export.
+const startTailLimit = 500
+
 type LogDeps struct {
 	Buffer      *logstream.Buffer
 	StartPoller func()
@@ -26,7 +34,7 @@ func (s *LogService) Start() (protocol.LogsStartResult, error) {
 		s.d.StartPoller()
 	}
 	var out []protocol.LogsEntry
-	for _, e := range s.d.Buffer.Snapshot() {
+	for _, e := range s.d.Buffer.Tail(startTailLimit) {
 		out = append(out, protocol.LogsEntry{
 			Seq:     e.Seq,
 			Time:    e.Time.Format(time.RFC3339Nano),

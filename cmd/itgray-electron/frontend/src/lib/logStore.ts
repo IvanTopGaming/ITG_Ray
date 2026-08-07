@@ -9,7 +9,13 @@ export type LogEntry = {
 };
 
 const LEVEL_ORDER: Record<LogLevel, number> = { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 };
-const CAP = 6000;
+
+// How many lines the renderer keeps. The Logs page renders the newest 800 and
+// re-filters the whole store on every incoming line, so retaining thousands
+// bought nothing but work: the extra entries were never displayed. The bridge
+// now seeds the tab with a tail rather than the entire buffer, and the full
+// history stays available through Export.
+export const CAP = 1600;
 
 let entries: LogEntry[] = [];
 let lastSeq = 0;
@@ -59,6 +65,9 @@ export function filterLogs(
       (q === "" || e.message.toLowerCase().includes(q)),
   );
 }
+
+// Test-only view of the retained entries.
+export function __entriesForTest(): LogEntry[] { return entries; }
 
 export function useLogEntries(): LogEntry[] {
   return useSyncExternalStore(
