@@ -77,8 +77,9 @@ contextBridge.exposeInMainWorld("itg", {
   },
   subs: {
     list: () => rpc("subs.list"),
-    add: (params: { url: string; name: string }) => rpc("subs.add", params),
-    edit: (params: { id: string; url: string; name: string }) =>
+    add: (params: { url: string; name: string; userAgent?: string }) =>
+      rpc("subs.add", params),
+    edit: (params: { id: string; url: string; name: string; userAgent?: string }) =>
       rpc("subs.edit", params),
     remove: (params: { id: string }) => rpc("subs.remove", params),
     syncOne: (params: { id: string }) => rpc("subs.syncOne", params),

@@ -9,9 +9,10 @@ import (
 )
 
 // Subs is the surface SubsHandlers needs from bindings.SubsService.
-// The real type satisfies it directly (Add/Edit accept a userAgent that
-// the bridge always passes as "" — bindings persists empty UA, and
-// SyncOne falls back to the settings.subscriptions.userAgent default).
+// The real type satisfies it directly. Add/Edit take the per-subscription
+// userAgent from the request; an empty string means "no override", so
+// bindings persists it empty and SyncOne falls back to the
+// settings.subscriptions.userAgent default.
 type Subs interface {
 	List() ([]hub.SubView, error)
 	Add(url, name, userAgent string) (hub.SubView, error)
@@ -27,14 +28,16 @@ type SubsHandlers struct {
 }
 
 type subsAddParams struct {
-	URL  string `json:"url"`
-	Name string `json:"name"`
+	URL       string `json:"url"`
+	Name      string `json:"name"`
+	UserAgent string `json:"userAgent"`
 }
 
 type subsEditParams struct {
-	ID   string `json:"id"`
-	URL  string `json:"url"`
-	Name string `json:"name"`
+	ID        string `json:"id"`
+	URL       string `json:"url"`
+	Name      string `json:"name"`
+	UserAgent string `json:"userAgent"`
 }
 
 type subsRemoveParams struct {
@@ -53,9 +56,9 @@ func (s SubsHandlers) List(_ context.Context, _ json.RawMessage) (any, error) {
 	return s.Svc.List()
 }
 
-// Add creates a new subscription. userAgent is always passed as "" — the
-// bindings layer persists it as such, and SyncOne falls back to the
-// per-call settings.subscriptions.userAgent default.
+// Add creates a new subscription with an optional per-subscription
+// User-Agent override. An empty userAgent means "inherit the global
+// settings.subscriptions.userAgent default".
 func (s SubsHandlers) Add(_ context.Context, params json.RawMessage) (any, error) {
 	if s.Svc == nil {
 		return hub.SubView{}, nil
@@ -64,11 +67,12 @@ func (s SubsHandlers) Add(_ context.Context, params json.RawMessage) (any, error
 	if err := json.Unmarshal(params, &p); err != nil {
 		return nil, err
 	}
-	return s.Svc.Add(p.URL, p.Name, "")
+	return s.Svc.Add(p.URL, p.Name, p.UserAgent)
 }
 
-// Edit updates name and/or URL of an existing subscription. userAgent
-// is always passed as "" for the same reason as Add.
+// Edit updates name, URL and/or the per-subscription User-Agent override.
+// An empty userAgent clears the override so the subscription falls back to
+// the global settings default.
 func (s SubsHandlers) Edit(_ context.Context, params json.RawMessage) (any, error) {
 	if s.Svc == nil {
 		return hub.SubView{}, nil
@@ -77,7 +81,7 @@ func (s SubsHandlers) Edit(_ context.Context, params json.RawMessage) (any, erro
 	if err := json.Unmarshal(params, &p); err != nil {
 		return nil, err
 	}
-	return s.Svc.Edit(p.ID, p.URL, p.Name, "")
+	return s.Svc.Edit(p.ID, p.URL, p.Name, p.UserAgent)
 }
 
 // Remove deletes the subscription with the given id.

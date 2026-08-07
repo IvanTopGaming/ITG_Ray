@@ -341,12 +341,14 @@ export interface SubView {
 export interface SubsAddParams {
   url: string;
   name: string;
+  userAgent?: string;
 }
 
 export interface SubsEditParams {
   id: string;
   url: string;
   name: string;
+  userAgent?: string;
 }
 
 export interface SubsRemoveParams {
