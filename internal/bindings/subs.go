@@ -9,11 +9,13 @@ import (
 	"log/slog"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/itg-team/itg-ray/internal/hub"
 	"github.com/itg-team/itg-ray/internal/hwid"
 	"github.com/itg-team/itg-ray/internal/logging"
+	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/subscription"
 )
 
@@ -21,6 +23,12 @@ import (
 // `subs sync` 30s budget so a slow provider does not block the GUI's
 // SyncOne / SyncAll for longer than the user is likely to wait.
 const syncTimeout = 30 * time.Second
+
+// maxConcurrentSyncs caps how many subscriptions SyncAll refreshes at once,
+// so a user with a long provider list doesn't open that many sockets in one
+// burst. Each sync is mostly waiting on the network, so a modest fan-out
+// already collapses the total time to roughly the slowest provider.
+const maxConcurrentSyncs = 8
 
 // defaultUpdateInterval is the polling cadence written to a freshly-added
 // Stored when the user does not supply one in the AddSubDialog. Matches
@@ -47,6 +55,11 @@ type SubsDeps struct {
 	ServerStore ServerStore
 	Hub         *hub.Hub
 
+	// StoreLock serializes read-modify-write cycles over the shared stores.
+	// main.go passes the same instance to ServersService so both services
+	// contend on one lock; when nil, the constructor creates a private one.
+	StoreLock *StoreLock
+
 	// Identity-header inputs for SyncOne. Resolved at startup and held;
 	// SettingsView is a function so toggle changes take effect on the
 	// next sync without restart.
@@ -61,9 +74,15 @@ type SubsDeps struct {
 type SubsService struct{ d SubsDeps }
 
 // NewSubsService constructs a new SubsService. SubsDeps is passed by value
-// because the struct is small (three interface/pointer fields) and the
-// constructor is invoked once at process start.
-func NewSubsService(d SubsDeps) *SubsService { return &SubsService{d: d} }
+// because the struct is small (a handful of interface/pointer fields) and the
+// constructor is invoked once at process start. A nil StoreLock is replaced
+// by a private one so a service is never silently left unsynchronized.
+func NewSubsService(d SubsDeps) *SubsService {
+	if d.StoreLock == nil {
+		d.StoreLock = NewStoreLock()
+	}
+	return &SubsService{d: d}
+}
 
 // List returns every persisted subscription as a SubView, with ServerCount
 // computed from the matching servers.json entries (grouped by SourceID).
@@ -109,13 +128,19 @@ func (s *SubsService) Add(rawURL, name, userAgent string) (hub.SubView, error) {
 		UserAgent:      strings.TrimSpace(userAgent),
 		UpdateInterval: subscription.Duration(interval),
 	}
-	subs, err := s.d.SubStore.Load()
-	if err != nil {
-		return hub.SubView{}, fmt.Errorf("sub.Load: %w", err)
-	}
-	subs = append(subs, stored)
-	if err := s.d.SubStore.Save(subs); err != nil {
-		return hub.SubView{}, fmt.Errorf("sub.Save: %w", err)
+	if err := func() error {
+		s.d.StoreLock.Lock()
+		defer s.d.StoreLock.Unlock()
+		subs, err := s.d.SubStore.Load()
+		if err != nil {
+			return fmt.Errorf("sub.Load: %w", err)
+		}
+		if err := s.d.SubStore.Save(append(subs, stored)); err != nil {
+			return fmt.Errorf("sub.Save: %w", err)
+		}
+		return nil
+	}(); err != nil {
+		return hub.SubView{}, err
 	}
 	view := toSubViews([]subscription.Stored{stored}, nil)[0]
 	slog.Info("sub added", slog.String("scope", "subs"),
@@ -135,46 +160,64 @@ func (s *SubsService) Add(rawURL, name, userAgent string) (hub.SubView, error) {
 // the user prunes them. Mirrors the CLI's `sub remove` semantics so the
 // two surfaces remain interchangeable.
 func (s *SubsService) Remove(id string) error {
-	subs, err := s.d.SubStore.Load()
-	if err != nil {
-		return fmt.Errorf("sub.Load: %w", err)
-	}
-	out := subs[:0]
-	for _, sub := range subs {
-		if sub.ID != id {
-			out = append(out, sub)
-		}
-	}
-	if err := s.d.SubStore.Save(out); err != nil {
-		return fmt.Errorf("sub.Save: %w", err)
-	}
-	slog.Info("sub removed", slog.String("scope", "subs"), slog.String("id", id))
+	// The sub removal and its server cascade are one transaction: both stores
+	// are rewritten from a single consistent read, so a concurrent sync can't
+	// interleave between them and resurrect the servers being dropped.
+	serversChanged := false
+	if err := func() error {
+		s.d.StoreLock.Lock()
+		defer s.d.StoreLock.Unlock()
 
-	// Cascade: drop the servers this subscription imported so they don't
-	// linger as orphans (mislabeled "manual", undeletable). Mirrors Edit's
-	// URL-change cleanup. Best-effort — a server-store failure here leaves
-	// the (now-orphaned) servers but the sub is already gone; not fatal.
-	if servers, lerr := s.d.ServerStore.Load(); lerr == nil {
-		kept := servers[:0]
-		removed := false
-		for _, srv := range servers {
-			if srv.SourceID == id {
-				removed = true
-				continue
-			}
-			kept = append(kept, srv)
+		subs, err := s.d.SubStore.Load()
+		if err != nil {
+			return fmt.Errorf("sub.Load: %w", err)
 		}
-		if removed {
-			if serr := s.d.ServerStore.Save(kept); serr == nil {
-				s.d.Hub.Publish(hub.Event{Name: hub.EventServersChanged})
-			} else {
-				slog.Warn("sub remove cascade save failed", slog.String("scope", "subs"),
-					slog.String("id", id), slog.String("err", serr.Error()))
+		out := subs[:0]
+		for _, sub := range subs {
+			if sub.ID != id {
+				out = append(out, sub)
 			}
 		}
-	} else {
-		slog.Warn("sub remove cascade load failed", slog.String("scope", "subs"),
-			slog.String("id", id), slog.String("err", lerr.Error()))
+		if err := s.d.SubStore.Save(out); err != nil {
+			return fmt.Errorf("sub.Save: %w", err)
+		}
+		slog.Info("sub removed", slog.String("scope", "subs"), slog.String("id", id))
+
+		// Cascade: drop the servers this subscription imported so they don't
+		// linger as orphans (mislabeled "manual", undeletable). Mirrors Edit's
+		// URL-change cleanup. Best-effort — a server-store failure here leaves
+		// the (now-orphaned) servers but the sub is already gone; not fatal.
+		if servers, lerr := s.d.ServerStore.Load(); lerr == nil {
+			kept := servers[:0]
+			removed := false
+			for _, srv := range servers {
+				if srv.SourceID == id {
+					removed = true
+					continue
+				}
+				kept = append(kept, srv)
+			}
+			if removed {
+				if serr := s.d.ServerStore.Save(kept); serr == nil {
+					serversChanged = true
+				} else {
+					slog.Warn("sub remove cascade save failed", slog.String("scope", "subs"),
+						slog.String("id", id), slog.String("err", serr.Error()))
+				}
+			}
+		} else {
+			slog.Warn("sub remove cascade load failed", slog.String("scope", "subs"),
+				slog.String("id", id), slog.String("err", lerr.Error()))
+		}
+		return nil
+	}(); err != nil {
+		return err
+	}
+
+	// Published outside the lock so a subscriber can't re-enter the stores
+	// while it is still held.
+	if serversChanged {
+		s.d.Hub.Publish(hub.Event{Name: hub.EventServersChanged})
 	}
 	return nil
 }
@@ -191,6 +234,13 @@ func (s *SubsService) Edit(id, rawURL, name, userAgent string) (hub.SubView, err
 	if err := validateSubURL(rawURL); err != nil {
 		return hub.SubView{}, err
 	}
+
+	// Held for the whole edit: on a URL change this rewrites servers.json and
+	// subscriptions.json together, and a concurrent sync must not land between
+	// the two halves.
+	s.d.StoreLock.Lock()
+	defer s.d.StoreLock.Unlock()
+
 	subs, err := s.d.SubStore.Load()
 	if err != nil {
 		return hub.SubView{}, fmt.Errorf("sub.Load: %w", err)
@@ -282,17 +332,16 @@ func (s *SubsService) SyncOne(id string) error {
 		return errSubNotFound
 	}
 
-	existing, err := s.d.ServerStore.Load()
-	if err != nil {
-		return fmt.Errorf("server.Load: %w", err)
-	}
-
 	input := found.ToSyncInput()
 	if s.d.SettingsView != nil {
 		input.UserAgent, input.HWID, input.DeviceOS, input.OSVersion, input.DeviceModel =
 			resolveIdentity(s.d.SettingsView().Subscriptions, *found, s.d.HWID, s.d.DeviceInfo)
 	}
-	merged, meta, syncErr := subscription.Sync(ctx, input, existing, syncTimeout)
+
+	// The fetch runs outside the store lock so subscriptions refresh in
+	// parallel instead of queueing behind each other's network round-trip.
+	incoming, meta, syncErr := subscription.FetchParse(ctx, input, syncTimeout)
+
 	// Capture the upstream-fetch outcome before the Save branch may
 	// overwrite syncErr — Userinfo is meaningful exactly when the fetch
 	// itself succeeded, regardless of whether the disk write that follows
@@ -300,28 +349,45 @@ func (s *SubsService) SyncOne(id string) error {
 	syncOK := syncErr == nil
 
 	// Local override pattern: status/msg start from meta and are explicitly
-	// overridden only when ServerStore.Save fails after a successful Sync.
+	// overridden only when the merge-and-save fails after a successful fetch.
 	// Keeps a single UpdateMeta call site at the bottom.
 	status := meta.Status
 	msg := meta.Message
 	imported := 0
 	if syncOK {
-		// Successful sync: persist merged servers + count post-merge entries
-		// belonging to this sub. importedCount is what the reducer uses to
-		// keep the badge fresh between snapshot refreshes.
-		if err := s.d.ServerStore.Save(merged); err != nil {
-			// Demote to error so the frontend's red badge surfaces the
-			// disk failure; the user can retry. syncErr is set so the
-			// return value reflects the disk failure too.
-			status = "error"
-			msg = fmt.Sprintf("server.Save: %v", err)
-			syncErr = err
-		} else {
+		// Successful fetch: reconcile against the current list and persist,
+		// counting post-merge entries belonging to this sub. importedCount is
+		// what the reducer uses to keep the badge fresh between snapshot
+		// refreshes.
+		//
+		// existing is loaded here, under the lock and after the fetch, rather
+		// than before it: a snapshot taken before a concurrent sync's Save
+		// would be stale, and writing it back would drop that sync's servers.
+		saveErr := func() error {
+			s.d.StoreLock.Lock()
+			defer s.d.StoreLock.Unlock()
+			existing, lerr := s.d.ServerStore.Load()
+			if lerr != nil {
+				return fmt.Errorf("server.Load: %w", lerr)
+			}
+			merged := server.Merge(existing, incoming, id)
+			if serr := s.d.ServerStore.Save(merged); serr != nil {
+				return serr
+			}
 			for i := range merged {
 				if merged[i].SourceID == id {
 					imported++
 				}
 			}
+			return nil
+		}()
+		if saveErr != nil {
+			// Demote to error so the frontend's red badge surfaces the
+			// disk failure; the user can retry. syncErr is set so the
+			// return value reflects the disk failure too.
+			status = "error"
+			msg = fmt.Sprintf("server.Save: %v", saveErr)
+			syncErr = saveErr
 		}
 	}
 
@@ -354,26 +420,46 @@ func (s *SubsService) SyncOne(id string) error {
 	return syncErr
 }
 
-// SyncAll iterates over every subscription, calling SyncOne on each. A
-// failure on one sub does not abort the loop — each sub's own sub:synced
+// SyncAll refreshes every subscription concurrently, calling SyncOne on each.
+// A failure on one sub does not abort the rest — each sub's own sub:synced
 // event already carries the per-entry status, so the frontend can react
 // independently. The aggregate return is nil unless the initial Load
 // itself failed.
+//
+// Concurrency matters here: each SyncOne can spend up to syncTimeout waiting
+// on its provider, so running them in sequence made a full refresh take the
+// sum of every provider's latency. The fetches now overlap, and SyncOne's
+// store lock keeps the merges serialized.
 func (s *SubsService) SyncAll() error {
 	subs, err := s.d.SubStore.Load()
 	if err != nil {
 		return fmt.Errorf("sub.Load: %w", err)
 	}
-	var ok, failed int
+
+	var (
+		mu         sync.Mutex
+		ok, failed int
+		wg         sync.WaitGroup
+	)
+	sem := make(chan struct{}, maxConcurrentSyncs)
 	for _, sub := range subs {
-		if err := s.SyncOne(sub.ID); err != nil {
-			failed++
-			slog.Warn("sub sync skipped", slog.String("scope", "subs"),
-				slog.String("id", sub.ID), slog.String("err", logging.RedactError(err)))
-			continue
-		}
-		ok++
+		sem <- struct{}{}
+		wg.Go(func() {
+			defer func() { <-sem }()
+			err := s.SyncOne(sub.ID)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				failed++
+				slog.Warn("sub sync skipped", slog.String("scope", "subs"),
+					slog.String("id", sub.ID), slog.String("err", logging.RedactError(err)))
+				return
+			}
+			ok++
+		})
 	}
+	wg.Wait()
+
 	slog.Info("subs sync complete", slog.String("scope", "subs"),
 		slog.Int("ok", ok), slog.Int("failed", failed))
 	return nil

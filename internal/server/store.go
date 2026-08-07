@@ -5,7 +5,8 @@ import (
 	"errors"
 	"io/fs"
 	"os"
-	"path/filepath"
+
+	"github.com/itg-team/itg-ray/internal/config"
 )
 
 // Load reads a servers.json file. Returns an empty slice (not nil-or-error)
@@ -26,24 +27,17 @@ func Load(path string) ([]Server, error) {
 }
 
 // Save writes servers atomically (tmp + rename) with 0600 permissions.
+//
+// config.WriteAtomic is used rather than a hand-rolled "<path>.tmp": that
+// fixed temp name is shared by every concurrent writer, so two overlapping
+// saves race on the same file and whichever renames second fails with
+// ENOENT. WriteAtomic gives each writer its own temp file.
 func Save(path string, servers []Server) error {
 	b, err := json.MarshalIndent(servers, "", "  ")
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	return nil
+	return config.WriteAtomic(path, b, 0o600)
 }
 
 // Merge reconciles an existing server list with a freshly-synced list for a given

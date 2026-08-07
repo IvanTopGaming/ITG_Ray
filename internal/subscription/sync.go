@@ -75,7 +75,30 @@ type SyncMeta struct {
 // On failure: returns (nil, meta, err) — meta is still populated with
 // LastUpdate, Status="error", Message=logging.RedactError(err), and Headers if Fetch
 // succeeded. Callers should always persist meta regardless of err.
+//
+// Callers that must not hold a lock across the network round-trip should use
+// FetchParse instead and call server.Merge themselves once the fetch is done.
 func Sync(ctx context.Context, sub Subscription, existing []server.Server, timeout time.Duration) ([]server.Server, SyncMeta, error) { //nolint:gocritic // sub is a value type; caller convenience outweighs copy cost
+	incoming, meta, err := FetchParse(ctx, sub, timeout)
+	if err != nil {
+		return nil, meta, err
+	}
+	merged := server.Merge(existing, incoming, sub.ID)
+	slog.Info("sub synced", slog.String("scope", "sub"), slog.String("id", sub.ID),
+		slog.Int("servers", len(merged)))
+	return merged, meta, nil
+}
+
+// FetchParse fetches the subscription and parses its body into the servers it
+// declares, without touching the local list. Splitting this out of Sync lets a
+// caller run the slow network half concurrently and take its store lock only
+// for the merge-and-save that follows — holding a lock across a 30s fetch
+// would serialize every subscription refresh behind the slowest provider.
+//
+// Returns the incoming servers plus the same SyncMeta contract as Sync: meta
+// is populated (including Headers when the fetch itself succeeded) even on
+// error, so callers can persist it regardless.
+func FetchParse(ctx context.Context, sub Subscription, timeout time.Duration) ([]server.Server, SyncMeta, error) { //nolint:gocritic // sub is a value type; caller convenience outweighs copy cost
 	slog.Info("sub sync start", slog.String("scope", "sub"), slog.String("id", sub.ID))
 
 	meta := SyncMeta{LastUpdate: time.Now()}
@@ -119,13 +142,12 @@ func Sync(ctx context.Context, sub Subscription, existing []server.Server, timeo
 	for i := range parsed.Configs {
 		incoming = append(incoming, server.New(parsed.Configs[i], server.OriginSubscription, sub.ID))
 	}
-	merged := server.Merge(existing, incoming, sub.ID)
 
 	meta.Status = "ok"
 	meta.Message = fmt.Sprintf("imported=%d invalid=%d skipped=%d", len(parsed.Configs), parsed.Invalid, sumSkipped(parsed.Skipped))
-	slog.Info("sub synced", slog.String("scope", "sub"), slog.String("id", sub.ID),
-		slog.Int("servers", len(merged)), slog.Int("skipped", sumSkipped(parsed.Skipped)))
-	return merged, meta, nil
+	slog.Info("sub fetched", slog.String("scope", "sub"), slog.String("id", sub.ID),
+		slog.Int("servers", len(incoming)), slog.Int("skipped", sumSkipped(parsed.Skipped)))
+	return incoming, meta, nil
 }
 
 func sumSkipped(m map[string]int) int {

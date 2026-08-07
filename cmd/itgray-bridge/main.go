@@ -138,10 +138,17 @@ func main() {
 	}
 	deviceInfo := hwid.Info()
 
+	// One lock shared by both services that rewrite servers.json /
+	// subscriptions.json. The dispatcher runs handlers concurrently, so a
+	// subscription sync and a server edit can otherwise each load the list,
+	// modify their own copy and save, silently dropping the other's change.
+	storeLock := bindings.NewStoreLock()
+
 	subsSvc := bindings.NewSubsService(bindings.SubsDeps{
 		SubStore:    subStore,
 		ServerStore: serverStore,
 		Hub:         h,
+		StoreLock:   storeLock,
 		SettingsView: func() hub.SettingsView {
 			view, verr := configStore.View()
 			if verr != nil {
@@ -244,6 +251,7 @@ func main() {
 		Hub:          h,
 		ActiveServer: chainCtrl,
 		SubStore:     subStore,
+		StoreLock:    storeLock,
 	})
 
 	logPoller := logstream.NewPoller(logBuf, newLogReader(logHelperAddr))
@@ -396,6 +404,7 @@ func main() {
 	refreshDriver := refresh.NewDriver(refresh.Config{
 		Subs:        &subStore,
 		ServersPath: serverStore.path,
+		ServersLock: storeLock,
 		Log:         slog.Default(),
 		OnSync: func(subID string) {
 			h.Publish(hub.Event{Name: hub.EventSubSynced, Payload: map[string]any{"id": subID}})
