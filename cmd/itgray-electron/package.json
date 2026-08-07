@@ -28,13 +28,16 @@
     "package:linux": "electron-builder --linux",
     "package:mac": "electron-builder --mac"
   },
+  "allowScripts": {
+    "electron": true
+  },
   "devDependencies": {
     "@types/auto-launch": "^5.0.5",
     "@types/node": "^20.0.0",
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
     "electron": "^41.10.3",
-    "electron-builder": "^26.8.1",
+    "electron-builder": "^26.15.3",
     "typescript": "^5.6.0",
     "wait-on": "^7.2.0"
   },
