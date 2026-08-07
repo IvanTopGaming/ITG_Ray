@@ -158,7 +158,15 @@ async function doBootstrap(): Promise<void> {
   try {
     const snap: Snapshot = await GetSnapshot();
     const servers = snap.servers ?? [];
-    const nextStatus = (snap.status as ChainStatus) || "idle";
+    const snapStatus = (snap.status as ChainStatus) || "idle";
+    // The backend reports "connected" from the moment the chain has been
+    // handed off, which includes the connecting phase. bootstrap also runs on
+    // unrelated events (servers:changed, sub:synced), so a snapshot pulled
+    // mid-handshake would end the connecting stage before the chain is
+    // actually up. Only the vpn:status event ends it. An "idle" snapshot is
+    // still honoured, so a transition can never get stuck here.
+    const nextStatus =
+      state.status === "connecting" && snapStatus === "connected" ? state.status : snapStatus;
     // Adopt path: if the bridge reconciled a still-live chain at boot, the
     // vpn:status "connected" event that seeds the reconnect snapshot fired
     // before this renderer subscribed. Seed it from the pull so the Reconnect
@@ -339,15 +347,39 @@ function registerEventHandlers() {
   EventsOn("probe:result", onProbeResult);
 }
 
+// Servers the auto-probe has already swept this session, and whether a sweep
+// is currently running. Both are needed to keep maybeAutoProbe from looping:
+// TestLatency publishes servers:changed on completion, which re-bootstraps and
+// calls back in here.
+const autoProbedIds = new Set<string>();
+let autoProbeInFlight = false;
+
 // maybeAutoProbe fires a TestLatency batch when the snapshot contains servers
-// that have never been probed (latencyMs === 0). Fire-and-forget; results
-// arrive via the probe:result handler above.
+// this session has not swept yet. Fire-and-forget; results arrive via the
+// probe:result handler above.
+//
+// "Unprobed" cannot be latencyMs === 0 alone: a server that is unreachable
+// stays at 0 no matter how often it is probed, so that condition holds
+// forever and every servers:changed the sweep itself triggers starts another
+// one. After a disconnect the previously-reachable servers stop answering,
+// each probe then burns the full timeout, and the overlapping sweeps are what
+// showed up as latency being measured furiously. Tracking which ids have been
+// swept makes each server cost exactly one automatic probe; refreshing a
+// stale reading is what the explicit probe buttons are for.
 function maybeAutoProbe(servers: hub.ServerView[]) {
-  if (servers.length === 0) return;
-  if (servers.every((s) => s.latencyMs > 0)) return;
-  void TestLatency("").catch(() => {
-    /* probe failures are non-fatal; UI shows em-dash for unprobed servers */
-  });
+  if (servers.length === 0 || autoProbeInFlight) return;
+  const hasFreshTarget = servers.some((s) => s.latencyMs === 0 && !autoProbedIds.has(s.id));
+  if (!hasFreshTarget) return;
+  // TestLatency("") sweeps the whole list, so the whole list is now covered.
+  for (const s of servers) autoProbedIds.add(s.id);
+  autoProbeInFlight = true;
+  void TestLatency("")
+    .catch(() => {
+      /* probe failures are non-fatal; UI shows em-dash for unprobed servers */
+    })
+    .finally(() => {
+      autoProbeInFlight = false;
+    });
 }
 
 // maybeAutoConnect fires a one-shot connect to the last-used server at launch
@@ -396,25 +428,41 @@ export async function dashConnect(serverId: string): Promise<void> {
 }
 
 async function doConnect(serverId: string): Promise<void> {
+  // Read the pre-click status before the optimistic update below overwrites
+  // it — the "switch server while connected" path keys off it.
+  const wasConnected = state.status === "connected";
+
   // Optimistic UI: immediately reflect the user's chosen server so the
   // active-row indicator flips before the backend completes Disconnect+
   // Connect. The vpn:status connected event will set the same value;
   // on failure the chain falls back to idle/error but currentServer
   // continues to reflect the user's intent (clearer than reverting).
+  //
+  // The status flips to "connecting" here too. The backend does emit that
+  // status, but only after the RPC round-trip, and it can be superseded by
+  // "connected" a frame later — so waiting for it left the UI reading "not
+  // connected" for the entire handshake and the stage looked skipped. The
+  // click is what starts the transition, so that is when it should show.
   const target = state.allServers.find((s) => s.id === serverId);
-  if (target && state.currentServer?.id !== serverId) {
-    setState({ ...state, currentServer: target });
-  }
+  setState({
+    ...state,
+    status: "connecting",
+    currentServer: target && state.currentServer?.id !== serverId ? target : state.currentServer,
+  });
   try {
-    if (state.status === "connected") {
+    if (wasConnected) {
       await Disconnect();
       await waitForIdle();
     }
     await Connect(serverId, state.mode);
   } catch (err: any) {
     if (err?.message === "superseded") return;
+    // Back to idle, not left in "connecting": effectiveStatus only maps to
+    // "error" from idle, so keeping the optimistic status would hide the
+    // failure behind a spinner that never resolves.
     setState({
       ...state,
+      status: "idle",
       lastError: {
         kind: "connect_failed",
         message: err?.message ?? String(err),
@@ -426,11 +474,15 @@ async function doConnect(serverId: string): Promise<void> {
 }
 
 export async function dashDisconnect(): Promise<void> {
+  // Same reasoning as doConnect: show the transition from the click rather
+  // than from the backend event, which teardown often outruns.
+  setState({ ...state, status: "disconnecting" });
   try {
     await Disconnect();
   } catch (err: any) {
     setState({
       ...state,
+      status: "idle",
       lastError: {
         kind: "disconnect_failed",
         message: err?.message ?? String(err),
@@ -569,6 +621,8 @@ export function __resetForTest(): void {
   bootstrapInFlight = null;
   connectInFlight = null;
   autoConnectDone = false;
+  autoProbedIds.clear();
+  autoProbeInFlight = false;
   registerEventHandlers();
 }
 

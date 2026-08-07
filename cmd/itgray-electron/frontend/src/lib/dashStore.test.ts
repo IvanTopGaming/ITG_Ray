@@ -336,6 +336,53 @@ describe("dashStore — probe:result", () => {
     expect(testLatencyMock).not.toHaveBeenCalled();
   });
 
+  // TestLatency publishes servers:changed when it finishes, which re-bootstraps
+  // and re-evaluates the auto-probe. A server that never answers keeps
+  // latencyMs at 0, so a condition based only on "is anything unprobed" fires
+  // again on every one of those events — an endless probe loop that gets worse
+  // after disconnect, when unreachable servers each burn the full probe
+  // timeout and sweeps start overlapping.
+  it("does not re-fire the auto-probe when a server stays unprobed", async () => {
+    getSnapshotMock.mockResolvedValue({
+      ...baseSnapshot,
+      servers: [{ id: "a", name: "A", favorite: false, latencyMs: 0 }],
+    });
+    await __bootstrapForTest();
+    expect(testLatencyMock).toHaveBeenCalledTimes(1);
+
+    // The sweep found nothing reachable, so the snapshot still reports 0.
+    fireEvent("servers:changed", {});
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(testLatencyMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("auto-probes servers that appear later without re-probing known ones", async () => {
+    getSnapshotMock.mockResolvedValue({
+      ...baseSnapshot,
+      servers: [{ id: "a", name: "A", favorite: false, latencyMs: 0 }],
+    });
+    await __bootstrapForTest();
+    expect(testLatencyMock).toHaveBeenCalledTimes(1);
+
+    // A subscription sync brings in a server nobody has probed yet.
+    getSnapshotMock.mockResolvedValue({
+      ...baseSnapshot,
+      servers: [
+        { id: "a", name: "A", favorite: false, latencyMs: 0 },
+        { id: "b", name: "B", favorite: false, latencyMs: 0 },
+      ],
+    });
+    fireEvent("sub:synced", {});
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(testLatencyMock).toHaveBeenCalledTimes(2);
+  });
+
   it("patches latencyMs in allServers from probe:result payload", async () => {
     getSnapshotMock.mockResolvedValue({
       ...baseSnapshot,
@@ -442,6 +489,32 @@ describe("dashConnect optimistic UI", () => {
     await p;
   });
 
+  // The backend does emit "connecting", but only after the RPC round-trip,
+  // and in sysproxy mode the chain is often up so fast that connecting and
+  // connected arrive back to back. Waiting for the event leaves the button
+  // showing "not connected" for the whole handshake, so the stage reads as
+  // skipped. The click itself is the signal that the transition started.
+  it("flips status to connecting immediately on dashConnect, before backend resolves", async () => {
+    await __bootstrapForTest();
+    let resolveConnect: () => void = () => {};
+    runConnectMock.mockImplementationOnce(() => new Promise<void>((res) => { resolveConnect = res; }));
+    const p = dashConnect("a");
+    expect(getDashState().status).toBe("connecting");
+    resolveConnect();
+    await p;
+  });
+
+  // Otherwise the spinner is stuck forever: effectiveStatus only reports
+  // "error" while status is idle, so a rejected Connect that leaves the
+  // optimistic "connecting" in place hides its own failure.
+  it("falls back to idle when Connect rejects so the error surfaces", async () => {
+    await __bootstrapForTest();
+    runConnectMock.mockRejectedValueOnce(new Error("helper down"));
+    await expect(dashConnect("a")).rejects.toThrow("helper down");
+    expect(getDashState().status).toBe("idle");
+    expect(effectiveStatus(getDashState())).toBe("error");
+  });
+
   it("does not setState when target equals currentServer (no-op optimistic branch)", async () => {
     await __bootstrapForTest();
     // Set currentServer to 'a' but NOT status=connected by firing connected
@@ -474,6 +547,28 @@ describe("dashDisconnect", () => {
     runDisconnectMock.mockResolvedValue(undefined);
     await dashDisconnect();
     expect(runDisconnectMock).toHaveBeenCalled();
+  });
+
+  it("flips status to disconnecting immediately, before backend resolves", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    fireEvent("vpn:status", { status: "connected", serverId: "a", mode: "tun" });
+    let resolveDisconnect: () => void = () => {};
+    runDisconnectMock.mockImplementationOnce(() => new Promise<void>((res) => { resolveDisconnect = res; }));
+    const p = dashDisconnect();
+    expect(getDashState().status).toBe("disconnecting");
+    resolveDisconnect();
+    await p;
+  });
+
+  it("falls back to idle when Disconnect rejects so the error surfaces", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    fireEvent("vpn:status", { status: "connected", serverId: "a", mode: "tun" });
+    runDisconnectMock.mockRejectedValueOnce(new Error("helper gone"));
+    await expect(dashDisconnect()).rejects.toThrow("helper gone");
+    expect(getDashState().status).toBe("idle");
+    expect(effectiveStatus(getDashState())).toBe("error");
   });
 });
 
