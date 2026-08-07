@@ -54,7 +54,9 @@ ls -la "$OUT"
 
 # ----- Electron NSIS installer -----
 echo ">> cross-compiling itgray-bridge for Windows"
-( cd "$ROOT/cmd/itgray-electron" && npm run build:bridge:win )
+# Pass VERSION through — see the note in build-linux.sh: otherwise the bridge
+# derives its own dirty describe string and ships "<tag>+dirty".
+( cd "$ROOT/cmd/itgray-electron" && APP_VERSION="$VERSION" npm run build:bridge:win )
 
 echo ">> building Electron bundle (main + preload + frontend)"
 ( cd "$ROOT/cmd/itgray-electron" && npm run build:main && npm run build:preload && npm run build:frontend )
