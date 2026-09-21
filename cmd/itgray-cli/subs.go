@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/itg-team/itg-ray/internal/logging"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/subscription"
 	"github.com/spf13/cobra"
@@ -107,8 +108,16 @@ func newSubCmd() *cobra.Command {
 				existing = nil
 			}
 			ctx := context.Background()
+			resolveInput := subscription.NewInputResolver(dataDir, Version)
 			for _, s := range subs {
-				merged, meta, err := subscription.Sync(ctx, s.ToSyncInput(), existing, 30*time.Second)
+				input, err := resolveInput(s)
+				var merged []server.Server
+				var meta subscription.SyncMeta
+				if err == nil {
+					merged, meta, err = subscription.Sync(ctx, input, existing, 30*time.Second)
+				} else {
+					meta.Message = logging.RedactError(err)
+				}
 				if err != nil {
 					// meta.Message is already logging.RedactError(err) (see
 					// subscription.Sync) — never fall back to the raw err.Error(),

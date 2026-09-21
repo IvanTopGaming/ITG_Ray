@@ -6,6 +6,7 @@ import (
 	"context"
 	"log/slog"
 	"math/rand"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -54,6 +55,7 @@ type ProbeFn func(ctx context.Context, addr string, timeout time.Duration) (time
 
 // Config wires a Driver. All fields are optional except Subs and ServersPath.
 type Config struct {
+	ResolveInput       subscription.InputResolver
 	Subs               subscription.Store
 	ServersPath        string
 	SyncFunc           SyncFn
@@ -88,6 +90,7 @@ type Config struct {
 
 // Driver owns the background goroutines.
 type Driver struct {
+	resolveInput         subscription.InputResolver
 	subs                 subscription.Store
 	serversPath          string
 	syncFunc             SyncFn
@@ -113,6 +116,7 @@ type Driver struct {
 // left at its zero value.
 func NewDriver(c Config) *Driver {
 	d := &Driver{
+		resolveInput:         c.ResolveInput,
 		subs:                 c.Subs,
 		serversPath:          c.ServersPath,
 		syncFunc:             c.SyncFunc,
@@ -132,6 +136,9 @@ func NewDriver(c Config) *Driver {
 	}
 	if d.serversMu == nil {
 		d.serversMu = &sync.Mutex{}
+	}
+	if d.resolveInput == nil {
+		d.resolveInput = subscription.NewInputResolver(filepath.Dir(c.ServersPath), "dev")
 	}
 	if d.syncFunc == nil {
 		d.syncFunc = subscription.Sync

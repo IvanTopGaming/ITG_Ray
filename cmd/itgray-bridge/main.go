@@ -25,7 +25,6 @@ import (
 	"github.com/itg-team/itg-ray/internal/config"
 	"github.com/itg-team/itg-ray/internal/geo"
 	"github.com/itg-team/itg-ray/internal/hub"
-	"github.com/itg-team/itg-ray/internal/hwid"
 	"github.com/itg-team/itg-ray/internal/logging"
 	"github.com/itg-team/itg-ray/internal/logstream"
 	"github.com/itg-team/itg-ray/internal/refresh"
@@ -130,13 +129,7 @@ func main() {
 	slog.SetDefault(slog.New(logstream.NewTapHandler(
 		logging.NewHandler(logWriter, logLevel), logBuf)))
 
-	// HWID + DeviceInfo for SubsService HWID-aware sync. Failure is
-	// non-fatal: SubsService treats empty HWID as "HWID disabled".
-	hwidValue, err := hwid.Get(dataDir)
-	if err != nil {
-		slog.Warn("hwid.Get returned error; using fallback value", "err", err)
-	}
-	deviceInfo := hwid.Info()
+	resolveInput := subscription.NewInputResolver(dataDir, handlers.Version)
 
 	// One lock shared by both services that rewrite servers.json /
 	// subscriptions.json. The dispatcher runs handlers concurrently, so a
@@ -156,8 +149,7 @@ func main() {
 			}
 			return view
 		},
-		HWID:       hwidValue,
-		DeviceInfo: deviceInfo,
+		ResolveInput: resolveInput,
 	})
 
 	// helperProber wraps HelperService.Status: bindings.AppService uses
@@ -402,10 +394,11 @@ func main() {
 	// previously wired only in itgray-cli, so the Electron app never
 	// auto-updated subscriptions.
 	refreshDriver := refresh.NewDriver(refresh.Config{
-		Subs:        &subStore,
-		ServersPath: serverStore.path,
-		ServersLock: storeLock,
-		Log:         slog.Default(),
+		ResolveInput: resolveInput,
+		Subs:         &subStore,
+		ServersPath:  serverStore.path,
+		ServersLock:  storeLock,
+		Log:          slog.Default(),
 		OnSync: func(subID string) {
 			h.Publish(hub.Event{Name: hub.EventSubSynced, Payload: map[string]any{"id": subID}})
 			h.Publish(hub.Event{Name: hub.EventServersChanged, Payload: map[string]any{}})

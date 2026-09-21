@@ -7,8 +7,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/itg-team/itg-ray/internal/config"
+	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/subscription"
 	"github.com/stretchr/testify/require"
 )
@@ -106,4 +110,53 @@ func TestSubSync_RedactsTokenFromStdoutAndStore(t *testing.T) {
 	require.Len(t, persisted, 1)
 	require.NotContains(t, persisted[0].LastMessage, token, "token leaked into persisted LastMessage")
 	require.Equal(t, "error", persisted[0].LastStatus)
+}
+
+func TestSubSync_UsesConfiguredIdentity(t *testing.T) {
+	originalDir := dataDir
+	dataDir = t.TempDir()
+	t.Cleanup(func() { dataDir = originalDir })
+	cfg := config.Defaults()
+	cfg.Subscriptions.UserAgent = "Global/1"
+	require.NoError(t, config.Save(filepath.Join(dataDir, "config.json"), cfg))
+	id := strings.Repeat("c", 64)
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "hwid.dat"), []byte(id), 0600))
+	headers := make(chan http.Header, 1)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		headers <- r.Header.Clone()
+		_, _ = w.Write([]byte("vless://u@node.example:443#demo"))
+	}))
+	t.Cleanup(ts.Close)
+	require.NoError(t, subsStore().Save([]subscription.Stored{{ID: "s1", URL: ts.URL, UserAgent: "Override/1"}}))
+	cmd, _, err := newSubCmd().Find([]string{"sync"})
+	require.NoError(t, err)
+	captureStdout(t, func() { require.NoError(t, cmd.RunE(cmd, nil)) })
+	h := <-headers
+	require.Equal(t, "Override/1", h.Get("User-Agent"))
+	require.Equal(t, id, h.Get("x-hwid"))
+}
+
+func TestSubSync_SettingsFailurePreservesEarlierImports(t *testing.T) {
+	originalDir := dataDir
+	dataDir = t.TempDir()
+	t.Cleanup(func() { dataDir = originalDir })
+	configPath := filepath.Join(dataDir, "config.json")
+	require.NoError(t, config.Save(configPath, config.Defaults()))
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, os.WriteFile(configPath, []byte("{"), 0600))
+		_, _ = w.Write([]byte("vless://u@node.example:443#demo"))
+	}))
+	t.Cleanup(ts.Close)
+	require.NoError(t, subsStore().Save([]subscription.Stored{{ID: "s1", URL: ts.URL}, {ID: "s2", URL: ts.URL}}))
+	cmd, _, err := newSubCmd().Find([]string{"sync"})
+	require.NoError(t, err)
+	captureStdout(t, func() { require.NoError(t, cmd.RunE(cmd, nil)) })
+	stored, err := server.Load(serversPath())
+	require.NoError(t, err)
+	require.Len(t, stored, 1)
+	require.Equal(t, "s1", stored[0].SourceID)
+	subs, err := subsStore().Load()
+	require.NoError(t, err)
+	require.Equal(t, "ok", subs[0].LastStatus)
+	require.Equal(t, "error", subs[1].LastStatus)
 }
