@@ -4,12 +4,44 @@ import (
 	"bytes"
 	"io"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 
 	"github.com/itg-team/itg-ray/internal/subscription"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSubAddAndSync_ProviderName(t *testing.T) {
+	originalDir := dataDir
+	dataDir = t.TempDir()
+	t.Cleanup(func() { dataDir = originalDir })
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Profile-Title", "CLI Provider")
+		_, _ = w.Write([]byte("vless://00000000-0000-0000-0000-000000000000@1.2.3.4:443?type=tcp&security=tls&sni=x#A\n"))
+	}))
+	t.Cleanup(ts.Close)
+	addCmd, _, err := newSubCmd().Find([]string{"add"})
+	require.NoError(t, err)
+	require.Nil(t, addCmd.Flags().Lookup("name"))
+	captureStdout(t, func() {
+		require.NoError(t, addCmd.RunE(addCmd, []string{ts.URL + "/private-token"}))
+	})
+	stored, err := subsStore().Load()
+	require.NoError(t, err)
+	require.Len(t, stored, 1)
+	require.Equal(t, "127.0.0.1", stored[0].Name)
+	syncCmd, _, err := newSubCmd().Find([]string{"sync"})
+	require.NoError(t, err)
+	captureStdout(t, func() {
+		require.NoError(t, syncCmd.RunE(syncCmd, nil))
+	})
+	stored, err = subsStore().Load()
+	require.NoError(t, err)
+	require.Len(t, stored, 1)
+	require.Equal(t, "CLI Provider", stored[0].Name)
+}
 
 // captureStdout redirects os.Stdout for the duration of fn and returns
 // everything written to it.

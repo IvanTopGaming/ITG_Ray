@@ -23,7 +23,7 @@ type fakeStore struct {
 
 func (f *fakeStore) Load() ([]subscription.Stored, error) { return f.subs, nil }
 func (f *fakeStore) Save(s []subscription.Stored) error   { f.subs = s; return nil }
-func (f *fakeStore) UpdateMeta(_ string, _ time.Time, _, _ string, _ *subscription.Userinfo) error {
+func (f *fakeStore) UpdateMeta(_ string, _ time.Time, _, _ string, _ *subscription.Headers) error {
 	f.updates.Add(1)
 	return nil
 }

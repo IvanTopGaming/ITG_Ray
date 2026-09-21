@@ -1,6 +1,7 @@
 package bindings
 
 import (
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,63 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestSubsService_SyncOne_ProviderName(t *testing.T) {
+	const title = "Подписка 🚀"
+	const validBody = "vless://00000000-0000-0000-0000-000000000000@1.2.3.4:443?type=tcp&security=tls&sni=x#A\n"
+	for _, tc := range []struct {
+		name   string
+		header string
+		body   string
+		want   string
+		fail   bool
+	}{
+		{"plain title replaces old name", "New Provider", validBody, "New Provider", false},
+		{"encoded title replaces old name", "base64:" + base64.StdEncoding.EncodeToString([]byte(title)), validBody, title, false},
+		{"missing title preserves name", "", validBody, "Previous Provider", false},
+		{"empty title preserves name", "  ", validBody, "Previous Provider", false},
+		{"malformed title preserves name", "base64:!", validBody, "Previous Provider", false},
+		{"failed sync preserves name", "Error Page", "<html>bad gateway</html>", "Previous Provider", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Profile-Title", tc.header)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			t.Cleanup(ts.Close)
+			svc, store := newSubsServiceForTest(t, t.TempDir())
+			require.NoError(t, store.Save([]subscription.Stored{{ID: "s1", Name: "Previous Provider", URL: ts.URL}}))
+			err := svc.SyncOne("s1")
+			if tc.fail {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			subs, err := store.Load()
+			require.NoError(t, err)
+			require.Equal(t, tc.want, subs[0].Name)
+			views, err := svc.List()
+			require.NoError(t, err)
+			require.Equal(t, tc.want, views[0].Name)
+		})
+	}
+}
+
+func TestSubsService_Add_FetchesProviderName(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Profile-Title", "base64:UHJvdmlkZXI=")
+		_, _ = w.Write([]byte("vless://00000000-0000-0000-0000-000000000000@1.2.3.4:443?type=tcp&security=tls&sni=x#A\n"))
+	}))
+	t.Cleanup(ts.Close)
+	svc, store := newSubsServiceForTest(t, t.TempDir())
+	view, err := svc.Add(ts.URL+"/private-token", "")
+	require.NoError(t, err)
+	require.Equal(t, "127.0.0.1", view.Name)
+	require.Eventually(t, func() bool {
+		subs, err := store.Load()
+		return err == nil && len(subs) == 1 && subs[0].Name == "Provider" && subs[0].LastStatus == "ok"
+	}, 3*time.Second, 10*time.Millisecond)
+}
 
 // newSubsServiceForTest builds a SubsService over fresh FileStores rooted in
 // dir. Shared helper for the Add/Remove unit tests below; List has its own
@@ -78,26 +136,20 @@ func TestSubsService_List(t *testing.T) {
 	require.Equal(t, int(time.Hour/time.Second), got[0].UpdateInterval)
 }
 
-// TestSubsService_Add_GeneratesIDAndPersists checks the happy path: a valid
-// http(s) URL produces a non-empty ID, the friendly name round-trips, and
-// the entry lands in the on-disk file. The auto-kicked SyncOne goroutine is
-// not awaited — it will fail to dial example.com:443 in CI, but since Add
-// returns *before* spawning the goroutine and the test uses t.TempDir, the
-// goroutine cannot race with assertions on the store contents.
 func TestSubsService_Add_GeneratesIDAndPersists(t *testing.T) {
 	svc, store := newSubsServiceForTest(t, t.TempDir())
 
-	view, err := svc.Add("https://example.com/sub", "test", "")
+	view, err := svc.Add("https://example.com/sub", "")
 	require.NoError(t, err)
 	require.NotEmpty(t, view.ID)
-	require.Equal(t, "test", view.Name)
+	require.Equal(t, "example.com", view.Name)
 	require.Equal(t, "https://example.com/sub", view.URL)
 
 	all, err := store.Load()
 	require.NoError(t, err)
 	require.Len(t, all, 1)
 	require.Equal(t, view.ID, all[0].ID)
-	require.Equal(t, "test", all[0].Name)
+	require.Equal(t, "example.com", all[0].Name)
 	require.Equal(t, "https://example.com/sub", all[0].URL)
 }
 
@@ -107,7 +159,7 @@ func TestSubsService_Add_GeneratesIDAndPersists(t *testing.T) {
 func TestSubsService_Add_RejectsInvalidURL(t *testing.T) {
 	svc, store := newSubsServiceForTest(t, t.TempDir())
 
-	_, err := svc.Add("not-a-url", "", "")
+	_, err := svc.Add("not-a-url", "")
 	require.Error(t, err)
 
 	all, err := store.Load()
@@ -262,7 +314,7 @@ func TestSubsService_SyncOne_ConcurrentSyncsKeepBothSubscriptions(t *testing.T) 
 	require.Equal(t, 1, bySource["s2"], "servers from the second subscription survived the concurrent sync")
 }
 
-func TestSubsService_Edit_RenameOnly_PreservesServersAndLastSync(t *testing.T) {
+func TestSubsService_Edit_UserAgentPreservesNameServersAndLastSync(t *testing.T) {
 	dir := t.TempDir()
 	svc, subStore := newSubsServiceForTest(t, dir)
 	srvPath := filepath.Join(dir, "servers.json")
@@ -288,22 +340,23 @@ func TestSubsService_Edit_RenameOnly_PreservesServersAndLastSync(t *testing.T) {
 		},
 	}}))
 
-	view, err := svc.Edit("s1", "https://provider.example/sub", "new name", "")
+	view, err := svc.Edit("s1", "https://provider.example/sub", "Custom/2.0")
 	require.NoError(t, err)
-	require.Equal(t, "new name", view.Name)
+	require.Equal(t, "old name", view.Name)
+	require.Equal(t, "Custom/2.0", view.UserAgent)
 	require.Equal(t, "OK", view.LastSyncStatus)
-	require.True(t, view.LastSyncAt.Equal(syncedAt), "LastSyncAt must be preserved on rename")
-	require.Equal(t, 1, view.ServerCount, "servers must not be cascaded on rename")
+	require.True(t, view.LastSyncAt.Equal(syncedAt), "LastSyncAt must be preserved when updating User-Agent")
+	require.Equal(t, 1, view.ServerCount, "servers must not be cascaded when updating User-Agent")
 
 	loaded, err := subStore.Load()
 	require.NoError(t, err)
 	require.Len(t, loaded, 1)
-	require.Equal(t, "new name", loaded[0].Name)
+	require.Equal(t, "old name", loaded[0].Name)
 	require.True(t, loaded[0].LastSyncAt.Equal(syncedAt))
 
 	srvs, err := server.Load(srvPath)
 	require.NoError(t, err)
-	require.Len(t, srvs, 1, "server with this SourceID must survive rename")
+	require.Len(t, srvs, 1, "server with this SourceID must survive a User-Agent change")
 }
 
 func TestSubsService_Edit_URLChange_CascadesServersAndResetsMeta(t *testing.T) {
@@ -340,9 +393,10 @@ func TestSubsService_Edit_URLChange_CascadesServersAndResetsMeta(t *testing.T) {
 		mkSrv("d", ""),   // manual entry — must survive
 	}))
 
-	view, err := svc.Edit("s1", "https://new.example/sub", "renamed", "")
+	view, err := svc.Edit("s1", "https://new.example/sub", "")
 	require.NoError(t, err)
 	require.Equal(t, "https://new.example/sub", view.URL)
+	require.Equal(t, "new.example", view.Name)
 	require.True(t, view.LastSyncAt.IsZero(), "LastSyncAt must reset on URL change")
 	require.Equal(t, "", view.LastSyncStatus, "LastSyncStatus must reset on URL change")
 	require.Equal(t, 0, view.ServerCount, "old servers must be cascaded")
@@ -367,7 +421,7 @@ func TestSubsService_Edit_RejectsInvalidURL(t *testing.T) {
 		ID: "s1", Name: "x", URL: "https://provider.example/sub",
 	}}))
 
-	_, err := svc.Edit("s1", "ftp://bad", "x", "")
+	_, err := svc.Edit("s1", "ftp://bad", "")
 	require.ErrorIs(t, err, errInvalidURL)
 }
 
@@ -375,7 +429,7 @@ func TestSubsService_Edit_ReturnsErrSubNotFound(t *testing.T) {
 	dir := t.TempDir()
 	svc, _ := newSubsServiceForTest(t, dir)
 
-	_, err := svc.Edit("missing-id", "https://provider.example/sub", "x", "")
+	_, err := svc.Edit("missing-id", "https://provider.example/sub", "")
 	require.ErrorIs(t, err, errSubNotFound)
 }
 
@@ -383,7 +437,7 @@ func TestSubsService_Add_PersistsUserAgent(t *testing.T) {
 	dir := t.TempDir()
 	svc, subStore := newSubsServiceForTest(t, dir)
 
-	_, err := svc.Add("https://provider.example/sub", "n", "Custom/1.0")
+	_, err := svc.Add("https://provider.example/sub", "Custom/1.0")
 	require.NoError(t, err)
 
 	loaded, err := subStore.Load()
@@ -410,7 +464,7 @@ func TestSubsService_Add_UsesConfiguredInterval(t *testing.T) {
 		},
 	})
 
-	_, err := svc.Add("https://example.com/sub", "test", "")
+	_, err := svc.Add("https://example.com/sub", "")
 	require.NoError(t, err)
 
 	all, err := subStore.Load()
@@ -435,7 +489,7 @@ func TestSubsService_Add_FallsBackWhenSettingsZero(t *testing.T) {
 		},
 	})
 
-	_, err := svc.Add("https://example.com/sub", "test", "")
+	_, err := svc.Add("https://example.com/sub", "")
 	require.NoError(t, err)
 	all, err := subStore.Load()
 	require.NoError(t, err)
@@ -458,7 +512,7 @@ func TestSubsService_Add_FallsBackWhenSettingsViewNil(t *testing.T) {
 		SettingsView: nil,
 	})
 
-	_, err := svc.Add("https://example.com/sub", "test", "")
+	_, err := svc.Add("https://example.com/sub", "")
 	require.NoError(t, err)
 	all, err := subStore.Load()
 	require.NoError(t, err)
@@ -473,7 +527,7 @@ func TestSubsService_Edit_UpdatesUserAgent_IncludingClearToEmpty(t *testing.T) {
 		ID: "s1", Name: "x", URL: "https://provider.example/sub", UserAgent: "old/1.0",
 	}}))
 
-	_, err := svc.Edit("s1", "https://provider.example/sub", "x", "")
+	_, err := svc.Edit("s1", "https://provider.example/sub", "")
 	require.NoError(t, err)
 
 	loaded, err := subStore.Load()

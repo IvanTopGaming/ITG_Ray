@@ -36,6 +36,22 @@ func TestStored_JSON_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestStored_DisplayName(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		stored Stored
+		want   string
+	}{
+		{"existing name", Stored{Name: "Provider", URL: "https://vpn.example.com/sub"}, "Provider"},
+		{"legacy empty name", Stored{URL: "https://user:secret@vpn.example.com:8443/sub/token?key=secret"}, "vpn.example.com"},
+		{"whitespace name", Stored{Name: "  ", URL: "https://vpn.example.com/sub"}, "vpn.example.com"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, tc.stored.DisplayName())
+		})
+	}
+}
+
 func TestStored_ToSyncInput_OmitsMetadata(t *testing.T) {
 	s := Stored{
 		ID:             "s1",
@@ -244,7 +260,7 @@ func TestFileStore_UpdateMeta_WritesMessageAndUserinfo(t *testing.T) {
 	}
 	at := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
 
-	require.NoError(t, fs.UpdateMeta("s1", at, "ok", "imported=3", ui))
+	require.NoError(t, fs.UpdateMeta("s1", at, "ok", "imported=3", &Headers{Userinfo: ui}))
 
 	got, err := fs.Load()
 	require.NoError(t, err)
@@ -271,7 +287,7 @@ func TestFileStore_UpdateMeta_PartialUserinfo_PreservesUnsetFields(t *testing.T)
 	ui := &Userinfo{Total: 2000, HasTotal: true}
 	at := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
 
-	require.NoError(t, fs.UpdateMeta("s1", at, "ok", "", ui))
+	require.NoError(t, fs.UpdateMeta("s1", at, "ok", "", &Headers{Userinfo: ui}))
 	got, err := fs.Load()
 	require.NoError(t, err)
 	require.EqualValues(t, 999, got[0].Upload, "prior Upload preserved (not in header)")
@@ -302,7 +318,7 @@ func TestFileStore_UpdateMeta_HasExpireClearsPriorExpiry(t *testing.T) {
 		Expire: nil, HasExpire: true,
 	}
 	at := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
-	require.NoError(t, fs.UpdateMeta("s1", at, "ok", "", ui))
+	require.NoError(t, fs.UpdateMeta("s1", at, "ok", "", &Headers{Userinfo: ui}))
 
 	got, err := fs.Load()
 	require.NoError(t, err)

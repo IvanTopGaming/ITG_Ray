@@ -52,11 +52,11 @@ func (d *Driver) syncOne(ctx context.Context, sub subscription.Stored) (retryabl
 		return false
 	}
 
-	var ui *subscription.Userinfo
+	var headers *subscription.Headers
 	if syncErr == nil {
-		ui = meta.Headers.Userinfo
+		headers = &meta.Headers
 	}
-	if err := d.subs.UpdateMeta(sub.ID, d.now(), meta.Status, truncate(meta.Message, lastStatusMaxLen), ui); err != nil {
+	if err := d.subs.UpdateMeta(sub.ID, d.now(), meta.Status, truncate(meta.Message, lastStatusMaxLen), headers); err != nil {
 		d.log.Error("refresh sync: update meta failed",
 			slog.String("scope", "refresh"),
 			slog.String("id", sub.ID),

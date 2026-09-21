@@ -22,6 +22,7 @@ type metaCall struct {
 	Status  string
 	Message string
 	UI      *subscription.Userinfo
+	Title   string
 }
 
 type metaCaptureStore struct {
@@ -32,10 +33,16 @@ type metaCaptureStore struct {
 
 func (m *metaCaptureStore) Load() ([]subscription.Stored, error) { return m.subs, nil }
 func (m *metaCaptureStore) Save(s []subscription.Stored) error   { m.subs = s; return nil }
-func (m *metaCaptureStore) UpdateMeta(id string, at time.Time, status, message string, ui *subscription.Userinfo) error {
+func (m *metaCaptureStore) UpdateMeta(id string, at time.Time, status, message string, headers *subscription.Headers) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.log = append(m.log, metaCall{ID: id, At: at, Status: status, Message: message, UI: ui})
+	var ui *subscription.Userinfo
+	var title string
+	if headers != nil {
+		ui = headers.Userinfo
+		title = headers.ProfileTitle
+	}
+	m.log = append(m.log, metaCall{ID: id, At: at, Status: status, Message: message, UI: ui, Title: title})
 	return nil
 }
 
@@ -59,6 +66,26 @@ func mkDriver(t *testing.T, st subscription.Store, serversPath string, syncFn Sy
 		Rand:        rand.New(rand.NewSource(1)), //nolint:gosec // deterministic test seed
 		Log:         slog.New(slog.NewTextHandler(testWriter{t}, nil)),
 	})
+}
+
+func TestSyncOne_PersistsProviderName(t *testing.T) {
+	dir := t.TempDir()
+	store := subscription.FileStore{Path: filepath.Join(dir, "subscriptions.json")}
+	sub := subscription.Stored{ID: "s1", Name: "Old Provider", URL: "https://provider.example/sub"}
+	if err := store.Save([]subscription.Stored{sub}); err != nil {
+		t.Fatal(err)
+	}
+	d := mkDriver(t, store, writeSeedServers(t, dir, nil), func(_ context.Context, _ subscription.Subscription, existing []server.Server, _ time.Duration) ([]server.Server, subscription.SyncMeta, error) {
+		return existing, subscription.SyncMeta{Status: "ok", Headers: subscription.Headers{ProfileTitle: "New Provider"}}, nil
+	})
+	d.syncOne(context.Background(), sub)
+	stored, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stored) != 1 || stored[0].Name != "New Provider" {
+		t.Fatalf("provider name not persisted: %+v", stored)
+	}
 }
 
 func TestSyncOne_Success_WritesServersAndOKMeta(t *testing.T) {

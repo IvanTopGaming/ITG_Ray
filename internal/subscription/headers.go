@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Userinfo holds quota figures parsed from the Subscription-Userinfo header.
@@ -53,14 +55,31 @@ func ParseHeaders(h http.Header) Headers {
 			slog.Debug("profile-update-interval: skipping non-numeric", slog.String("scope", "subscription.headers"), slog.String("value", s))
 		}
 	}
-	if s := h.Get("profile-title"); s != "" {
-		if dec, err := base64.StdEncoding.DecodeString(strings.TrimSpace(s)); err == nil {
-			out.ProfileTitle = string(dec)
-		} else {
-			out.ProfileTitle = s
+	out.ProfileTitle = parseProfileTitle(h.Get("profile-title"))
+	return out
+}
+
+func parseProfileTitle(raw string) string {
+	raw = strings.TrimSpace(raw)
+	encoded, prefixed := strings.CutPrefix(raw, "base64:")
+	for _, encoding := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding} {
+		if decoded, err := encoding.DecodeString(strings.TrimSpace(encoded)); err == nil {
+			if title := cleanProfileTitle(string(decoded)); title != "" {
+				return title
+			}
 		}
 	}
-	return out
+	if prefixed {
+		return ""
+	}
+	return cleanProfileTitle(raw)
+}
+
+func cleanProfileTitle(title string) string {
+	if !utf8.ValidString(title) || strings.ContainsFunc(title, unicode.IsControl) {
+		return ""
+	}
+	return strings.TrimSpace(title)
 }
 
 func parseUserinfo(s string) *Userinfo {

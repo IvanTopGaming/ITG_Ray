@@ -180,10 +180,10 @@ describe("subsStore.add", () => {
     await act(async () => { await Promise.resolve(); });
 
     await act(async () => {
-      await result.current.actions.add("new", "https://x");
+      await result.current.actions.add("https://x");
     });
 
-    expect(mockAdd).toHaveBeenCalledWith("https://x", "new", "");
+    expect(mockAdd).toHaveBeenCalledWith("https://x", "");
     expect(result.current.state.inFlight.adding).toBe(false);
     if (result.current.state.load.kind === "ready") {
       expect(result.current.state.load.subs).toHaveLength(1);
@@ -201,7 +201,7 @@ describe("subsStore.add", () => {
 
     await act(async () => {
       await expect(
-        result.current.actions.add("bad", "ftp://x"),
+        result.current.actions.add("ftp://x"),
       ).rejects.toThrow(/invalid url/);
     });
 
@@ -405,10 +405,10 @@ describe("subsStore.edit", () => {
     await act(async () => { await Promise.resolve(); });
 
     await act(async () => {
-      await result.current.actions.edit("s1", "renamed", "https://2");
+      await result.current.actions.edit("s1", "https://2");
     });
 
-    expect(mockEdit).toHaveBeenCalledWith("s1", "https://2", "renamed", "");
+    expect(mockEdit).toHaveBeenCalledWith("s1", "https://2", "");
     expect(result.current.state.load.kind).toBe("ready");
     if (result.current.state.load.kind === "ready") {
       const row = result.current.state.load.subs.find(s => s.id === "s1");
@@ -428,7 +428,7 @@ describe("subsStore.edit", () => {
 
     await act(async () => {
       await expect(
-        result.current.actions.edit("s1", "x", "https://y"),
+        result.current.actions.edit("s1", "https://y"),
       ).rejects.toThrow(/not found/);
     });
 
@@ -448,7 +448,7 @@ describe("subsStore.add — userAgent passthrough", () => {
     mod.__resetForTests();
   });
 
-  it("passes userAgent (3rd arg) through to AddSub binding", async () => {
+  it("passes userAgent through to AddSub binding", async () => {
     mockList.mockResolvedValueOnce([]);
     mockAdd.mockResolvedValueOnce({
       id: "s-new", name: "n", url: "https://x",
@@ -460,9 +460,9 @@ describe("subsStore.add — userAgent passthrough", () => {
     await act(async () => { await Promise.resolve(); });
 
     await act(async () => {
-      await result.current.actions.add("n", "https://x", "Custom/1.0");
+      await result.current.actions.add("https://x", "Custom/1.0");
     });
-    expect(mockAdd).toHaveBeenCalledWith("https://x", "n", "Custom/1.0");
+    expect(mockAdd).toHaveBeenCalledWith("https://x", "Custom/1.0");
   });
 
   it("passes empty string when userAgent omitted", async () => {
@@ -476,8 +476,8 @@ describe("subsStore.add — userAgent passthrough", () => {
     const { result } = renderHook(() => useSubs());
     await act(async () => { await Promise.resolve(); });
 
-    await act(async () => { await result.current.actions.add("n", "https://x"); });
-    expect(mockAdd).toHaveBeenCalledWith("https://x", "n", "");
+    await act(async () => { await result.current.actions.add("https://x"); });
+    expect(mockAdd).toHaveBeenCalledWith("https://x", "");
   });
 });
 
@@ -492,7 +492,7 @@ describe("subsStore.edit — userAgent passthrough", () => {
     mod.__resetForTests();
   });
 
-  it("passes userAgent (4th arg) through to EditSub binding", async () => {
+  it("passes userAgent through to EditSub binding", async () => {
     mockList.mockResolvedValueOnce(seed);
     mockEdit.mockResolvedValueOnce({
       id: "s1", name: "new", url: "https://2",
@@ -504,9 +504,9 @@ describe("subsStore.edit — userAgent passthrough", () => {
     await act(async () => { await Promise.resolve(); });
 
     await act(async () => {
-      await result.current.actions.edit("s1", "new", "https://2", "Hiddify/1.0");
+      await result.current.actions.edit("s1", "https://2", "Hiddify/1.0");
     });
-    expect(mockEdit).toHaveBeenCalledWith("s1", "https://2", "new", "Hiddify/1.0");
+    expect(mockEdit).toHaveBeenCalledWith("s1", "https://2", "Hiddify/1.0");
   });
 
   it("empty userAgent clears the per-sub override", async () => {
@@ -521,9 +521,9 @@ describe("subsStore.edit — userAgent passthrough", () => {
     await act(async () => { await Promise.resolve(); });
 
     await act(async () => {
-      await result.current.actions.edit("s1", "old", "https://1", "");
+      await result.current.actions.edit("s1", "https://1", "");
     });
-    expect(mockEdit).toHaveBeenCalledWith("s1", "https://1", "old", "");
+    expect(mockEdit).toHaveBeenCalledWith("s1", "https://1", "");
   });
 });
 

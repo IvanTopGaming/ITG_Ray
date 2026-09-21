@@ -21,21 +21,21 @@ type fakeSubs struct {
 	syncOneErr error
 	syncAllErr error
 
-	gotAddURL, gotAddName, gotAddUA               string
-	gotEditID, gotEditURL, gotEditName, gotEditUA string
-	gotRemoveID, gotSyncOneID                     string
-	syncAllCalled                                 bool
+	gotAddURL, gotAddUA              string
+	gotEditID, gotEditURL, gotEditUA string
+	gotRemoveID, gotSyncOneID        string
+	syncAllCalled                    bool
 }
 
 func (f *fakeSubs) List() ([]hub.SubView, error) {
 	return f.listOut, f.listErr
 }
-func (f *fakeSubs) Add(url, name, ua string) (hub.SubView, error) {
-	f.gotAddURL, f.gotAddName, f.gotAddUA = url, name, ua
+func (f *fakeSubs) Add(url, ua string) (hub.SubView, error) {
+	f.gotAddURL, f.gotAddUA = url, ua
 	return f.addOut, f.addErr
 }
-func (f *fakeSubs) Edit(id, url, name, ua string) (hub.SubView, error) {
-	f.gotEditID, f.gotEditURL, f.gotEditName, f.gotEditUA = id, url, name, ua
+func (f *fakeSubs) Edit(id, url, ua string) (hub.SubView, error) {
+	f.gotEditID, f.gotEditURL, f.gotEditUA = id, url, ua
 	return f.editOut, f.editErr
 }
 func (f *fakeSubs) Remove(id string) error {
@@ -77,12 +77,12 @@ func TestSubsListPropagatesError(t *testing.T) {
 func TestSubsAddForwardsUserAgent(t *testing.T) {
 	fake := &fakeSubs{addOut: hub.SubView{ID: "u1"}}
 	h := SubsHandlers{Svc: fake}
-	params := json.RawMessage(`{"url":"https://x/y","name":"P","userAgent":"Custom/1.0"}`)
+	params := json.RawMessage(`{"url":"https://x/y","userAgent":"Custom/1.0"}`)
 	if _, err := h.Add(context.Background(), params); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
-	if fake.gotAddURL != "https://x/y" || fake.gotAddName != "P" {
-		t.Fatalf("forwarded: url=%q name=%q", fake.gotAddURL, fake.gotAddName)
+	if fake.gotAddURL != "https://x/y" {
+		t.Fatalf("forwarded: url=%q", fake.gotAddURL)
 	}
 	if fake.gotAddUA != "Custom/1.0" {
 		t.Fatalf("userAgent not forwarded: got %q, want %q", fake.gotAddUA, "Custom/1.0")
@@ -94,7 +94,7 @@ func TestSubsAddOmittedUserAgentIsEmpty(t *testing.T) {
 	// settings.subscriptions.userAgent default.
 	fake := &fakeSubs{addOut: hub.SubView{ID: "u1"}}
 	h := SubsHandlers{Svc: fake}
-	params := json.RawMessage(`{"url":"https://x/y","name":"P"}`)
+	params := json.RawMessage(`{"url":"https://x/y"}`)
 	if _, err := h.Add(context.Background(), params); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestSubsAddInvalidParams(t *testing.T) {
 func TestSubsEditForwardsUserAgent(t *testing.T) {
 	fake := &fakeSubs{editOut: hub.SubView{ID: "u9"}}
 	h := SubsHandlers{Svc: fake}
-	params := json.RawMessage(`{"id":"u9","url":"https://x/y","name":"Renamed","userAgent":"Custom/2.0"}`)
+	params := json.RawMessage(`{"id":"u9","url":"https://x/y","userAgent":"Custom/2.0"}`)
 	got, err := h.Edit(context.Background(), params)
 	if err != nil {
 		t.Fatalf("Edit: %v", err)
@@ -121,8 +121,8 @@ func TestSubsEditForwardsUserAgent(t *testing.T) {
 	if v, _ := got.(hub.SubView); v.ID != "u9" {
 		t.Fatalf("result: %+v", got)
 	}
-	if fake.gotEditID != "u9" || fake.gotEditURL != "https://x/y" || fake.gotEditName != "Renamed" {
-		t.Fatalf("forwarded: id=%q url=%q name=%q", fake.gotEditID, fake.gotEditURL, fake.gotEditName)
+	if fake.gotEditID != "u9" || fake.gotEditURL != "https://x/y" {
+		t.Fatalf("forwarded: id=%q url=%q", fake.gotEditID, fake.gotEditURL)
 	}
 	if fake.gotEditUA != "Custom/2.0" {
 		t.Fatalf("userAgent not forwarded: got %q, want %q", fake.gotEditUA, "Custom/2.0")
@@ -134,7 +134,7 @@ func TestSubsEditOmittedUserAgentIsEmpty(t *testing.T) {
 	// subscription inherits the global settings default.
 	fake := &fakeSubs{editOut: hub.SubView{ID: "u9"}}
 	h := SubsHandlers{Svc: fake}
-	params := json.RawMessage(`{"id":"u9","url":"https://x/y","name":"Renamed"}`)
+	params := json.RawMessage(`{"id":"u9","url":"https://x/y"}`)
 	if _, err := h.Edit(context.Background(), params); err != nil {
 		t.Fatalf("Edit: %v", err)
 	}
@@ -207,9 +207,9 @@ func TestSubsHandlersNilSvc(t *testing.T) {
 		fn   func() (any, error)
 	}{
 		{"List", func() (any, error) { return h.List(context.Background(), nil) }},
-		{"Add", func() (any, error) { return h.Add(context.Background(), json.RawMessage(`{"url":"x","name":"y"}`)) }},
+		{"Add", func() (any, error) { return h.Add(context.Background(), json.RawMessage(`{"url":"x"}`)) }},
 		{"Edit", func() (any, error) {
-			return h.Edit(context.Background(), json.RawMessage(`{"id":"a","url":"x","name":"y"}`))
+			return h.Edit(context.Background(), json.RawMessage(`{"id":"a","url":"x"}`))
 		}},
 		{"Remove", func() (any, error) { return h.Remove(context.Background(), json.RawMessage(`{"id":"a"}`)) }},
 		{"SyncOne", func() (any, error) { return h.SyncOne(context.Background(), json.RawMessage(`{"id":"a"}`)) }},

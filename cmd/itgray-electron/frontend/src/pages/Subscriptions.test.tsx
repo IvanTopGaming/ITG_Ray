@@ -60,20 +60,20 @@ describe("Subscriptions page", () => {
     expect(screen.getByText("okins")).toBeInTheDocument();
   });
 
-  it("Add success closes modal and dispatches actions.add", async () => {
+  it("adds a subscription using only its URL", async () => {
     const add = vi.fn().mockResolvedValue(undefined);
     mockUseSubs.mockReturnValue(makeStore({ add }));
     render(<Subscriptions />);
     fireEvent.click(screen.getByText(/Add subscription/));
-    fireEvent.change(screen.getByPlaceholderText(/Main provider/), { target: { value: "new" } });
+    expect(screen.queryByPlaceholderText(/Main provider/)).not.toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText(/provider\.example/), { target: { value: "https://x.example" } });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Add" }));
       await Promise.resolve();
     });
-    expect(add).toHaveBeenCalledWith("new", "https://x.example", "");
+    expect(add).toHaveBeenCalledWith("https://x.example", "");
     await waitFor(() => {
-      expect(screen.queryByPlaceholderText(/Main provider/)).not.toBeInTheDocument();
+      expect(screen.queryByPlaceholderText(/provider\.example/)).not.toBeInTheDocument();
     });
   });
 
@@ -82,14 +82,14 @@ describe("Subscriptions page", () => {
     mockUseSubs.mockReturnValue(makeStore({ add }));
     render(<Subscriptions />);
     fireEvent.click(screen.getByText(/Add subscription/));
-    fireEvent.change(screen.getByPlaceholderText(/Main provider/), { target: { value: "n" } });
+    expect(screen.queryByPlaceholderText(/Main provider/)).not.toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText(/provider\.example/), { target: { value: "https://x" } });
     fireEvent.change(screen.getByPlaceholderText(/Settings default/), { target: { value: "Hiddify/1.0" } });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Add" }));
       await Promise.resolve();
     });
-    expect(add).toHaveBeenCalledWith("n", "https://x", "Hiddify/1.0");
+    expect(add).toHaveBeenCalledWith("https://x", "Hiddify/1.0");
   });
 
   it("Add backend error shows banner and keeps modal open", async () => {
@@ -97,14 +97,28 @@ describe("Subscriptions page", () => {
     mockUseSubs.mockReturnValue(makeStore({ add }));
     render(<Subscriptions />);
     fireEvent.click(screen.getByText(/Add subscription/));
-    fireEvent.change(screen.getByPlaceholderText(/Main provider/), { target: { value: "x" } });
+    expect(screen.queryByPlaceholderText(/Main provider/)).not.toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText(/provider\.example/), { target: { value: "https://bad.example" } });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Add" }));
       await Promise.resolve();
     });
     expect(await screen.findByText(/http\(s\)/)).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/Main provider/)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/provider\.example/)).toBeInTheDocument();
+  });
+
+  it("edits the URL without exposing or submitting the provider name", async () => {
+    const edit = vi.fn().mockResolvedValue(undefined);
+    mockUseSubs.mockReturnValue(makeStore({ edit }));
+    render(<Subscriptions />);
+    fireEvent.click(screen.getByLabelText(/edit/i));
+    expect(screen.queryByDisplayValue("alpha")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText(/provider\.example/), { target: { value: "https://new.example/sub" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      await Promise.resolve();
+    });
+    expect(edit).toHaveBeenCalledWith("s1", "https://new.example/sub", "");
   });
 
   it("Delete inside Edit modal calls actions.remove and closes modal on success", async () => {

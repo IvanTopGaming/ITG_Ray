@@ -15,8 +15,8 @@ import (
 // settings.subscriptions.userAgent default.
 type Subs interface {
 	List() ([]hub.SubView, error)
-	Add(url, name, userAgent string) (hub.SubView, error)
-	Edit(id, url, name, userAgent string) (hub.SubView, error)
+	Add(url, userAgent string) (hub.SubView, error)
+	Edit(id, url, userAgent string) (hub.SubView, error)
 	Remove(id string) error
 	SyncOne(id string) error
 	SyncAll() error
@@ -29,14 +29,12 @@ type SubsHandlers struct {
 
 type subsAddParams struct {
 	URL       string `json:"url"`
-	Name      string `json:"name"`
 	UserAgent string `json:"userAgent"`
 }
 
 type subsEditParams struct {
 	ID        string `json:"id"`
 	URL       string `json:"url"`
-	Name      string `json:"name"`
 	UserAgent string `json:"userAgent"`
 }
 
@@ -67,10 +65,9 @@ func (s SubsHandlers) Add(_ context.Context, params json.RawMessage) (any, error
 	if err := json.Unmarshal(params, &p); err != nil {
 		return nil, err
 	}
-	return s.Svc.Add(p.URL, p.Name, p.UserAgent)
+	return s.Svc.Add(p.URL, p.UserAgent)
 }
 
-// Edit updates name, URL and/or the per-subscription User-Agent override.
 // An empty userAgent clears the override so the subscription falls back to
 // the global settings default.
 func (s SubsHandlers) Edit(_ context.Context, params json.RawMessage) (any, error) {
@@ -81,7 +78,7 @@ func (s SubsHandlers) Edit(_ context.Context, params json.RawMessage) (any, erro
 	if err := json.Unmarshal(params, &p); err != nil {
 		return nil, err
 	}
-	return s.Svc.Edit(p.ID, p.URL, p.Name, p.UserAgent)
+	return s.Svc.Edit(p.ID, p.URL, p.UserAgent)
 }
 
 // Remove deletes the subscription with the given id.

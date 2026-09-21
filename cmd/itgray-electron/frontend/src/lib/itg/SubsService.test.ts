@@ -20,21 +20,19 @@ describe("SubsService binding shim", () => {
 
   it("Add forwards the per-subscription userAgent to the bridge", async () => {
     const subs = stubSubs();
-    await Add("https://x/y", "Pool A", "Custom/1.0");
+    await Add("https://x/y", "Custom/1.0");
     expect(subs.add).toHaveBeenCalledWith({
       url: "https://x/y",
-      name: "Pool A",
       userAgent: "Custom/1.0",
     });
   });
 
   it("Edit forwards the per-subscription userAgent to the bridge", async () => {
     const subs = stubSubs();
-    await Edit("u9", "https://x/y", "Renamed", "Custom/2.0");
+    await Edit("u9", "https://x/y", "Custom/2.0");
     expect(subs.edit).toHaveBeenCalledWith({
       id: "u9",
       url: "https://x/y",
-      name: "Renamed",
       userAgent: "Custom/2.0",
     });
   });
