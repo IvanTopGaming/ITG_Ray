@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, type HTMLAttributes, type SyntheticEvent } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { Lock, ChevronRight, Plus, MoreHorizontal, GripVertical } from "lucide-react";
+import { Lock, ChevronRight, Plus, MoreHorizontal, GripVertical, Import } from "lucide-react";
 import { DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -282,7 +282,7 @@ export function Routing() {
             transition={{ duration: 0.18, ease: SNAP_EASE }}
             className="flex items-center gap-1.5 rounded-md bg-white/[0.06] px-3 py-1.5 text-[12px] font-medium text-white/75 hover:bg-white/[0.10]"
           >
-            {t("routing.import")}
+            <Import className="h-3.5 w-3.5" aria-hidden="true" /> {t("routing.import")}
           </motion.button>
           <motion.button
             type="button"
@@ -862,4 +862,3 @@ function RuleRow({
     </motion.div>
   );
 }
-
