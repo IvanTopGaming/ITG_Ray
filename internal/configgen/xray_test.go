@@ -5,8 +5,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/itg-team/itg-ray/internal/subscription"
 	"github.com/itg-team/itg-ray/internal/vless"
 	"github.com/stretchr/testify/require"
+	"github.com/xtls/xray-core/infra/conf"
 )
 
 func TestBuildXrayXHTTPHost(t *testing.T) {
@@ -188,4 +190,25 @@ func TestBuildXray_IncludesStatsAPIBlocks(t *testing.T) {
 	if len(rules) == 0 {
 		t.Fatalf("routing.rules empty")
 	}
+}
+
+func TestBuildXray_ImportedVisionUDP443(t *testing.T) {
+	parsed, err := subscription.Parse(`{"outbounds":[{"protocol":"vless","settings":{"address":"node.example","port":443,"id":"00000000-0000-0000-0000-000000000001","flow":"xtls-rprx-vision-udp443"},"streamSettings":{"network":"tcp","security":"tls","tlsSettings":{"serverName":"cover.example"}}}]}`)
+	require.NoError(t, err)
+	require.Len(t, parsed.Configs, 1)
+	raw, err := BuildXray(&XrayInput{Server: parsed.Configs[0], SocksPort: 1081})
+	require.NoError(t, err)
+	var doc struct {
+		Outbounds []struct {
+			Settings struct {
+				VNext []struct{ Users []struct{ Flow string } }
+			}
+		}
+	}
+	require.NoError(t, json.Unmarshal(raw, &doc))
+	require.Equal(t, "xtls-rprx-vision-udp443", doc.Outbounds[0].Settings.VNext[0].Users[0].Flow)
+	var core conf.Config
+	require.NoError(t, json.Unmarshal(raw, &core))
+	_, err = core.Build()
+	require.NoError(t, err)
 }

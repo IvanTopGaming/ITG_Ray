@@ -122,12 +122,18 @@ func FetchParse(ctx context.Context, sub Subscription, timeout time.Duration) ([
 	}
 
 	incoming := make([]server.Server, 0, len(parsed.Configs))
+	seen := make(map[string]bool)
 	for i := range parsed.Configs {
+		key := server.ConnectionID(parsed.Configs[i])
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
 		incoming = append(incoming, server.New(parsed.Configs[i], server.OriginSubscription, sub.ID))
 	}
 
 	meta.Status = "ok"
-	meta.Message = fmt.Sprintf("imported=%d invalid=%d skipped=%d", len(parsed.Configs), parsed.Invalid, sumSkipped(parsed.Skipped))
+	meta.Message = fmt.Sprintf("imported=%d invalid=%d skipped=%d", len(incoming), parsed.Invalid, sumSkipped(parsed.Skipped))
 	slog.Info("sub fetched", slog.String("scope", "sub"), slog.String("id", sub.ID),
 		slog.Int("servers", len(incoming)), slog.Int("skipped", sumSkipped(parsed.Skipped)))
 	return incoming, meta, nil

@@ -196,3 +196,14 @@ func TestParse_XraySkipsFinalMask(t *testing.T) {
 	require.Empty(t, r.Configs)
 	require.Equal(t, 1, r.Skipped["xray-complex"])
 }
+
+func TestParse_XrayKeepsConnectionVariants(t *testing.T) {
+	second := strings.ReplaceAll(xrayRealityOutbound, "cover.example", "other.example")
+	r, err := Parse(`[{"remarks":"A","outbounds":[` + xrayRealityOutbound + `]},{"remarks":"B","outbounds":[` + second + `]},{"outbounds":[` + xrayRealityOutbound + `,` + second + `]}]`)
+	require.NoError(t, err)
+	require.Len(t, r.Configs, 2)
+	require.Equal(t, "cover.example", r.Configs[0].SNI)
+	require.Equal(t, "other.example", r.Configs[1].SNI)
+	require.Equal(t, "A", r.Configs[0].Remark)
+	require.Equal(t, "B", r.Configs[1].Remark)
+}

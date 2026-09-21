@@ -146,3 +146,14 @@ func TestSync_NoUsableServersIsAnError(t *testing.T) {
 		})
 	}
 }
+
+func TestSync_DuplicateURIsReportUniqueImportCount(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("vless://u@node.example:443#A\nvless://u@node.example:443#B\n"))
+	}))
+	t.Cleanup(ts.Close)
+	servers, meta, err := Sync(context.Background(), Subscription{ID: "s1", URL: ts.URL}, nil, time.Second)
+	require.NoError(t, err)
+	require.Len(t, servers, 1)
+	require.Contains(t, meta.Message, "imported=1 ")
+}

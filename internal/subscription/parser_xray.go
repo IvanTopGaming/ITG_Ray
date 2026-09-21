@@ -76,7 +76,7 @@ func ParseXray(body string) (ParseResult, error) {
 			if preferredName {
 				c.Remark = strings.TrimSpace(doc.Remarks)
 			}
-			key := server.StableID(c)
+			key := server.ConnectionID(c)
 			if index, ok := seen[key]; ok {
 				if preferredName && !named[key] {
 					result.Configs[index] = c

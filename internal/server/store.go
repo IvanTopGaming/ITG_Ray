@@ -46,6 +46,7 @@ func Save(path string, servers []Server) error {
 // OriginSubscription with matching sourceID but missing from the incoming list are dropped;
 // entries from other sources are preserved untouched.
 func Merge(existing, incoming []Server, sourceID string) []Server {
+	incoming = reconcileIncomingIDs(existing, incoming, sourceID)
 	existingByID := make(map[string]Server, len(existing))
 	for i := range existing {
 		existingByID[existing[i].ID] = existing[i]
