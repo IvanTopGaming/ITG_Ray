@@ -183,32 +183,65 @@ func NewDriver(c Config) *Driver {
 // is cancelled, then waits for in-flight ticks to finish before returning.
 // Returns ctx.Err() (typically context.Canceled or DeadlineExceeded) on shutdown.
 func (d *Driver) Run(ctx context.Context) error {
-	subs, err := d.subs.Load()
-	if err != nil {
-		d.log.Error("refresh load subs failed",
-			slog.String("scope", "refresh"),
-			slog.String("err", logging.RedactError(err)),
-		)
-		// Still run probe loop — operator may add subs without restarting.
-		subs = nil
+	type worker struct {
+		url    string
+		cancel context.CancelFunc
+		done   chan struct{}
 	}
-	d.log.Info("refresh started",
-		slog.String("scope", "refresh"),
-		slog.Int("subs", len(subs)),
-	)
-	for _, s := range subs {
-		d.wg.Go(func() { d.runSub(ctx, s) })
+	workers := make(map[string]worker)
+	reconcile := func() {
+		subs, err := d.loadSubscriptions()
+		if err != nil {
+			d.log.Error("refresh load subs failed", slog.String("scope", "refresh"), slog.String("err", logging.RedactError(err)))
+			return
+		}
+		current := make(map[string]subscription.Stored, len(subs))
+		for _, sub := range subs {
+			current[sub.ID] = sub
+		}
+		for id, w := range workers {
+			sub, found := current[id]
+			if !found || sub.URL != w.url {
+				w.cancel()
+			}
+			select {
+			case <-w.done:
+				w.cancel()
+				delete(workers, id)
+			default:
+			}
+		}
+		for id, sub := range current {
+			if _, found := workers[id]; found {
+				continue
+			}
+			subCtx, cancel := context.WithCancel(ctx)
+			done := make(chan struct{})
+			workers[id] = worker{url: sub.URL, cancel: cancel, done: done}
+			d.wg.Go(func() {
+				defer close(done)
+				d.runSub(subCtx, sub)
+			})
+		}
 	}
-
-	d.log.Debug("refresh probe loop starting",
-		slog.String("scope", "refresh"),
-		slog.Duration("interval", d.probeInterval),
-	)
+	reconcile()
+	d.log.Info("refresh started", slog.String("scope", "refresh"), slog.Int("subs", len(workers)))
+	d.log.Debug("refresh probe loop starting", slog.String("scope", "refresh"), slog.Duration("interval", d.probeInterval))
 	d.wg.Go(func() { d.runProbe(ctx) })
-
-	<-ctx.Done()
-	d.wg.Wait()
-	return ctx.Err()
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			for _, w := range workers {
+				w.cancel()
+			}
+			d.wg.Wait()
+			return ctx.Err()
+		case <-ticker.C:
+			reconcile()
+		}
+	}
 }
 
 // jittered returns base * (1 ± pct * rand-uniform-in-[0,1)) using d.rand.
@@ -222,4 +255,10 @@ func (d *Driver) jittered(base time.Duration, pct float64) time.Duration {
 	delta := (d.rand.Float64()*2 - 1) * pct
 	d.randMu.Unlock()
 	return time.Duration(float64(base) * (1 + delta))
+}
+
+func (d *Driver) loadSubscriptions() ([]subscription.Stored, error) {
+	d.serversMu.Lock()
+	defer d.serversMu.Unlock()
+	return d.subs.Load()
 }

@@ -143,9 +143,8 @@ app.whenReady().then(async () => {
       };
     },
   });
-  const notifierRpc = supervisor!.rpc();
-  notifierRpc.on("vpn.status", (p) => void notifier.onVpnStatus(p));
-  notifierRpc.on("sub.synced", (p) => void notifier.onSubSynced(p));
+  supervisor.on("vpn.status", (p) => void notifier.onVpnStatus(p));
+  supervisor.on("sub.synced", (p) => void notifier.onSubSynced(p));
 
   // One snapshot read drives autostart reconcile AND start-minimized.
   void (async () => {

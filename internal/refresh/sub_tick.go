@@ -19,72 +19,66 @@ import (
 // instead of waiting the full update interval.
 func (d *Driver) syncOne(ctx context.Context, sub subscription.Stored) (retryable bool) {
 	start := d.now()
-	d.serversMu.Lock()
-	existing, err := server.Load(d.serversPath)
-	if err != nil {
-		d.recordMeta(ctx, sub, "error", "load servers: "+truncate(err.Error(), lastStatusMaxLen))
-		d.serversMu.Unlock()
-		d.log.Error("refresh sync: load servers failed",
-			slog.String("scope", "refresh"),
-			slog.String("id", sub.ID),
-			slog.String("err", logging.RedactError(err)),
-		)
-		return true // local IO hiccup — worth a sooner retry
-	}
-
-	merged, meta, syncErr := d.syncWithRetry(ctx, sub, existing)
-	if syncErr == nil {
-		if saveErr := server.Save(d.serversPath, merged); saveErr != nil {
-			d.recordMeta(ctx, sub, "error", "save servers: "+truncate(saveErr.Error(), lastStatusMaxLen))
-			d.serversMu.Unlock()
-			d.log.Error("refresh sync: save servers failed",
-				slog.String("scope", "refresh"),
-				slog.String("id", sub.ID),
-				slog.String("err", logging.RedactError(saveErr)),
-			)
-			return true // local IO hiccup — worth a sooner retry
-		}
-	}
-
-	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		// Shutdown — do not record this attempt.
-		d.serversMu.Unlock()
+	incoming, meta, syncErr := d.syncWithRetry(ctx, sub)
+	if ctx.Err() != nil {
 		return false
 	}
-
-	var headers *subscription.Headers
-	if syncErr == nil {
-		headers = &meta.Headers
+	committed := false
+	retryable = func() bool {
+		d.serversMu.Lock()
+		defer d.serversMu.Unlock()
+		if ctx.Err() != nil {
+			return false
+		}
+		subs, err := d.subs.Load()
+		if err != nil {
+			d.log.Error("refresh sync: load subscriptions failed", slog.String("scope", "refresh"), slog.String("id", sub.ID), slog.String("err", logging.RedactError(err)))
+			return true
+		}
+		found := false
+		for _, current := range subs {
+			if current.ID == sub.ID && current.URL == sub.URL {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+		if syncErr == nil {
+			existing, err := server.Load(d.serversPath)
+			if err != nil {
+				d.recordMeta(ctx, sub, "error", "load servers: "+truncate(err.Error(), lastStatusMaxLen))
+				d.log.Error("refresh sync: load servers failed", slog.String("scope", "refresh"), slog.String("id", sub.ID), slog.String("err", logging.RedactError(err)))
+				return true
+			}
+			merged := server.Merge(existing, incoming, sub.ID)
+			if err := server.Save(d.serversPath, merged); err != nil {
+				d.recordMeta(ctx, sub, "error", "save servers: "+truncate(err.Error(), lastStatusMaxLen))
+				d.log.Error("refresh sync: save servers failed", slog.String("scope", "refresh"), slog.String("id", sub.ID), slog.String("err", logging.RedactError(err)))
+				return true
+			}
+		}
+		var headers *subscription.Headers
+		if syncErr == nil {
+			headers = &meta.Headers
+		}
+		if err := d.subs.UpdateMeta(sub.ID, sub.URL, d.now(), meta.Status, truncate(meta.Message, lastStatusMaxLen), headers); err != nil {
+			d.log.Error("refresh sync: update meta failed", slog.String("scope", "refresh"), slog.String("id", sub.ID), slog.String("err", logging.RedactError(err)))
+		}
+		committed = true
+		return subscription.IsTransient(syncErr)
+	}()
+	if committed {
+		d.log.Info("refresh sync done", slog.String("scope", "refresh"), slog.String("id", sub.ID), slog.String("status", meta.Status), slog.String("message", truncate(meta.Message, 80)), slog.Duration("duration", d.now().Sub(start)))
+		if d.onSync != nil {
+			d.onSync(sub.ID)
+		}
 	}
-	if err := d.subs.UpdateMeta(sub.ID, sub.URL, d.now(), meta.Status, truncate(meta.Message, lastStatusMaxLen), headers); err != nil {
-		d.log.Error("refresh sync: update meta failed",
-			slog.String("scope", "refresh"),
-			slog.String("id", sub.ID),
-			slog.String("err", logging.RedactError(err)),
-		)
-	}
-	d.serversMu.Unlock()
-	d.log.Info("refresh sync done",
-		slog.String("scope", "refresh"),
-		slog.String("id", sub.ID),
-		slog.String("status", meta.Status),
-		slog.String("message", truncate(meta.Message, 80)),
-		slog.Duration("duration", d.now().Sub(start)),
-	)
-	if d.onSync != nil {
-		d.onSync(sub.ID)
-	}
-	return subscription.IsTransient(syncErr)
+	return retryable
 }
 
-// syncWithRetry runs syncFunc, re-attempting on transient failures per the
-// level-1 backoff schedule, and returns the last attempt's result. The caller
-// holds serversMu across this call — consistent with the pre-existing "fetch
-// under lock" behavior — so a flaky sub can delay others by at most the
-// bounded retry window. A server Retry-After hint is honored when longer than
-// the scheduled wait, unless it exceeds maxInAttemptRetryWait (then the attempt
-// gives up and the scheduler backs off instead). Respects ctx cancellation.
-func (d *Driver) syncWithRetry(ctx context.Context, sub subscription.Stored, existing []server.Server) ([]server.Server, subscription.SyncMeta, error) {
+func (d *Driver) syncWithRetry(ctx context.Context, sub subscription.Stored) ([]server.Server, subscription.SyncMeta, error) {
 	var (
 		merged  []server.Server
 		meta    subscription.SyncMeta
@@ -95,7 +89,7 @@ func (d *Driver) syncWithRetry(ctx context.Context, sub subscription.Stored, exi
 		if err != nil {
 			return nil, subscription.SyncMeta{LastUpdate: d.now(), Status: "error", Message: logging.RedactError(err)}, err
 		}
-		merged, meta, syncErr = d.syncFunc(ctx, input, existing, syncFetchTimeout)
+		merged, meta, syncErr = d.syncFunc(ctx, input, nil, syncFetchTimeout)
 		if syncErr == nil || !subscription.IsTransient(syncErr) || attempt >= len(d.subFetchRetryBackoff) {
 			return merged, meta, syncErr
 		}
@@ -181,7 +175,7 @@ func (d *Driver) runSub(ctx context.Context, s subscription.Stored) {
 		case <-ctx.Done():
 			return
 		case <-timer.C:
-			subs, err := d.subs.Load()
+			subs, err := d.loadSubscriptions()
 			if err != nil {
 				d.log.Error("refresh sync: load subscriptions failed",
 					slog.String("scope", "refresh"),

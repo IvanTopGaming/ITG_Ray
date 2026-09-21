@@ -9,12 +9,20 @@ import (
 	"time"
 )
 
-// Dial connects to the helper's unix socket with a 5 s budget.
-func Dial(_ context.Context, socketPath string) (*Client, error) {
-	d := net.Dialer{Timeout: 5 * time.Second}
-	conn, err := d.Dial("unix", socketPath)
-	if err != nil {
-		return nil, fmt.Errorf("dial unix %q: %w", socketPath, err)
+func Dial(ctx context.Context, socketPath string) (*Client, error) {
+	dial := func(ctx context.Context) (net.Conn, error) {
+		d := net.Dialer{Timeout: 5 * time.Second}
+		conn, err := d.DialContext(ctx, "unix", socketPath)
+		if err != nil {
+			return nil, fmt.Errorf("dial unix %q: %w", socketPath, err)
+		}
+		return conn, nil
 	}
-	return NewWithConn(conn), nil
+	conn, err := dial(ctx)
+	if err != nil {
+		return nil, err
+	}
+	c := NewWithConn(conn)
+	c.dial = dial
+	return c, nil
 }

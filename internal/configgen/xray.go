@@ -121,7 +121,7 @@ func buildStream(c *vless.Config) map[string]any {
 	case vless.SecurityTLS:
 		ss["security"] = "tls"
 		tls := map[string]any{
-			"serverName":    c.SNI,
+			"serverName":    orDefaultStr(c.SNI, c.Address),
 			"allowInsecure": c.AllowInsecure,
 		}
 		if c.Fingerprint != "" {

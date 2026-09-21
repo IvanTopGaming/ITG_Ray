@@ -22,6 +22,9 @@ func (c *Controller) runPoller(ctx context.Context) {
 			return
 		case now := <-t.C:
 			state, err := c.d.Helper.ServiceStatus(ctx)
+			if ctx.Err() != nil {
+				return
+			}
 			if err != nil {
 				slog.Warn("chainctl poll error",
 					slog.String("scope", "chainctl"), slog.String("err", err.Error()))
@@ -46,8 +49,17 @@ func (c *Controller) runPoller(ctx context.Context) {
 				blocking := kerr != nil || ks.Enabled // fail closed on loader error
 
 				c.mu.Lock()
+				if ctx.Err() != nil || c.cancel == nil {
+					c.mu.Unlock()
+					return
+				}
 				mode := c.mode
-				c.cancel = nil
+				if blocking {
+					c.cancel()
+					c.cancel = nil
+					c.cleanupPending = true
+					c.cleanupMode = mode
+				}
 				c.current = nil
 				// Note: unlike Stop(), we deliberately do NOT clearSession here —
 				// an unsolicited drop is not a user disconnect, so the session is
@@ -55,10 +67,22 @@ func (c *Controller) runPoller(ctx context.Context) {
 				c.mu.Unlock()
 
 				if !blocking {
-					c.tearDown(ctx, mode) // kill-switch OFF: restore direct networking
+					err := c.tearDown(ctx, mode)
+					c.mu.Lock()
+					status := hub.StatusIdle
+					if err != nil {
+						c.cleanupPending = true
+						c.cleanupMode = mode
+						status = hub.StatusError
+					}
+					if c.cancel != nil {
+						c.cancel()
+						c.cancel = nil
+					}
+					c.mu.Unlock()
 					c.d.Hub.Publish(hub.Event{
 						Name:    hub.EventVPNStatus,
-						Payload: map[string]any{"status": string(hub.StatusIdle)},
+						Payload: map[string]any{"status": string(status)},
 					})
 				} else {
 					c.d.Hub.Publish(hub.Event{

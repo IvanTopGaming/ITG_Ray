@@ -1,24 +1,10 @@
 // cmd/itgray-electron/src/main/ipc.ts
 import { app, ipcMain, dialog, BrowserWindow } from "electron";
 import { writeFile } from "node:fs/promises";
-import type { BridgeSupervisor } from "./bridge";
-import type { RpcMethod, EventTopic } from "../shared/protocol";
+import { BRIDGE_TOPICS, type BridgeSupervisor } from "./bridge";
+import type { RpcMethod } from "../shared/protocol";
 import { defaultAutostart } from "./autostart";
 import { createAutoConnectClaim } from "./autoconnect";
-
-// Topics emitted by the bridge subprocess (not the supervisor itself).
-// `bridge.state` is supervisor-driven and forwarded separately below.
-const BRIDGE_TOPICS: Exclude<EventTopic, "bridge.state">[] = [
-  "chain.error",
-  "geo.progress",
-  "helper.state",
-  "log.line",
-  "probe.result",
-  "servers.changed",
-  "sub.synced",
-  "vpn.speed",
-  "vpn.status",
-];
 
 // This launch's single auto-connect. Lives in main because the renderer is
 // re-created whenever the window is closed to the tray and re-opened, which
@@ -102,13 +88,8 @@ export function wireIPC(
     if (win) win.webContents.send("event:bridge.state", payload);
   });
 
-  // Generic forwarder for every bridge-emitted topic. Subscribed once via
-  // the live RpcClient. The supervisor.rpc() throw guard means this runs
-  // after supervisor.start() — wireIPC is called from index.ts after start().
-  // A future Phase 3+ optimisation can coalesce vpn.speed at ~100ms here.
-  const rpc = supervisor.rpc();
   for (const topic of BRIDGE_TOPICS) {
-    rpc.on(topic, (payload) => {
+    supervisor.on(topic, (payload) => {
       const win = getWindow();
       if (win) win.webContents.send(`event:${topic}`, payload);
       if (topic === "vpn.status" && trayStatus) {

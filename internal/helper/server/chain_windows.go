@@ -17,6 +17,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sys/windows"
+
 	"github.com/itg-team/itg-ray/internal/configgen"
 	"github.com/itg-team/itg-ray/internal/helper/adapter"
 	"github.com/itg-team/itg-ray/internal/helper/dns"
@@ -63,6 +65,7 @@ func asStopper(c *supervisor.Child) coreStopper {
 // chainState tracks the active session inside the helper process.
 type chainState struct {
 	sessionID string
+	stopping  bool
 	singbox   *supervisor.Child
 	xray      *supervisor.Child
 	tunLUID   uint64
@@ -96,9 +99,22 @@ type statsClient interface {
 }
 
 var (
-	chainMu    sync.Mutex
-	activeSess *chainState
+	chainMu             sync.Mutex
+	activeSess          *chainState
+	stopChainCores      = stopBoth
+	restoreChainDNS     = dns.Restore
+	removeChainNRPT     = dns.RemoveNrptRule
+	removeChainRoute    = route.Remove
+	snapshotChainRoutes = route.Snapshot
+	addChainRoute       = route.Add
+	clearChainUndo      = undo.Clear
 )
+
+func IsCleanupPending() bool {
+	chainMu.Lock()
+	defer chainMu.Unlock()
+	return activeSess != nil && activeSess.stopping
+}
 
 // IsChainActive reports whether the helper has a running chain session.
 // Safe for concurrent callers — used by OpServiceStatus to surface chain
@@ -106,7 +122,7 @@ var (
 func IsChainActive() bool {
 	chainMu.Lock()
 	defer chainMu.Unlock()
-	return activeSess != nil
+	return activeSess != nil && !activeSess.stopping
 }
 
 // binaryPath looks up an adjacent binary by name. Two layouts are
@@ -499,6 +515,11 @@ func watchChainExit(sess *chainState) {
 	// an already-closed channel, which would fire this select immediately —
 	// so only wait on the cores that were actually spawned. Both are always
 	// non-nil on the success path, but guard defensively.
+	chainMu.Lock()
+	if activeSess != sess || sess.stopping {
+		chainMu.Unlock()
+		return
+	}
 	var singboxDone, xrayDone <-chan struct{}
 	if sess.singbox != nil {
 		singboxDone = sess.singbox.Done()
@@ -506,6 +527,8 @@ func watchChainExit(sess *chainState) {
 	if sess.xray != nil {
 		xrayDone = sess.xray.Done()
 	}
+
+	chainMu.Unlock()
 
 	var which string
 	select {
@@ -522,7 +545,7 @@ func watchChainExit(sess *chainState) {
 	// If activeSess is nil (already stopped) or a different *chainState (a
 	// newer StartChain ran), do nothing — the teardown already happened or
 	// belongs to someone else.
-	if activeSess != sess {
+	if activeSess != sess || sess.stopping {
 		return
 	}
 
@@ -611,70 +634,68 @@ func StopActiveChain() error {
 // stopActiveChainLocked runs the teardown sequence. The caller MUST hold
 // chainMu and MUST have verified activeSess != nil. Returns the list of
 // best-effort errors accumulated during teardown (empty slice on full
-// success). Always sets activeSess = nil before returning.
+// success).
 //
 //nolint:gocyclo,gocognit // best-effort sequence requires linear control flow
 func stopActiveChainLocked() []string {
 	s := activeSess
+	s.stopping = true
 	var errs []string
 
 	// 1. Stop cores in parallel (worst case 2s — kill if not graceful by then).
-	xrayErr, sbErr := stopBoth(2*time.Second, asStopper(s.xray), asStopper(s.singbox))
+	xrayErr, sbErr := stopChainCores(2*time.Second, asStopper(s.xray), asStopper(s.singbox))
 	if xrayErr != nil {
 		errs = append(errs, "xray.Stop: "+xrayErr.Error())
+	} else {
+		s.xray = nil
 	}
 	if sbErr != nil {
 		errs = append(errs, "singbox.Stop: "+sbErr.Error())
+	} else {
+		s.singbox = nil
 	}
 
-	// 2. Restore DNS if we changed it (legacy dns_alias single-adapter path
-	// only; sing-box auto_route teardown handles its own DNS hijack restore).
 	if s.dnsPrior != nil {
-		if err := dns.Restore(*s.dnsPrior); err != nil {
+		if err := restoreChainDNS(*s.dnsPrior); err != nil {
 			errs = append(errs, "dns.Restore: "+err.Error())
+		} else {
+			s.dnsPrior = nil
 		}
 	}
-
-	// 2b. Remove the NRPT rule we installed at chain start, in the
-	// background. The PowerShell Remove-DnsClientNrptRule pipeline costs
-	// ~1s and the chain is already down by this point, so blocking the
-	// teardown RPC on it just makes Disconnect feel slow. It's idempotent
-	// and best-effort (a stray rule points at the transit IP and is
-	// cleared on the next connect/disconnect), so fire-and-forget is safe.
-	if name := s.nrptName; name != "" {
-		go func() {
-			if err := dns.RemoveNrptRule(name); err != nil {
-				slog.Warn("background NRPT removal failed",
-					slog.String("scope", "helper"), slog.String("rule", name),
-					slog.String("err", logging.RedactError(err)))
-			}
-		}()
+	if s.nrptName != "" {
+		if err := removeChainNRPT(s.nrptName); err != nil {
+			errs = append(errs, "dns.RemoveNrptRule: "+err.Error())
+		} else {
+			s.nrptName = ""
+		}
 	}
-
-	// 3. Remove the peer-route.
-	_ = route.Remove(s.peerRoute)
-
-	// 4. Apply RouteRestore from snapshot (diff-add anything we evicted).
-	current, err := route.Snapshot()
-	if err == nil {
-		want := indexRouteEntries(s.snapshot)
-		have := indexRouteEntries(current)
-		for k, e := range want {
-			if _, ok := have[k]; !ok {
-				if err := route.Add(e); err != nil {
-					slog.Warn("chain teardown: route restore failed", slog.String("scope", "helper"),
-						slog.String("session", s.sessionID), slog.String("dest", e.DestCIDR),
-						slog.String("err", logging.RedactError(err)))
+	if s.peerRoute.DestCIDR != "" {
+		if err := removeChainRoute(s.peerRoute); err != nil && !errors.Is(err, windows.ERROR_NOT_FOUND) {
+			errs = append(errs, "route.Remove: "+err.Error())
+		} else {
+			s.peerRoute = route.Entry{}
+		}
+	}
+	if s.snapshot != nil {
+		current, err := snapshotChainRoutes()
+		if err != nil {
+			errs = append(errs, "route.Snapshot(post): "+err.Error())
+		} else {
+			want := indexRouteEntries(s.snapshot)
+			have := indexRouteEntries(current)
+			restored := true
+			for k, e := range want {
+				if _, ok := have[k]; !ok {
+					if err := addChainRoute(e); err != nil && !errors.Is(err, windows.ERROR_OBJECT_ALREADY_EXISTS) {
+						errs = append(errs, "route.Add: "+err.Error())
+						restored = false
+					}
 				}
 			}
+			if restored {
+				s.snapshot = nil
+			}
 		}
-	} else {
-		errs = append(errs, "route.Snapshot(post): "+err.Error())
-	}
-
-	// 5. Clear undo journal.
-	if err := undo.Clear(undoPath()); err != nil {
-		errs = append(errs, "undo.Clear: "+err.Error())
 	}
 
 	// Note: do NOT wipe runtime.BasePath() here. Next session's OpStartChain
@@ -687,9 +708,17 @@ func stopActiveChainLocked() []string {
 		if err := s.xrayAPI.Close(); err != nil {
 			errs = append(errs, "xrayAPI.Close: "+err.Error())
 		}
+		s.xrayAPI = nil
 	}
 
-	activeSess = nil
+	if len(errs) == 0 {
+		if err := clearChainUndo(undoPath()); err != nil {
+			errs = append(errs, "undo.Clear: "+err.Error())
+		}
+	}
+	if len(errs) == 0 {
+		activeSess = nil
+	}
 
 	if len(errs) > 0 {
 		slog.Error("chain stop failed", slog.String("scope", "helper"),
@@ -730,7 +759,7 @@ func indexRouteEntries(es []route.Entry) map[string]route.Entry {
 func readChainCounters(ctx context.Context) (up, down uint64, ok bool) {
 	chainMu.Lock()
 	sess := activeSess
-	if sess == nil || sess.xrayAPI == nil {
+	if sess == nil || sess.stopping || sess.xrayAPI == nil {
 		chainMu.Unlock()
 		return 0, 0, false
 	}

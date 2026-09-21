@@ -10,7 +10,7 @@ import type { hub } from "@/lib/itg/models";
 type ServerView = hub.ServerView;
 type Snapshot = hub.Snapshot;
 
-export type ChainStatus = "idle" | "connecting" | "connected" | "disconnecting";
+export type ChainStatus = "idle" | "connecting" | "connected" | "disconnecting" | "error";
 export type Mode = "tun" | "sysproxy";
 
 export type SpeedPoint = { t: number; downBps: number; upBps: number };
@@ -490,10 +490,12 @@ export async function dashDisconnect(): Promise<void> {
   setState({ ...state, status: "disconnecting" });
   try {
     await Disconnect();
+    clearLastError();
+    onVpnStatus({ status: "idle" });
   } catch (err: any) {
     setState({
       ...state,
-      status: "idle",
+      status: "error",
       lastError: {
         kind: "disconnect_failed",
         message: err?.message ?? String(err),

@@ -24,12 +24,6 @@ type helperDialer func(ctx context.Context) (chainctl.HelperClient, error)
 // dialing means the very next Connect after install succeeds. It also
 // covers the Restart/Reinstall helper actions: when the pipe dies the
 // cached connection is dropped and the next call redials.
-//
-// Method semantics mirror the previous missing-helper stub: connection-
-// dependent operations surface a clear "helper unavailable" error when the
-// helper can't be reached, while teardown operations (StopChain,
-// TunDestroy, RouteRestore, DnsRestore) degrade to no-ops so a rollback
-// path never hard-fails just because the helper is already gone.
 type lazyHelperClient struct {
 	dial helperDialer
 	mu   sync.Mutex
@@ -80,18 +74,12 @@ func (l *lazyHelperClient) required(ctx context.Context, op func(c chainctl.Help
 	return nil
 }
 
-// teardown runs op against a live delegate but degrades to a no-op when the
-// helper is unreachable, mirroring the old stub so rollback can't hard-fail.
 func (l *lazyHelperClient) teardown(ctx context.Context, op func(c chainctl.HelperClient) error) error {
 	c, err := l.get(ctx)
 	if err != nil {
-		return nil
-	}
-	if err := op(c); err != nil {
-		l.invalidate()
 		return err
 	}
-	return nil
+	return op(c)
 }
 
 func (l *lazyHelperClient) StartChain(ctx context.Context, singboxJSON, xrayJSON []byte, mode chainctl.Mode) error {

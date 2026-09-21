@@ -18,7 +18,7 @@ import (
 // default logger.
 func newLoggingTestDriver(t *testing.T) (*Driver, string) {
 	t.Helper()
-	st := &metaCaptureStore{}
+	st := &metaCaptureStore{subs: []subscription.Stored{{ID: "s1", URL: "https://x.test"}}}
 	serversPath := t.TempDir() + "/servers.json"
 	if err := server.Save(serversPath, nil); err != nil {
 		t.Fatalf("seed servers.json: %v", err)
@@ -49,7 +49,7 @@ func TestSyncOne_LogsScopedSummary(t *testing.T) {
 
 func TestSyncOne_LoadFailure_LogsScopedError(t *testing.T) {
 	buf := logtest.Capture(t)
-	st := &metaCaptureStore{}
+	st := &metaCaptureStore{subs: []subscription.Stored{{ID: "s1", URL: "https://x.test"}}}
 	// serversPath points at a directory, so server.Load will fail to read it as a file.
 	dir := t.TempDir()
 	d := NewDriver(Config{
@@ -72,7 +72,7 @@ func TestSyncOne_LoadFailure_LogsScopedError(t *testing.T) {
 
 func TestDriver_Run_LogsScopedStartupSummary(t *testing.T) {
 	buf := logtest.Capture(t)
-	st := &metaCaptureStore{}
+	st := &metaCaptureStore{subs: []subscription.Stored{{ID: "s1", URL: "https://x.test"}}}
 	serversPath := t.TempDir() + "/servers.json"
 	if err := server.Save(serversPath, nil); err != nil {
 		t.Fatal(err)

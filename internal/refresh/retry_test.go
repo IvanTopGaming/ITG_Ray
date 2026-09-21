@@ -35,7 +35,7 @@ func okMeta() subscription.SyncMeta {
 func TestSyncOne_RetriesTransientThenSucceeds(t *testing.T) {
 	dir := t.TempDir()
 	serversPath := writeSeedServers(t, dir, nil)
-	st := &metaCaptureStore{}
+	st := &metaCaptureStore{subs: []subscription.Stored{{ID: "s1", URL: "https://x.test"}}}
 	merged := []server.Server{{ID: "srv1", Name: "X", Vless: vless.Config{Address: "a.test", Port: 443, UUID: "u"}}}
 
 	calls := 0
@@ -60,7 +60,7 @@ func TestSyncOne_RetriesTransientThenSucceeds(t *testing.T) {
 func TestSyncOne_TransientExhausted_Retryable(t *testing.T) {
 	dir := t.TempDir()
 	serversPath := writeSeedServers(t, dir, nil)
-	st := &metaCaptureStore{}
+	st := &metaCaptureStore{subs: []subscription.Stored{{ID: "s1", URL: "https://x.test"}}}
 
 	calls := 0
 	syncFn := func(_ context.Context, _ subscription.Subscription, _ []server.Server, _ time.Duration) ([]server.Server, subscription.SyncMeta, error) {
@@ -78,7 +78,7 @@ func TestSyncOne_TransientExhausted_Retryable(t *testing.T) {
 func TestSyncOne_PermanentNotRetried(t *testing.T) {
 	dir := t.TempDir()
 	serversPath := writeSeedServers(t, dir, nil)
-	st := &metaCaptureStore{}
+	st := &metaCaptureStore{subs: []subscription.Stored{{ID: "s1", URL: "https://x.test"}}}
 
 	calls := 0
 	syncFn := func(_ context.Context, _ subscription.Subscription, _ []server.Server, _ time.Duration) ([]server.Server, subscription.SyncMeta, error) {

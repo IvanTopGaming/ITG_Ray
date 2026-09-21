@@ -178,7 +178,7 @@ func (m *modeRoutingHelperClient) ServiceStatus(ctx context.Context) (ChainState
 	if err != nil {
 		return ChainState{}, nil
 	}
-	if st.Running {
+	if st.Running || st.CleanupPending {
 		m.mu.Lock()
 		m.active = m.daemon
 		m.mu.Unlock()
