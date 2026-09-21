@@ -4,6 +4,39 @@ All notable changes to ITG Ray are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.2-beta.1] - 2026-09-21
+
+Subscription import improvements and recovery fixes for VPN connections.
+
+### Added
+- Import supported VLESS profiles from Xray JSON subscriptions, with an
+  explanation when a feed contains no usable servers.
+- Use subscription response headers to derive the provider's display name.
+- Disconnect and retry incomplete cleanup from the error screen, even when
+  the server list is empty.
+
+### Fixed
+- TLS connections preserve the original server name when the connection
+  address is resolved to an IP and the profile has no explicit SNI.
+- Background refresh uses the same HWID and User-Agent settings as manual
+  refresh. CLI imports continue past an individual subscription failure.
+- Subscriptions added after startup receive automatic refreshes. Removed
+  subscriptions and old URLs cannot write stale responses back into the
+  server list, and slow downloads no longer block local edits.
+- Refresh preserves local server fields and distinguishes profiles sharing
+  an endpoint but using different connection settings.
+- UI, tray and notifications keep receiving events after the bridge restarts.
+- Editing an active server's connection settings offers a reconnect action.
+- Explicit disconnect clears a retained system proxy after a core crash.
+  Helper requests honor cancellation, and partial cleanup failures remain
+  visible and retryable across application restarts.
+- Update checks handle local development versions and stalled responses.
+- Routing import displays its action icon correctly.
+- Packaged helper and bridge report the intended release version.
+
+### Changed
+- Update gRPC and frontend dependencies.
+
 ## [0.1.1-beta.1] - 2026-08-07
 
 Bug-fix beta, plus a jump to Electron 41.
