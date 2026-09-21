@@ -22,8 +22,8 @@ func (d *Driver) syncOne(ctx context.Context, sub subscription.Stored) (retryabl
 	d.serversMu.Lock()
 	existing, err := server.Load(d.serversPath)
 	if err != nil {
+		d.recordMeta(ctx, sub, "error", "load servers: "+truncate(err.Error(), lastStatusMaxLen))
 		d.serversMu.Unlock()
-		d.recordMeta(ctx, sub.ID, "error", "load servers: "+truncate(err.Error(), lastStatusMaxLen))
 		d.log.Error("refresh sync: load servers failed",
 			slog.String("scope", "refresh"),
 			slog.String("id", sub.ID),
@@ -35,8 +35,8 @@ func (d *Driver) syncOne(ctx context.Context, sub subscription.Stored) (retryabl
 	merged, meta, syncErr := d.syncWithRetry(ctx, sub, existing)
 	if syncErr == nil {
 		if saveErr := server.Save(d.serversPath, merged); saveErr != nil {
+			d.recordMeta(ctx, sub, "error", "save servers: "+truncate(saveErr.Error(), lastStatusMaxLen))
 			d.serversMu.Unlock()
-			d.recordMeta(ctx, sub.ID, "error", "save servers: "+truncate(saveErr.Error(), lastStatusMaxLen))
 			d.log.Error("refresh sync: save servers failed",
 				slog.String("scope", "refresh"),
 				slog.String("id", sub.ID),
@@ -45,10 +45,10 @@ func (d *Driver) syncOne(ctx context.Context, sub subscription.Stored) (retryabl
 			return true // local IO hiccup — worth a sooner retry
 		}
 	}
-	d.serversMu.Unlock()
 
 	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		// Shutdown — do not record this attempt.
+		d.serversMu.Unlock()
 		return false
 	}
 
@@ -56,13 +56,14 @@ func (d *Driver) syncOne(ctx context.Context, sub subscription.Stored) (retryabl
 	if syncErr == nil {
 		headers = &meta.Headers
 	}
-	if err := d.subs.UpdateMeta(sub.ID, d.now(), meta.Status, truncate(meta.Message, lastStatusMaxLen), headers); err != nil {
+	if err := d.subs.UpdateMeta(sub.ID, sub.URL, d.now(), meta.Status, truncate(meta.Message, lastStatusMaxLen), headers); err != nil {
 		d.log.Error("refresh sync: update meta failed",
 			slog.String("scope", "refresh"),
 			slog.String("id", sub.ID),
 			slog.String("err", logging.RedactError(err)),
 		)
 	}
+	d.serversMu.Unlock()
 	d.log.Info("refresh sync done",
 		slog.String("scope", "refresh"),
 		slog.String("id", sub.ID),
@@ -119,14 +120,14 @@ func (d *Driver) syncWithRetry(ctx context.Context, sub subscription.Stored, exi
 // recordMeta is a small helper that respects ctx-cancel for shutdown.
 // ui is intentionally omitted — recordMeta is only used for pre-sync
 // failures where there is no fresh Userinfo to write.
-func (d *Driver) recordMeta(ctx context.Context, id, status, message string) {
+func (d *Driver) recordMeta(ctx context.Context, sub subscription.Stored, status, message string) {
 	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return
 	}
-	if err := d.subs.UpdateMeta(id, d.now(), status, message, nil); err != nil {
+	if err := d.subs.UpdateMeta(sub.ID, sub.URL, d.now(), status, message, nil); err != nil {
 		d.log.Error("refresh sync: update meta failed",
 			slog.String("scope", "refresh"),
-			slog.String("id", id),
+			slog.String("id", sub.ID),
 			slog.String("err", logging.RedactError(err)),
 		)
 	}
@@ -176,6 +177,31 @@ func (d *Driver) runSub(ctx context.Context, s subscription.Stored) {
 		case <-ctx.Done():
 			return
 		case <-timer.C:
+			subs, err := d.subs.Load()
+			if err != nil {
+				d.log.Error("refresh sync: load subscriptions failed",
+					slog.String("scope", "refresh"),
+					slog.String("id", s.ID),
+					slog.String("err", logging.RedactError(err)),
+				)
+				timer.Reset(d.nextTick(interval, true, &fails))
+				continue
+			}
+			found := false
+			for _, current := range subs {
+				if current.ID == s.ID {
+					s = current
+					found = true
+					break
+				}
+			}
+			if !found {
+				return
+			}
+			interval = time.Duration(s.UpdateInterval)
+			if interval <= 0 {
+				interval = d.defaultSubInterval
+			}
 			retryable := d.syncOne(ctx, s)
 			timer.Reset(d.nextTick(interval, retryable, &fails))
 		}

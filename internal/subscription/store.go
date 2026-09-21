@@ -96,7 +96,7 @@ func (s Stored) ToSyncInput() Subscription {
 type Store interface {
 	Load() ([]Stored, error)
 	Save(subs []Stored) error
-	UpdateMeta(id string, at time.Time, status, message string, headers *Headers) error
+	UpdateMeta(id, sourceURL string, at time.Time, status, message string, headers *Headers) error
 }
 
 // FileStore persists Stored entries as JSON at Path, using atomic file replace.
@@ -145,7 +145,7 @@ func (s FileStore) Save(subs []Stored) error {
 	return nil
 }
 
-func (s FileStore) UpdateMeta(id string, at time.Time, status, message string, headers *Headers) error {
+func (s FileStore) UpdateMeta(id, sourceURL string, at time.Time, status, message string, headers *Headers) error {
 	mu := lockForPath(s.Path)
 	mu.Lock()
 	defer mu.Unlock()
@@ -154,7 +154,7 @@ func (s FileStore) UpdateMeta(id string, at time.Time, status, message string, h
 		return err
 	}
 	for i := range subs {
-		if subs[i].ID != id {
+		if subs[i].ID != id || subs[i].URL != sourceURL {
 			continue
 		}
 		subs[i].LastSyncAt = at

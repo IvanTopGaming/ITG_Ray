@@ -114,12 +114,12 @@ func newSubCmd() *cobra.Command {
 					// subscription.Sync) — never fall back to the raw err.Error(),
 					// which can embed the full subscription URL/token.
 					fmt.Printf("%s\tERROR: %s\n", s.ID, meta.Message)
-					_ = st.UpdateMeta(s.ID, time.Now(), "error", truncate(meta.Message, 120), nil)
+					_ = st.UpdateMeta(s.ID, s.URL, time.Now(), "error", truncate(meta.Message, 120), nil)
 					continue
 				}
 				existing = merged
 				fmt.Printf("%s\t%s\t%s\n", s.ID, meta.Status, meta.Message)
-				_ = st.UpdateMeta(s.ID, time.Now(), "ok", meta.Message, &meta.Headers)
+				_ = st.UpdateMeta(s.ID, s.URL, time.Now(), "ok", meta.Message, &meta.Headers)
 			}
 			return server.Save(serversPath(), existing)
 		},

@@ -139,7 +139,7 @@ func TestFileStore_UpdateMeta_PartialUpdate(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 	at := time.Date(2026, 4, 26, 12, 0, 0, 0, time.UTC)
-	if err := fs.UpdateMeta("s2", at, "ok", "imported=1", nil); err != nil {
+	if err := fs.UpdateMeta("s2", "https://b.test", at, "ok", "imported=1", nil); err != nil {
 		t.Fatalf("UpdateMeta: %v", err)
 	}
 	got, err := fs.Load()
@@ -159,7 +159,7 @@ func TestFileStore_UpdateMeta_UnknownID_NoOpNoError(t *testing.T) {
 	fs := FileStore{Path: filepath.Join(dir, "subscriptions.json")}
 	_ = fs.Save([]Stored{{ID: "s1", Name: "A", URL: "https://a.test"}})
 	// Unknown ID — driver may race with a user removing a sub. Should not error.
-	if err := fs.UpdateMeta("ghost", time.Now(), "ok", "", nil); err != nil {
+	if err := fs.UpdateMeta("ghost", "https://a.test", time.Now(), "ok", "", nil); err != nil {
 		t.Fatalf("UpdateMeta unknown id should be no-op, got error %v", err)
 	}
 }
@@ -260,7 +260,7 @@ func TestFileStore_UpdateMeta_WritesMessageAndUserinfo(t *testing.T) {
 	}
 	at := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
 
-	require.NoError(t, fs.UpdateMeta("s1", at, "ok", "imported=3", &Headers{Userinfo: ui}))
+	require.NoError(t, fs.UpdateMeta("s1", "https://a.test", at, "ok", "imported=3", &Headers{Userinfo: ui}))
 
 	got, err := fs.Load()
 	require.NoError(t, err)
@@ -287,7 +287,7 @@ func TestFileStore_UpdateMeta_PartialUserinfo_PreservesUnsetFields(t *testing.T)
 	ui := &Userinfo{Total: 2000, HasTotal: true}
 	at := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
 
-	require.NoError(t, fs.UpdateMeta("s1", at, "ok", "", &Headers{Userinfo: ui}))
+	require.NoError(t, fs.UpdateMeta("s1", "https://a.test", at, "ok", "", &Headers{Userinfo: ui}))
 	got, err := fs.Load()
 	require.NoError(t, err)
 	require.EqualValues(t, 999, got[0].Upload, "prior Upload preserved (not in header)")
@@ -318,7 +318,7 @@ func TestFileStore_UpdateMeta_HasExpireClearsPriorExpiry(t *testing.T) {
 		Expire: nil, HasExpire: true,
 	}
 	at := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
-	require.NoError(t, fs.UpdateMeta("s1", at, "ok", "", &Headers{Userinfo: ui}))
+	require.NoError(t, fs.UpdateMeta("s1", "https://a.test", at, "ok", "", &Headers{Userinfo: ui}))
 
 	got, err := fs.Load()
 	require.NoError(t, err)
@@ -336,7 +336,7 @@ func TestFileStore_UpdateMeta_NilUserinfo_PreservesPriorQuota(t *testing.T) {
 	}}))
 
 	at := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
-	require.NoError(t, fs.UpdateMeta("s1", at, "error", "boom", nil))
+	require.NoError(t, fs.UpdateMeta("s1", "https://a.test", at, "error", "boom", nil))
 
 	got, err := fs.Load()
 	require.NoError(t, err)

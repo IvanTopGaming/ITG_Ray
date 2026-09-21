@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +17,42 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestSubsService_SyncOne_IgnoresResponseAfterURLChange(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	releaseResponse := sync.OnceFunc(func() { close(release) })
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(started)
+		<-release
+		w.Header().Set("Profile-Title", "Old Provider")
+		_, _ = w.Write([]byte("vless://00000000-0000-0000-0000-000000000000@1.2.3.4:443?type=tcp&security=tls&sni=x#A\n"))
+	}))
+	t.Cleanup(ts.Close)
+	t.Cleanup(releaseResponse)
+	svc, store := newSubsServiceForTest(t, t.TempDir())
+	require.NoError(t, store.Save([]subscription.Stored{{ID: "s1", Name: "Old Provider", URL: ts.URL}}))
+	done := make(chan error, 1)
+	go func() { done <- svc.SyncOne("s1") }()
+	select {
+	case <-started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("sync did not start")
+	}
+	_, err := svc.Edit("s1", "https://new.example/sub", "")
+	require.NoError(t, err)
+	releaseResponse()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(3 * time.Second):
+		t.Fatal("sync did not finish")
+	}
+	subs, err := store.Load()
+	require.NoError(t, err)
+	require.Equal(t, "new.example", subs[0].Name)
+	require.True(t, subs[0].LastSyncAt.IsZero())
+}
 
 func TestSubsService_SyncOne_ProviderName(t *testing.T) {
 	const title = "Подписка 🚀"

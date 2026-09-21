@@ -341,6 +341,24 @@ func (s *SubsService) SyncOne(id string) error {
 	// it succeeds.
 	syncOK := syncErr == nil
 
+	s.d.StoreLock.Lock()
+	current, err := s.d.SubStore.Load()
+	if err != nil {
+		s.d.StoreLock.Unlock()
+		return fmt.Errorf("sub.Load: %w", err)
+	}
+	matches := false
+	for _, sub := range current {
+		if sub.ID == id && sub.URL == input.URL {
+			matches = true
+			break
+		}
+	}
+	if !matches {
+		s.d.StoreLock.Unlock()
+		return nil
+	}
+
 	// Local override pattern: status/msg start from meta and are explicitly
 	// overridden only when the merge-and-save fails after a successful fetch.
 	// Keeps a single UpdateMeta call site at the bottom.
@@ -357,8 +375,6 @@ func (s *SubsService) SyncOne(id string) error {
 		// than before it: a snapshot taken before a concurrent sync's Save
 		// would be stale, and writing it back would drop that sync's servers.
 		saveErr := func() error {
-			s.d.StoreLock.Lock()
-			defer s.d.StoreLock.Unlock()
 			existing, lerr := s.d.ServerStore.Load()
 			if lerr != nil {
 				return fmt.Errorf("server.Load: %w", lerr)
@@ -395,10 +411,11 @@ func (s *SubsService) SyncOne(id string) error {
 	if syncOK {
 		headers = &meta.Headers
 	}
-	if err := s.d.SubStore.UpdateMeta(id, time.Now(), status, truncate(msg, 120), headers); err != nil {
+	if err := s.d.SubStore.UpdateMeta(id, input.URL, time.Now(), status, truncate(msg, 120), headers); err != nil {
 		slog.Warn("sub meta update failed", slog.String("scope", "subs"),
 			slog.String("id", id), slog.String("err", err.Error()))
 	}
+	s.d.StoreLock.Unlock()
 
 	s.d.Hub.Publish(hub.Event{
 		Name: hub.EventSubSynced,

@@ -33,7 +33,7 @@ type metaCaptureStore struct {
 
 func (m *metaCaptureStore) Load() ([]subscription.Stored, error) { return m.subs, nil }
 func (m *metaCaptureStore) Save(s []subscription.Stored) error   { m.subs = s; return nil }
-func (m *metaCaptureStore) UpdateMeta(id string, at time.Time, status, message string, headers *subscription.Headers) error {
+func (m *metaCaptureStore) UpdateMeta(id, sourceURL string, at time.Time, status, message string, headers *subscription.Headers) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var ui *subscription.Userinfo
@@ -85,6 +85,57 @@ func TestSyncOne_PersistsProviderName(t *testing.T) {
 	}
 	if len(stored) != 1 || stored[0].Name != "New Provider" {
 		t.Fatalf("provider name not persisted: %+v", stored)
+	}
+}
+
+func TestSyncOne_IgnoresProviderNameFromReplacedURL(t *testing.T) {
+	dir := t.TempDir()
+	store := subscription.FileStore{Path: filepath.Join(dir, "subscriptions.json")}
+	old := subscription.Stored{ID: "s1", Name: "Old Provider", URL: "https://old.example/sub"}
+	current := subscription.Stored{ID: "s1", Name: "new.example", URL: "https://new.example/sub"}
+	if err := store.Save([]subscription.Stored{old}); err != nil {
+		t.Fatal(err)
+	}
+	d := mkDriver(t, store, writeSeedServers(t, dir, nil), func(_ context.Context, _ subscription.Subscription, existing []server.Server, _ time.Duration) ([]server.Server, subscription.SyncMeta, error) {
+		if err := store.Save([]subscription.Stored{current}); err != nil {
+			return nil, subscription.SyncMeta{}, err
+		}
+		return existing, subscription.SyncMeta{Status: "ok", Headers: subscription.Headers{ProfileTitle: "Old Provider"}}, nil
+	})
+	d.syncOne(context.Background(), old)
+	stored, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored[0].Name != current.Name || !stored[0].LastSyncAt.IsZero() {
+		t.Fatalf("outdated response changed current subscription: %+v", stored[0])
+	}
+}
+
+func TestRunSub_UsesCurrentSubscriptionURL(t *testing.T) {
+	dir := t.TempDir()
+	store := subscription.FileStore{Path: filepath.Join(dir, "subscriptions.json")}
+	old := subscription.Stored{ID: "s1", URL: "https://old.example/sub"}
+	current := subscription.Stored{ID: "s1", URL: "https://new.example/sub"}
+	if err := store.Save([]subscription.Stored{current}); err != nil {
+		t.Fatal(err)
+	}
+	requested := make(chan string, 1)
+	d := mkDriver(t, store, writeSeedServers(t, dir, nil), func(_ context.Context, sub subscription.Subscription, existing []server.Server, _ time.Duration) ([]server.Server, subscription.SyncMeta, error) {
+		requested <- sub.URL
+		return existing, subscription.SyncMeta{Status: "ok"}, nil
+	})
+	d.firstSubJitterMax = time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() { cancel(); d.wg.Wait() })
+	d.wg.Go(func() { d.runSub(ctx, old) })
+	select {
+	case got := <-requested:
+		if got != current.URL {
+			t.Fatalf("requested %q, want current URL %q", got, current.URL)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("scheduled sync did not run")
 	}
 }
 

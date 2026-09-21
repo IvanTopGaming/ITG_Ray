@@ -42,7 +42,7 @@ type ServerStore interface {
 type SubStore interface {
 	Load() ([]subscription.Stored, error)
 	Save([]subscription.Stored) error
-	UpdateMeta(id string, at time.Time, status, message string, headers *subscription.Headers) error
+	UpdateMeta(id, sourceURL string, at time.Time, status, message string, headers *subscription.Headers) error
 }
 
 // HelperProber returns the current helper-service state.
@@ -241,7 +241,7 @@ func subOriginByID(subs []subscription.Stored) map[string]string {
 		if s.ID == "" {
 			continue
 		}
-		name := s.Name
+		name := s.DisplayName()
 		if name == "" {
 			name = s.ID
 		}
