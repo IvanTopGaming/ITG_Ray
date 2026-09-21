@@ -573,6 +573,12 @@ describe('Settings — Update check', () => {
     expect(screen.queryByText('MIT')).toBeNull();
   });
 
+  it('does not claim a previous check before the user checks for updates', async () => {
+    await renderSettings();
+    expect(screen.queryByText(/last checked.*ago/i)).toBeNull();
+    expect(screen.getByText('Check whether a newer version is available.')).toBeInTheDocument();
+  });
+
   it('checkNow -> uptodate shows the up-to-date hint', async () => {
     const update = (window as unknown as { itg: { update: { check: UpdateCheckMock } } }).itg.update;
     update.check.mockResolvedValue({ status: 'uptodate' });

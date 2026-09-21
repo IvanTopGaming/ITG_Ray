@@ -450,7 +450,7 @@
       "checkForUpdates": "Check for updates",
       "upToDate": "You're up to date.",
       "checking": "Checking…",
-      "lastChecked": "Last checked 12 minutes ago.",
+      "checkHint": "Check whether a newer version is available.",
       "checkNow": "Check now",
       "updateAvailable": "Update available: {{version}}",
       "updateError": "Couldn't check for updates.",
