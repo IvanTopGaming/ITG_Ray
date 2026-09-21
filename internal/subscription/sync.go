@@ -5,31 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/itg-team/itg-ray/internal/logging"
 	"github.com/itg-team/itg-ray/internal/server"
 )
 
-// ErrUnrecognizedFormat is returned by Sync when Parse succeeds without an
-// error but recognized nothing at all: zero configs, zero invalid entries,
-// and zero recognized-but-unsupported ("skipped") URIs. Parse's format
-// detection (sing-box JSON -> base64 -> plaintext) falls through every
-// stage silently for this input — an HTML error page, a WAF interstitial,
-// a bare "{}", a truncated response — and returns ParseResult{}, nil rather
-// than an error (see detector.go). Left unchecked, Sync would hand that
-// empty result to server.Merge, which deletes every previously-synced
-// server for this subscription while Sync still reported "ok".
-//
-// Trade-off: Parse cannot reliably tell "nothing recognized" apart from "a
-// legitimately empty subscription" — e.g. a sing-box document with an
-// explicit empty "outbounds" array parses to the exact same zero-signal
-// ParseResult as a bare "{}", since sbDoc has no required fields. Rather
-// than guess, Sync treats every zero-signal parse as a hard failure. A
-// subscription panel that genuinely has zero servers assigned will now
-// surface as a sync error instead of silently clearing the local list —
-// which is the safer default: existing servers are never dropped as a
-// side effect of a response the app didn't understand.
 var ErrUnrecognizedFormat = errors.New("unrecognized subscription format / empty response")
 
 // Subscription is the in-memory shape used by Sync. It is not the on-disk
@@ -129,8 +112,8 @@ func FetchParse(ctx context.Context, sub Subscription, timeout time.Duration) ([
 			slog.String("stage", "parse"), slog.String("err", logging.RedactError(err)))
 		return nil, meta, err
 	}
-	if len(parsed.Configs) == 0 && parsed.Invalid == 0 && sumSkipped(parsed.Skipped) == 0 {
-		err = ErrUnrecognizedFormat
+	if len(parsed.Configs) == 0 {
+		err = noServersError(parsed)
 		meta.Status = "error"
 		meta.Message = logging.RedactError(err)
 		slog.Error("sub sync failed", slog.String("scope", "sub"), slog.String("id", sub.ID),
@@ -139,12 +122,18 @@ func FetchParse(ctx context.Context, sub Subscription, timeout time.Duration) ([
 	}
 
 	incoming := make([]server.Server, 0, len(parsed.Configs))
+	seen := make(map[string]bool)
 	for i := range parsed.Configs {
+		key := server.ConnectionID(parsed.Configs[i])
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
 		incoming = append(incoming, server.New(parsed.Configs[i], server.OriginSubscription, sub.ID))
 	}
 
 	meta.Status = "ok"
-	meta.Message = fmt.Sprintf("imported=%d invalid=%d skipped=%d", len(parsed.Configs), parsed.Invalid, sumSkipped(parsed.Skipped))
+	meta.Message = fmt.Sprintf("imported=%d invalid=%d skipped=%d", len(incoming), parsed.Invalid, sumSkipped(parsed.Skipped))
 	slog.Info("sub fetched", slog.String("scope", "sub"), slog.String("id", sub.ID),
 		slog.Int("servers", len(incoming)), slog.Int("skipped", sumSkipped(parsed.Skipped)))
 	return incoming, meta, nil
@@ -156,4 +145,16 @@ func sumSkipped(m map[string]int) int {
 		n += v
 	}
 	return n
+}
+
+func noServersError(parsed ParseResult) error {
+	if parsed.Invalid == 0 && sumSkipped(parsed.Skipped) == 0 {
+		return ErrUnrecognizedFormat
+	}
+	protocols := make([]string, 0, len(parsed.Skipped))
+	for protocol := range parsed.Skipped {
+		protocols = append(protocols, safeProtocol(protocol))
+	}
+	sort.Strings(protocols)
+	return fmt.Errorf("no usable VLESS servers: invalid=%d skipped=%d protocols=%s", parsed.Invalid, sumSkipped(parsed.Skipped), strings.Join(protocols, ","))
 }

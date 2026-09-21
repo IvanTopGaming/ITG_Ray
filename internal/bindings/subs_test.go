@@ -3,10 +3,12 @@ package bindings
 import (
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -571,4 +573,94 @@ func TestSubsService_Edit_UpdatesUserAgent_IncludingClearToEmpty(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, loaded, 1)
 	require.Empty(t, loaded[0].UserAgent, "explicit empty must clear")
+}
+
+func TestSubsService_SyncOne_PreservesServersWhenNothingUsable(t *testing.T) {
+	for _, body := range []string{
+		"hysteria2://password@hy.example:443",
+		`{"outbounds":[{"protocol":"vless","settings":{"address":"node.example","port":0,"id":"u"}}]}`,
+		`{"error":"https://provider.example/private-token"}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(body)) }))
+			t.Cleanup(ts.Close)
+			dir := t.TempDir()
+			svc, store := newSubsServiceForTest(t, dir)
+			require.NoError(t, store.Save([]subscription.Stored{{ID: "s1", Name: "Provider", URL: ts.URL}}))
+			original := []server.Server{{ID: "existing", Name: "Previous", Origin: server.OriginSubscription, SourceID: "s1"}}
+			srvPath := filepath.Join(dir, "servers.json")
+			require.NoError(t, server.Save(srvPath, original))
+			require.Error(t, svc.SyncOne("s1"))
+			actual, err := server.Load(srvPath)
+			require.NoError(t, err)
+			require.Equal(t, original, actual)
+			subs, err := store.Load()
+			require.NoError(t, err)
+			require.Equal(t, "error", subs[0].LastStatus)
+			require.NotContains(t, subs[0].LastMessage, "private-token")
+			views, err := svc.List()
+			require.NoError(t, err)
+			require.Equal(t, 1, views[0].ServerCount)
+		})
+	}
+}
+
+func TestSubsService_SyncOne_ImportsXrayAndReportsSkipped(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`[{"remarks":"Alpha","outbounds":[{"protocol":"vless","settings":{"address":"node.example","port":443,"id":"user"}}]},{"outbounds":[{"protocol":"hysteria"}]}]`))
+	}))
+	t.Cleanup(ts.Close)
+	dir := t.TempDir()
+	svc, store := newSubsServiceForTest(t, dir)
+	require.NoError(t, store.Save([]subscription.Stored{{ID: "s1", Name: "Provider", URL: ts.URL}}))
+	require.NoError(t, svc.SyncOne("s1"))
+	actual, err := server.Load(filepath.Join(dir, "servers.json"))
+	require.NoError(t, err)
+	require.Len(t, actual, 1)
+	require.Equal(t, "Alpha", actual[0].Name)
+	subs, err := store.Load()
+	require.NoError(t, err)
+	require.Equal(t, "ok", subs[0].LastStatus)
+	require.Equal(t, "imported=1 invalid=0 skipped=1", subs[0].LastMessage)
+}
+
+func TestSubsService_SyncOne_XrayVariantsPersistAcrossRefreshes(t *testing.T) {
+	const uuid = "00000000-0000-0000-0000-000000000001"
+	profile := func(name, sni string) string {
+		return fmt.Sprintf(`{"remarks":%q,"outbounds":[{"protocol":"vless","settings":{"address":"node.example","port":443,"id":%q,"flow":"xtls-rprx-vision-udp443"},"streamSettings":{"network":"tcp","security":"tls","tlsSettings":{"serverName":%q}}}]}`, name, uuid, sni)
+	}
+	a, b := profile("Alpha", "a.example"), profile("Beta", "b.example")
+	var body atomic.Value
+	body.Store("[" + a + "," + b + `,{"outbounds":"invalid"}]`)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(body.Load().(string))) }))
+	t.Cleanup(ts.Close)
+	dir := t.TempDir()
+	svc, store := newSubsServiceForTest(t, dir)
+	require.NoError(t, store.Save([]subscription.Stored{{ID: "s1", URL: ts.URL}}))
+	original := server.New(vless.Config{Address: "node.example", Port: 443, UUID: uuid, Encryption: "none", Flow: "xtls-rprx-vision-udp443", Transport: vless.TransportTCP, Security: vless.SecurityTLS, SNI: "a.example"}, server.OriginSubscription, "s1")
+	original.Favorite = true
+	path := filepath.Join(dir, "servers.json")
+	require.NoError(t, server.Save(path, []server.Server{original}))
+	require.NoError(t, svc.SyncOne("s1"))
+	first, err := server.Load(path)
+	require.NoError(t, err)
+	require.Len(t, first, 2)
+	require.NotEqual(t, first[0].ID, first[1].ID)
+	require.Equal(t, original.ID, first[0].ID)
+	require.True(t, first[0].Favorite)
+	require.False(t, first[1].Favorite)
+	for _, s := range first {
+		require.Equal(t, "xtls-rprx-vision-udp443", s.Vless.Flow)
+	}
+	subs, err := store.Load()
+	require.NoError(t, err)
+	require.Equal(t, "imported=2 invalid=1 skipped=0", subs[0].LastMessage)
+	body.Store("[" + b + "," + a + "," + a + "]")
+	require.NoError(t, svc.SyncOne("s1"))
+	second, err := server.Load(path)
+	require.NoError(t, err)
+	require.Len(t, second, 2)
+	require.Equal(t, first[0].ID, second[1].ID)
+	require.Equal(t, first[1].ID, second[0].ID)
+	require.True(t, second[1].Favorite)
 }

@@ -53,8 +53,24 @@ func ParsePlaintext(s string) (ParseResult, error) {
 
 func schemeOf(line string) string {
 	i := strings.Index(line, "://")
-	if i < 0 {
+	if i < 0 || !validScheme(line[:i]) {
 		return ""
 	}
 	return strings.ToLower(line[:i])
+}
+
+func validScheme(s string) bool {
+	if len(s) == 0 || len(s) > 32 {
+		return false
+	}
+	for i, c := range s {
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' {
+			continue
+		}
+		if i > 0 && (c >= '0' && c <= '9' || c == '+' || c == '-' || c == '.') {
+			continue
+		}
+		return false
+	}
+	return true
 }

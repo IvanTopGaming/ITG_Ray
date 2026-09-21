@@ -27,7 +27,7 @@ func (c *Config) Normalize() ([]string, error) {
 	if c.Flow != "" {
 		ok := c.Transport == TransportTCP &&
 			(c.Security == SecurityTLS || c.Security == SecurityReality) &&
-			c.Flow == "xtls-rprx-vision"
+			(c.Flow == "xtls-rprx-vision" || c.Flow == "xtls-rprx-vision-udp443")
 		if !ok {
 			msgs = append(msgs, fmt.Sprintf("dropped flow %q (requires TCP + TLS/Reality)", c.Flow))
 			c.Flow = ""
