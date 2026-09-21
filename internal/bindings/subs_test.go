@@ -572,3 +572,52 @@ func TestSubsService_Edit_UpdatesUserAgent_IncludingClearToEmpty(t *testing.T) {
 	require.Len(t, loaded, 1)
 	require.Empty(t, loaded[0].UserAgent, "explicit empty must clear")
 }
+
+func TestSubsService_SyncOne_PreservesServersWhenNothingUsable(t *testing.T) {
+	for _, body := range []string{
+		"hysteria2://password@hy.example:443",
+		`{"outbounds":[{"protocol":"vless","settings":{"address":"node.example","port":0,"id":"u"}}]}`,
+		`{"error":"https://provider.example/private-token"}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(body)) }))
+			t.Cleanup(ts.Close)
+			dir := t.TempDir()
+			svc, store := newSubsServiceForTest(t, dir)
+			require.NoError(t, store.Save([]subscription.Stored{{ID: "s1", Name: "Provider", URL: ts.URL}}))
+			original := []server.Server{{ID: "existing", Name: "Previous", Origin: server.OriginSubscription, SourceID: "s1"}}
+			srvPath := filepath.Join(dir, "servers.json")
+			require.NoError(t, server.Save(srvPath, original))
+			require.Error(t, svc.SyncOne("s1"))
+			actual, err := server.Load(srvPath)
+			require.NoError(t, err)
+			require.Equal(t, original, actual)
+			subs, err := store.Load()
+			require.NoError(t, err)
+			require.Equal(t, "error", subs[0].LastStatus)
+			require.NotContains(t, subs[0].LastMessage, "private-token")
+			views, err := svc.List()
+			require.NoError(t, err)
+			require.Equal(t, 1, views[0].ServerCount)
+		})
+	}
+}
+
+func TestSubsService_SyncOne_ImportsXrayAndReportsSkipped(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`[{"remarks":"Alpha","outbounds":[{"protocol":"vless","settings":{"address":"node.example","port":443,"id":"user"}}]},{"outbounds":[{"protocol":"hysteria"}]}]`))
+	}))
+	t.Cleanup(ts.Close)
+	dir := t.TempDir()
+	svc, store := newSubsServiceForTest(t, dir)
+	require.NoError(t, store.Save([]subscription.Stored{{ID: "s1", Name: "Provider", URL: ts.URL}}))
+	require.NoError(t, svc.SyncOne("s1"))
+	actual, err := server.Load(filepath.Join(dir, "servers.json"))
+	require.NoError(t, err)
+	require.Len(t, actual, 1)
+	require.Equal(t, "Alpha", actual[0].Name)
+	subs, err := store.Load()
+	require.NoError(t, err)
+	require.Equal(t, "ok", subs[0].LastStatus)
+	require.Equal(t, "imported=1 invalid=0 skipped=1", subs[0].LastMessage)
+}

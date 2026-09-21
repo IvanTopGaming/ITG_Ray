@@ -123,3 +123,26 @@ func TestSync_UnrecognizedBodyDoesNotWipeExistingServers(t *testing.T) {
 
 // keep server import reachable
 var _ = server.Server{}
+
+func TestSync_NoUsableServersIsAnError(t *testing.T) {
+	for name, body := range map[string]string{
+		"unsupported protocol": "hysteria2://secret@hy.example:443",
+		"invalid vless":        "vless://broken",
+		"json error with URL":  `{"error":"https://provider.example/private-token"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(body)) }))
+			defer ts.Close()
+			existing := []server.Server{server.New(vless.Config{Address: "old.example", Port: 443, UUID: "old"}, server.OriginSubscription, "s1")}
+			merged, meta, err := Sync(context.Background(), Subscription{ID: "s1", URL: ts.URL}, existing, time.Second)
+			require.Error(t, err)
+			require.Equal(t, "error", meta.Status)
+			require.Nil(t, merged)
+			require.NotContains(t, meta.Message, "secret")
+			require.NotContains(t, meta.Message, "private-token")
+			if name == "unsupported protocol" {
+				require.Contains(t, meta.Message, "hysteria2")
+			}
+		})
+	}
+}

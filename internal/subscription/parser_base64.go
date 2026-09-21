@@ -42,5 +42,9 @@ func ParseBase64(s string) (ParseResult, error) {
 	if lastErr != nil {
 		return ParseResult{}, ErrNotBase64
 	}
-	return ParsePlaintext(string(decoded))
+	body := strings.TrimSpace(string(decoded))
+	if strings.HasPrefix(body, "{") || strings.HasPrefix(body, "[") {
+		return parseJSON(body)
+	}
+	return ParsePlaintext(body)
 }

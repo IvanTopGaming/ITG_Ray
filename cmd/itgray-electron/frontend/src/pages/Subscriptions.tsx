@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { subscriptionSyncMessage } from "@/lib/subscriptionSyncMessage";
 import { cn } from "@/lib/cn";
 import { type Sub } from "@/lib/subsAdapter";
 import { useSubs, humanizeError } from "@/lib/subsStore";
@@ -164,6 +165,7 @@ function SubCard({
   const { t } = useTranslation();
   const isError = sub.status === "error";
   const isSyncing = sub.status === "syncing";
+  const syncMessage = subscriptionSyncMessage(sub, t);
 
   return (
     <div
@@ -196,10 +198,10 @@ function SubCard({
           </button>
         </div>
 
-        {isError && sub.lastSyncMessage && (
-          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-[#ff9a9a]">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            {sub.lastSyncMessage}
+        {syncMessage && (
+          <div className={cn("mt-1 flex items-start gap-1.5 text-[11px]", isError ? "text-[#ff9a9a]" : "text-amber-300")}>
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{syncMessage}</span>
           </div>
         )}
 

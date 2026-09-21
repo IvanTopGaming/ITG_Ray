@@ -60,6 +60,23 @@ describe("Subscriptions page", () => {
     expect(screen.getByText("okins")).toBeInTheDocument();
   });
 
+  it.each([
+    ["unrecognized subscription format / empty response", "The response is empty or its format is unsupported. Existing servers were kept."],
+    ["no usable VLESS servers: invalid=2 skipped=1 protocols=hysteria2", "No usable VLESS servers. Existing servers were kept. Invalid: 2. Unsupported: 1. Protocols: hysteria2."],
+    ["no usable VLESS servers: invalid=0 skipped=1 protocols=xray-complex", "No usable VLESS servers. Existing servers were kept. Invalid: 0. Unsupported: 1. Protocols: advanced Xray settings."],
+  ])("explains import failure %s", (lastSyncMessage, message) => {
+    mockUseSubs.mockReturnValue(makeStore({ subs: [baseSub({ status: "error", lastSyncMessage })] }));
+    render(<Subscriptions />);
+    expect(screen.getByText(message)).toBeInTheDocument();
+    expect(screen.getByText("4 servers")).toBeInTheDocument();
+  });
+
+  it("shows skipped and invalid counts after partial import", () => {
+    mockUseSubs.mockReturnValue(makeStore({ subs: [baseSub({ lastSyncMessage: "imported=4 invalid=1 skipped=3" })] }));
+    render(<Subscriptions />);
+    expect(screen.getByText("Imported: 4. Invalid: 1. Unsupported: 3.")).toBeInTheDocument();
+  });
+
   it("adds a subscription using only its URL", async () => {
     const add = vi.fn().mockResolvedValue(undefined);
     mockUseSubs.mockReturnValue(makeStore({ add }));
