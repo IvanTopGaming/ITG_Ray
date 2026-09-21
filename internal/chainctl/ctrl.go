@@ -128,14 +128,17 @@ func networkSettingsView(n config.Network) map[string]any {
 
 // Controller is the public type owning the chain lifecycle.
 type Controller struct {
-	d        Deps
-	mu       sync.Mutex
-	cancel   context.CancelFunc
-	current  *server.Server
-	mode     Mode
-	prevUp   uint64
-	prevDown uint64
-	prevAt   time.Time
+	d              Deps
+	mu             sync.Mutex
+	opMu           sync.Mutex
+	cancel         context.CancelFunc
+	cleanupPending bool
+	cleanupMode    Mode
+	current        *server.Server
+	mode           Mode
+	prevUp         uint64
+	prevDown       uint64
+	prevAt         time.Time
 	// wg tracks the single in-flight goroutine that owns c.cancel's
 	// context — Start's bringUp+runPoller, or Reconcile's adopted
 	// runPoller. Stop() waits on it (after canceling that context) before
@@ -144,11 +147,6 @@ type Controller struct {
 	// (backend-review Finding 1: cancel used to only reach the poller's
 	// context, never the one bringUp actually ran under).
 	//
-	// wg is reused across Start/Stop cycles, which is safe only because the
-	// Controller is driven serially: the bridge dispatcher (Serve) handles ops
-	// one at a time and Reconcile runs once at boot, so a Start never Add()s
-	// concurrently with a Stop still inside Wait(). Callers must preserve that
-	// serialization.
 	wg sync.WaitGroup
 }
 
@@ -173,6 +171,8 @@ func New(d *Deps) *Controller {
 // arrives through events. Calling Start while already connected returns an
 // error — caller should Stop first.
 func (c *Controller) Start(ctx context.Context, serverID string, mode Mode) error {
+	c.opMu.Lock()
+	defer c.opMu.Unlock()
 	c.mu.Lock()
 	if c.cancel != nil {
 		c.mu.Unlock()
@@ -186,6 +186,12 @@ func (c *Controller) Start(ctx context.Context, serverID string, mode Mode) erro
 	if srv == nil {
 		c.mu.Unlock()
 		return fmt.Errorf("chainctl: server %q not found", serverID)
+	}
+
+	if c.cleanupPending {
+		c.mu.Unlock()
+		c.wg.Wait()
+		c.mu.Lock()
 	}
 
 	// connectCtx (not the caller's ctx) is what bringUp actually runs
@@ -246,12 +252,29 @@ func (c *Controller) Start(ctx context.Context, serverID string, mode Mode) erro
 			c.mu.Lock()
 			c.cancel = nil
 			c.current = nil
+			status := hub.StatusIdle
+			if c.cleanupPending {
+				status = hub.StatusError
+			}
 			c.mu.Unlock()
 			c.d.Hub.Publish(hub.Event{
 				Name:    hub.EventVPNStatus,
-				Payload: map[string]any{"status": string(hub.StatusIdle)},
+				Payload: map[string]any{"status": string(status)},
 			})
 			return
+		}
+		c.mu.Lock()
+		pending := c.cleanupPending
+		previousMode := c.cleanupMode
+		c.mu.Unlock()
+		var cleanupErr error
+		if pending && previousMode == ModeSysProxy && effectiveMode != ModeSysProxy {
+			cleanupErr = c.clearSysproxyBestEffort("chainctl reconnect")
+		}
+		if cleanupErr == nil {
+			c.mu.Lock()
+			c.cleanupPending = false
+			c.mu.Unlock()
 		}
 		if err := saveSession(c.d.DataDir, sessionRecord{
 			ServerID: srv.ID,
@@ -278,17 +301,24 @@ func (c *Controller) Start(ctx context.Context, serverID string, mode Mode) erro
 
 // Stop tears down the chain. Idempotent — safe to call when already idle.
 func (c *Controller) Stop(ctx context.Context) error {
+	c.opMu.Lock()
+	defer c.opMu.Unlock()
 	c.mu.Lock()
 	cancel := c.cancel
+	pending := c.cleanupPending
+	previousMode := c.cleanupMode
+	c.cleanupPending = false
 	c.cancel = nil
 	mode := c.mode
 	c.current = nil
 	c.mu.Unlock()
-	if cancel == nil {
+	if cancel == nil && !pending {
 		// Already idle. Don't emit transitions, don't touch session.
 		return nil
 	}
-	cancel()
+	if cancel != nil {
+		cancel()
+	}
 	c.d.Hub.Publish(hub.Event{
 		Name:    hub.EventVPNStatus,
 		Payload: map[string]any{"status": string(hub.StatusDisconnecting)},
@@ -304,7 +334,28 @@ func (c *Controller) Stop(ctx context.Context) error {
 	// is the single authoritative cleanup pass for whatever it did or
 	// didn't manage to roll back itself.
 	c.wg.Wait()
-	c.tearDown(ctx, mode)
+	teardownCtx, teardownCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer teardownCancel()
+	err := c.tearDown(teardownCtx, mode)
+	if pending && previousMode == ModeSysProxy && mode != ModeSysProxy {
+		err = errors.Join(err, c.clearSysproxyBestEffort("chainctl teardown"))
+	}
+	if err != nil {
+		c.mu.Lock()
+		c.cleanupPending = true
+		if !pending {
+			c.cleanupMode = mode
+		}
+		c.mu.Unlock()
+		c.d.Hub.Publish(hub.Event{
+			Name:    hub.EventVPNStatus,
+			Payload: map[string]any{"status": string(hub.StatusError)},
+		})
+		return err
+	}
+	c.mu.Lock()
+	c.cleanupPending = false
+	c.mu.Unlock()
 	c.d.Hub.Publish(hub.Event{
 		Name:    hub.EventVPNStatus,
 		Payload: map[string]any{"status": string(hub.StatusIdle)},
@@ -320,6 +371,9 @@ func (c *Controller) Stop(ctx context.Context) error {
 func (c *Controller) Status() (hub.ChainStatus, *server.Server, Mode) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.cleanupPending && c.cancel == nil {
+		return hub.StatusError, nil, c.mode
+	}
 	if c.cancel == nil {
 		return hub.StatusIdle, nil, ""
 	}
@@ -465,7 +519,12 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 			// points at, blackholing the user's traffic. Best-effort: an
 			// already-failed Set is exactly the case where Clear() might
 			// also fail, so this only ever improves on the pre-fix no-op.
-			c.clearSysproxyBestEffort("chainctl rollback")
+			c.mu.Lock()
+			pending := c.cleanupPending
+			c.mu.Unlock()
+			if !pending {
+				c.clearSysproxyBestEffort("chainctl rollback")
+			}
 			return mode, config.Network{}, fmt.Errorf("sysproxy.Set: %w", err)
 		}
 	}
@@ -485,30 +544,37 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 // rollback, and Reconcile's stale-session branch — routes through here
 // rather than calling Sysproxy.Clear() directly. step names the caller for
 // the log line (e.g. "chainctl teardown").
-func (c *Controller) clearSysproxyBestEffort(step string) {
+func (c *Controller) clearSysproxyBestEffort(step string) error {
+	var result error
 	if err := c.d.Sysproxy.Clear(); err != nil {
+		result = err
 		slog.Warn(step+": sysproxy clear failed", slog.String("scope", "chainctl"),
 			slog.String("err", logging.RedactError(err)))
 	}
-	if on, err := c.d.Sysproxy.IsSet(); err == nil && on {
+	if on, err := c.d.Sysproxy.IsSet(); err != nil {
+		result = errors.Join(result, err)
+	} else if on {
 		slog.Warn(step+": sysproxy still enabled after clear", slog.String("scope", "chainctl"))
+		result = errors.Join(result, errors.New("sysproxy still enabled after clear"))
 	}
+	return result
 }
 
-// tearDown is best-effort: every step is independent and errors are
-// swallowed so a partial bringup can still be unwound.
-func (c *Controller) tearDown(ctx context.Context, mode Mode) {
+func (c *Controller) tearDown(ctx context.Context, mode Mode) error {
+	var result error
 	tearStart := time.Now()
 	if mode == ModeSysProxy {
-		c.clearSysproxyBestEffort("chainctl teardown")
+		result = errors.Join(result, c.clearSysproxyBestEffort("chainctl teardown"))
 	}
 	if mode == ModeTUN {
 		tDns := time.Now()
 		if err := c.d.Helper.DnsRestore(ctx); err != nil {
+			result = errors.Join(result, fmt.Errorf("DnsRestore: %w", err))
 			slog.Warn("chainctl teardown: dns restore failed", slog.String("scope", "chainctl"),
 				slog.String("err", logging.RedactError(err)))
 		}
 		if err := c.d.Helper.RouteRestore(ctx); err != nil {
+			result = errors.Join(result, fmt.Errorf("RouteRestore: %w", err))
 			slog.Warn("chainctl teardown: route restore failed", slog.String("scope", "chainctl"),
 				slog.String("err", logging.RedactError(err)))
 		}
@@ -516,6 +582,7 @@ func (c *Controller) tearDown(ctx context.Context, mode Mode) {
 	}
 	tStop := time.Now()
 	if err := c.d.Helper.StopChain(ctx); err != nil {
+		result = errors.Join(result, fmt.Errorf("StopChain: %w", err))
 		slog.Warn("chainctl teardown: stop chain failed", slog.String("scope", "chainctl"),
 			slog.String("err", logging.RedactError(err)))
 	}
@@ -523,12 +590,14 @@ func (c *Controller) tearDown(ctx context.Context, mode Mode) {
 	if mode == ModeTUN {
 		tDestroy := time.Now()
 		if err := c.d.Helper.TunDestroy(ctx); err != nil {
+			result = errors.Join(result, fmt.Errorf("TunDestroy: %w", err))
 			slog.Warn("chainctl teardown: tun destroy failed", slog.String("scope", "chainctl"),
 				slog.String("err", logging.RedactError(err)))
 		}
 		slog.Info("chain timing", "step", "tunDestroy", "ms", time.Since(tDestroy).Milliseconds(), "scope", "chainctl")
 	}
 	slog.Info("chain timing", "step", "tearDown TOTAL", "ms", time.Since(tearStart).Milliseconds(), "mode", string(mode), "scope", "chainctl")
+	return result
 }
 
 // Reconcile is called at app boot. It rebinds Controller state to a
@@ -549,6 +618,8 @@ func (c *Controller) tearDown(ctx context.Context, mode Mode) {
 //     UX, but does NOT claim ownership and emits no event — the user
 //     reconnects explicitly.
 func (c *Controller) Reconcile(ctx context.Context) {
+	c.opMu.Lock()
+	defer c.opMu.Unlock()
 	slog.Info("chainctl reconcile start", slog.String("scope", "chainctl"))
 
 	rec, err := loadSession(c.d.DataDir)

@@ -4,17 +4,23 @@ package client
 
 import (
 	"context"
+	"net"
 	"time"
 
 	"github.com/Microsoft/go-winio"
 )
 
-// Dial connects to the helper's named pipe with a 5 s budget.
-func Dial(_ context.Context, pipeName string) (*Client, error) {
-	timeout := 5 * time.Second
-	conn, err := winio.DialPipe(pipeName, &timeout)
+func Dial(ctx context.Context, pipeName string) (*Client, error) {
+	dial := func(ctx context.Context) (net.Conn, error) {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		return winio.DialPipeContext(ctx, pipeName)
+	}
+	conn, err := dial(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return NewWithConn(conn), nil
+	c := NewWithConn(conn)
+	c.dial = dial
+	return c, nil
 }
