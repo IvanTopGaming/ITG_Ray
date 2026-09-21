@@ -69,16 +69,15 @@ func TestLazyHelper_DialsOnDemandAfterInstall(t *testing.T) {
 	require.Equal(t, 2, dials, "dialed once (failed) pre-install, once (ok) post-install")
 }
 
-func TestLazyHelper_TeardownIsNoOpWhenUnavailable(t *testing.T) {
+func TestLazyHelper_TeardownReportsUnavailable(t *testing.T) {
 	l := newLazyHelperClient(func(_ context.Context) (chainctl.HelperClient, error) {
 		return nil, errors.New("unavailable")
 	})
 	ctx := context.Background()
-	// Rollback/teardown ops must not hard-fail when the helper is unreachable.
-	require.NoError(t, l.StopChain(ctx))
-	require.NoError(t, l.TunDestroy(ctx))
-	require.NoError(t, l.RouteRestore(ctx))
-	require.NoError(t, l.DnsRestore(ctx))
+	require.Error(t, l.StopChain(ctx))
+	require.Error(t, l.TunDestroy(ctx))
+	require.Error(t, l.RouteRestore(ctx))
+	require.Error(t, l.DnsRestore(ctx))
 	// A required op still errors.
 	require.Error(t, l.StartChain(ctx, nil, nil, chainctl.ModeTUN))
 }

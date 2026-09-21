@@ -82,6 +82,7 @@ var stopChildBestEffort = func(c *supervisor.Child, grace time.Duration) error {
 // route_exclude_address (set bridge-side) handles the server-loop.
 type chainState struct {
 	sessionID string
+	stopping  bool
 	singbox   *supervisor.Child
 	xray      *supervisor.Child
 
@@ -106,9 +107,16 @@ type statsClient interface {
 }
 
 var (
-	chainMu    sync.Mutex
-	activeSess *chainState
+	chainMu        sync.Mutex
+	activeSess     *chainState
+	stopChainCores = stopBoth
 )
+
+func IsCleanupPending() bool {
+	chainMu.Lock()
+	defer chainMu.Unlock()
+	return activeSess != nil && activeSess.stopping
+}
 
 // IsChainActive reports whether the daemon has a running chain session.
 // Safe for concurrent callers — used by OpServiceStatus to surface chain
@@ -116,7 +124,7 @@ var (
 func IsChainActive() bool {
 	chainMu.Lock()
 	defer chainMu.Unlock()
-	return activeSess != nil
+	return activeSess != nil && !activeSess.stopping
 }
 
 // binaryPath looks up an adjacent binary by name. The install copies
@@ -304,6 +312,11 @@ func watchChainExit(sess *chainState) {
 	// an already-closed channel, which would fire this select immediately —
 	// so only wait on the cores that were actually spawned. Both are always
 	// non-nil on the success path, but guard defensively.
+	chainMu.Lock()
+	if activeSess != sess || sess.stopping {
+		chainMu.Unlock()
+		return
+	}
 	var singboxDone, xrayDone <-chan struct{}
 	if sess.singbox != nil {
 		singboxDone = sess.singbox.Done()
@@ -311,6 +324,8 @@ func watchChainExit(sess *chainState) {
 	if sess.xray != nil {
 		xrayDone = sess.xray.Done()
 	}
+
+	chainMu.Unlock()
 
 	var which string
 	select {
@@ -327,7 +342,7 @@ func watchChainExit(sess *chainState) {
 	// If activeSess is nil (already stopped) or a different *chainState (a
 	// newer StartChain ran), do nothing — the teardown already happened or
 	// belongs to someone else.
-	if activeSess != sess {
+	if activeSess != sess || sess.stopping {
 		return
 	}
 
@@ -398,20 +413,25 @@ func StopActiveChain() error {
 // stopActiveChainLocked runs the teardown sequence. The caller MUST hold
 // chainMu and MUST have verified activeSess != nil. Returns the list of
 // best-effort errors accumulated during teardown (empty slice on full
-// success). Always sets activeSess = nil before returning.
+// success).
 func stopActiveChainLocked() []string {
 	s := activeSess
+	s.stopping = true
 	var errs []string
 
 	// Stop cores in parallel (worst case 2s — kill if not graceful by then).
 	// sing-box tears down its own auto_route TUN + routes + DNS hijack as it
 	// exits, so there is no host-level restore to run afterwards on Linux.
-	xrayErr, sbErr := stopBoth(2*time.Second, asStopper(s.xray), asStopper(s.singbox))
+	xrayErr, sbErr := stopChainCores(2*time.Second, asStopper(s.xray), asStopper(s.singbox))
 	if xrayErr != nil {
 		errs = append(errs, "xray.Stop: "+xrayErr.Error())
+	} else {
+		s.xray = nil
 	}
 	if sbErr != nil {
 		errs = append(errs, "singbox.Stop: "+sbErr.Error())
+	} else {
+		s.singbox = nil
 	}
 
 	// Close xray API client (best-effort; the conn may already be unusable
@@ -420,9 +440,12 @@ func stopActiveChainLocked() []string {
 		if err := s.xrayAPI.Close(); err != nil {
 			errs = append(errs, "xrayAPI.Close: "+err.Error())
 		}
+		s.xrayAPI = nil
 	}
 
-	activeSess = nil
+	if len(errs) == 0 {
+		activeSess = nil
+	}
 
 	if len(errs) > 0 {
 		slog.Error("chain stop failed", slog.String("scope", "helper"),
@@ -450,7 +473,7 @@ func stopActiveChainLocked() []string {
 func readChainCounters(ctx context.Context) (up, down uint64, ok bool) {
 	chainMu.Lock()
 	sess := activeSess
-	if sess == nil || sess.xrayAPI == nil {
+	if sess == nil || sess.stopping || sess.xrayAPI == nil {
 		chainMu.Unlock()
 		return 0, 0, false
 	}

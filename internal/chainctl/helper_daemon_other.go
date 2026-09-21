@@ -165,7 +165,13 @@ func (a *daemonHelperClient) StopChain(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("marshal StopChain: %w", err)
 	}
-	_, err = a.call(ctx, protocol.OpStopChain, args)
+	raw, err := a.call(ctx, protocol.OpStopChain, args)
+	if err != nil {
+		return err
+	}
+	if err := checkStopResult(raw); err != nil {
+		return err
+	}
 	a.mu.Lock()
 	a.sessionID = ""
 	a.mu.Unlock()
@@ -188,9 +194,10 @@ func (a *daemonHelperClient) ServiceStatus(ctx context.Context) (ChainState, err
 		return ChainState{}, fmt.Errorf("decode ServiceStatus: %w", err)
 	}
 	return ChainState{
-		Running:   res.ChainActive,
-		UpBytes:   res.UpBytes,
-		DownBytes: res.DownBytes,
+		Running:        res.ChainActive,
+		CleanupPending: res.CleanupPending,
+		UpBytes:        res.UpBytes,
+		DownBytes:      res.DownBytes,
 	}, nil
 }
 

@@ -17,7 +17,8 @@ type ServiceStatusResult struct {
 	// already-running chain (the helper is a long-lived Windows service
 	// while the GUI/bridge are short-lived; without this flag a GUI
 	// restart loses connected-state and forces a re-Connect).
-	ChainActive bool `json:"chain_active"`
+	ChainActive    bool `json:"chain_active"`
+	CleanupPending bool `json:"cleanup_pending,omitempty"`
 }
 
 // NewServiceStatusHandler returns a Handler that reports the helper's
@@ -35,6 +36,7 @@ func NewServiceStatusHandler(version string, startedAt time.Time, chainAlive fun
 		if chainAlive != nil {
 			out.ChainActive = chainAlive()
 		}
+		out.CleanupPending = IsCleanupPending()
 		up, down, ok := readChainCounters(ctx)
 		if ok {
 			out.UpBytes = up

@@ -130,7 +130,13 @@ func (a *HelperAdapter) StopChain(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("marshal StopChain: %w", err)
 	}
-	_, err = a.c.Call(ctx, protocol.OpStopChain, args)
+	raw, err := a.c.Call(ctx, protocol.OpStopChain, args)
+	if err != nil {
+		return err
+	}
+	if err := checkStopResult(raw); err != nil {
+		return err
+	}
 	a.mu.Lock()
 	a.sessionID = ""
 	a.mu.Unlock()
@@ -154,9 +160,10 @@ func (a *HelperAdapter) ServiceStatus(ctx context.Context) (ChainState, error) {
 		return ChainState{}, fmt.Errorf("decode ServiceStatus: %w", err)
 	}
 	return ChainState{
-		Running:   res.ChainActive,
-		UpBytes:   res.UpBytes,
-		DownBytes: res.DownBytes,
+		Running:        res.ChainActive,
+		CleanupPending: res.CleanupPending,
+		UpBytes:        res.UpBytes,
+		DownBytes:      res.DownBytes,
 	}, nil
 }
 

@@ -58,10 +58,11 @@ type HelperClient interface {
 // fields chainctl actually consumes (running flag for crash detection,
 // byte counters for speed computation, last error message).
 type ChainState struct {
-	Running   bool
-	UpBytes   uint64
-	DownBytes uint64
-	LastError string
+	CleanupPending bool
+	Running        bool
+	UpBytes        uint64
+	DownBytes      uint64
+	LastError      string
 }
 
 // ServerStore is the narrow lookup contract chainctl needs. The runtime
@@ -627,6 +628,21 @@ func (c *Controller) Reconcile(ctx context.Context) {
 		slog.Info("chainctl reconcile: nothing to recover", slog.String("scope", "chainctl"))
 		return
 	}
+	state, statusErr := c.d.Helper.ServiceStatus(ctx)
+	if statusErr == nil && state.CleanupPending {
+		c.mu.Lock()
+		c.current = nil
+		c.mode = Mode(rec.Mode)
+		c.cleanupMode = Mode(rec.Mode)
+		c.cleanupPending = true
+		c.mu.Unlock()
+		c.d.Hub.Publish(hub.Event{
+			Name:    hub.EventVPNStatus,
+			Payload: map[string]any{"status": string(hub.StatusError)},
+		})
+		return
+	}
+
 	srv, err := c.d.ServerStore.Get(rec.ServerID)
 	if err != nil || srv == nil {
 		if err == nil {
@@ -641,7 +657,6 @@ func (c *Controller) Reconcile(ctx context.Context) {
 		return
 	}
 
-	state, statusErr := c.d.Helper.ServiceStatus(ctx)
 	if statusErr != nil {
 		slog.Error("chainctl reconcile failed",
 			slog.String("scope", "chainctl"), slog.String("err", statusErr.Error()))
