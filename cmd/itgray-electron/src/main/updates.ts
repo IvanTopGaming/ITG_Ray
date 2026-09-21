@@ -63,7 +63,7 @@ export interface ParsedVersion {
   prerelease: string[] | null;
 }
 
-const VERSION_RE = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
+const VERSION_RE = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 /**
  * parseVersion reads a semver-ish tag ("v0.1.0-beta.1") into numeric
@@ -175,24 +175,26 @@ export async function checkForUpdate(
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    let res: Response;
+    let body: unknown;
     try {
-      res = await fetchImpl(RELEASES_API_URL, {
+      const res = await fetchImpl(RELEASES_API_URL, {
         headers: { Accept: "application/vnd.github+json" },
         signal: controller.signal,
       });
+      if (!res.ok) return { status: "error" };
+      body = await res.json();
     } finally {
       clearTimeout(timer);
     }
-    if (!res.ok) return { status: "error" };
-
-    const body: unknown = await res.json();
     if (!Array.isArray(body)) return { status: "error" };
 
     const picked = pickLatestRelease(body as GithubRelease[]);
     if (!picked) return { status: "uptodate" };
 
-    const cmp = compareVersions(picked.version, currentVersion);
+    const currentRelease = currentVersion.trim()
+      .replace(/-\d+-g[0-9a-f]+(?:-dirty)?$/i, "")
+      .replace(/-dirty$/, "");
+    const cmp = compareVersions(picked.version, currentRelease);
     if (cmp === null) return { status: "error" };
     if (cmp > 0) {
       return { status: "available", latest: picked.version, htmlUrl: picked.htmlUrl || RELEASES_PAGE_URL };

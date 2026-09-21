@@ -857,7 +857,7 @@ export function Settings() {
               ? t('settings.about.upToDate')
               : updateState === 'checking'
               ? t('settings.about.checking')
-              : t('settings.about.lastChecked')
+              : t('settings.about.checkHint')
           }
         >
           <div className="flex items-center gap-2">

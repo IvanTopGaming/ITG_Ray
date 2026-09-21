@@ -185,3 +185,59 @@ test("checkForUpdate: draft releases never count as available updates", async ()
   const result = await checkForUpdate("0.1.0", fakeFetch(releases));
   assert.equal(result.status, "uptodate");
 });
+
+
+test("compareVersions ignores build metadata for update precedence", () => {
+  assert.equal(compareVersions("v0.1.1-beta.1+dirty", "0.1.1-beta.1"), 0);
+  assert.equal(compareVersions("1.2.3+build.5", "1.2.3+build.9"), 0);
+  assert.ok(compareVersions("0.1.1-beta.1+dirty", "0.1.1-beta.2")! < 0);
+});
+
+test("checkForUpdate accepts the current version with build metadata", async () => {
+  const result = await checkForUpdate("v0.1.0-beta.1+dirty", fakeFetch([
+    release({ tag_name: "v0.1.1-beta.1", html_url: RELEASES_PAGE_URL }),
+  ]));
+  assert.deepEqual(result, {
+    status: "available", latest: "0.1.1-beta.1", htmlUrl: RELEASES_PAGE_URL,
+  });
+});
+
+test("checkForUpdate times out while reading the response body", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let startReading!: () => void;
+  const reading = new Promise<void>((resolve) => { startReading = resolve; });
+  let signal!: AbortSignal;
+  const fetchBodyStalls = (async (_url, init) => {
+    signal = init!.signal!;
+    return {
+      ok: true,
+      json: () => {
+        startReading();
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+        });
+      },
+    } as Response;
+  }) as typeof fetch;
+  const result = checkForUpdate("0.1.0", fetchBodyStalls);
+  await reading;
+  t.mock.timers.tick(8_000);
+  assert.equal(signal.aborted, true);
+  assert.deepEqual(await result, { status: "error" });
+});
+
+
+test("checkForUpdate discovers the next beta from a local git-describe build", async () => {
+  for (const version of [
+    "v0.1.1-beta.1-dirty",
+    "v0.1.1-beta.1-3-g123abcd",
+    "v0.1.1-beta.1-3-g123abcd-dirty",
+  ]) {
+    const result = await checkForUpdate(version, fakeFetch([
+      release({ tag_name: "v0.1.1-beta.2", html_url: RELEASES_PAGE_URL }),
+    ]));
+    assert.deepEqual(result, {
+      status: "available", latest: "0.1.1-beta.2", htmlUrl: RELEASES_PAGE_URL,
+    }, version);
+  }
+});
