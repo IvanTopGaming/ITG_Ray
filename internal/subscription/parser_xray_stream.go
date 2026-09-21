@@ -8,7 +8,7 @@ import (
 )
 
 func applyXrayStream(c *vless.Config, s xrayStream) (bool, bool) {
-	if s.Address != "" || s.Port != 0 {
+	if s.Address != "" || s.Port != 0 || hasJSONValue(s.FinalMask) {
 		return false, true
 	}
 	network := s.Network

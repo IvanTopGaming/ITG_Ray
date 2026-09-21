@@ -12,23 +12,25 @@ import (
 var ErrNotXrayJSON = errors.New("not an Xray JSON subscription")
 
 func ParseXray(body string) (ParseResult, error) {
-	var docs []xrayDocument
+	var docs []json.RawMessage
 	if strings.HasPrefix(strings.TrimSpace(body), "[") {
 		if json.Unmarshal([]byte(body), &docs) != nil {
 			return ParseResult{}, ErrNotXrayJSON
 		}
 	} else {
-		var doc xrayDocument
-		if json.Unmarshal([]byte(body), &doc) != nil {
-			return ParseResult{}, ErrNotXrayJSON
-		}
-		docs = []xrayDocument{doc}
+		docs = []json.RawMessage{json.RawMessage(body)}
 	}
+
 	result := ParseResult{Skipped: map[string]int{}}
 	seen := map[string]int{}
 	named := map[string]bool{}
 	recognized := false
-	for _, doc := range docs {
+	for _, rawDoc := range docs {
+		var doc xrayDocument
+		if json.Unmarshal(rawDoc, &doc) != nil || doc.Outbounds == nil {
+			result.Invalid++
+			continue
+		}
 		var configs []vless.Config
 		for _, raw := range doc.Outbounds {
 			var fields map[string]json.RawMessage
@@ -37,6 +39,7 @@ func ParseXray(body string) (ParseResult, error) {
 				continue
 			}
 			if _, ok := fields["protocol"]; !ok {
+				result.Invalid++
 				continue
 			}
 			recognized = true
@@ -138,7 +141,7 @@ func parseXrayOutbound(out xrayOutbound) ([]vless.Config, bool, int) {
 			if user.Encryption != "" {
 				c.Encryption = user.Encryption
 			}
-			if _, err := c.Normalize(); err != nil {
+			if _, err := c.Normalize(); err != nil || c.Flow != user.Flow {
 				invalid++
 				continue
 			}

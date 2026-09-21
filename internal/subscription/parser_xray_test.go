@@ -3,6 +3,7 @@ package subscription
 import (
 	"encoding/base64"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/itg-team/itg-ray/internal/vless"
@@ -149,4 +150,49 @@ func TestParse_XrayUnsupportedStreamOptions(t *testing.T) {
 			require.Equal(t, 1, r.Skipped["xray-complex"])
 		})
 	}
+}
+
+func TestParse_XrayPreservesVisionUDP443(t *testing.T) {
+	body := strings.ReplaceAll(xrayRealityOutbound, "xtls-rprx-vision", "xtls-rprx-vision-udp443")
+	r, err := Parse(`{"outbounds":[` + body + `]}`)
+	require.NoError(t, err)
+	require.Len(t, r.Configs, 1)
+	require.Equal(t, "xtls-rprx-vision-udp443", r.Configs[0].Flow)
+	require.Zero(t, r.Invalid)
+}
+
+func TestParse_XrayRejectsFlowChanges(t *testing.T) {
+	for _, flow := range []string{"invalid-flow", "xtls-rprx-vision"} {
+		r, err := Parse(`{"outbounds":[{"protocol":"vless","settings":{"address":"node.example","port":443,"id":"u","flow":"` + flow + `"},"streamSettings":{"network":"ws","security":"tls"}}]}`)
+		require.NoError(t, err)
+		require.Empty(t, r.Configs)
+		require.Equal(t, 1, r.Invalid)
+	}
+}
+
+func TestParse_XrayMalformedDocumentsDoNotDiscardGoodProfiles(t *testing.T) {
+	for _, bad := range []string{`{"outbounds":"invalid"}`, `42`, `null`, `{"remarks":23,"outbounds":[]}`, `{"unexpected":true}`} {
+		t.Run(bad, func(t *testing.T) {
+			body := `[{"remarks":"Alpha","outbounds":[` + xrayRealityOutbound + `]},` + bad + `]`
+			r, err := Parse(body)
+			require.NoError(t, err)
+			require.Len(t, r.Configs, 1)
+			require.Equal(t, "Alpha", r.Configs[0].Remark)
+			require.Equal(t, 1, r.Invalid)
+		})
+	}
+}
+
+func TestParse_XrayMissingOutboundProtocolIsInvalid(t *testing.T) {
+	r, err := Parse(`{"outbounds":[` + xrayRealityOutbound + `,{"settings":{"address":"node.example","port":443,"id":"u"}}]}`)
+	require.NoError(t, err)
+	require.Len(t, r.Configs, 1)
+	require.Equal(t, 1, r.Invalid)
+}
+
+func TestParse_XraySkipsFinalMask(t *testing.T) {
+	r, err := Parse(`{"outbounds":[{"protocol":"vless","settings":{"address":"node.example","port":443,"id":"u"},"streamSettings":{"network":"tcp","finalmask":{"tcp":[{"type":"header-custom","settings":{"request":{"value":["custom"]}}}]}}}]}`)
+	require.NoError(t, err)
+	require.Empty(t, r.Configs)
+	require.Equal(t, 1, r.Skipped["xray-complex"])
 }

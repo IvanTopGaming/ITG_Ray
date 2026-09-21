@@ -38,18 +38,19 @@ type xraySettings struct {
 }
 
 type xrayStream struct {
-	Network     string      `json:"network"`
-	Security    string      `json:"security"`
-	Address     string      `json:"address"`
-	Port        int         `json:"port"`
-	TLS         xrayTLS     `json:"tlsSettings"`
-	Reality     xrayReality `json:"realitySettings"`
-	TCP         *xrayTCP    `json:"tcpSettings"`
-	Raw         *xrayTCP    `json:"rawSettings"`
-	WS          xrayHTTP    `json:"wsSettings"`
-	HTTPUpgrade xrayHTTP    `json:"httpupgradeSettings"`
-	XHTTP       *xrayHTTP   `json:"xhttpSettings"`
-	SplitHTTP   *xrayHTTP   `json:"splithttpSettings"`
+	FinalMask   json.RawMessage `json:"finalmask"`
+	Network     string          `json:"network"`
+	Security    string          `json:"security"`
+	Address     string          `json:"address"`
+	Port        int             `json:"port"`
+	TLS         xrayTLS         `json:"tlsSettings"`
+	Reality     xrayReality     `json:"realitySettings"`
+	TCP         *xrayTCP        `json:"tcpSettings"`
+	Raw         *xrayTCP        `json:"rawSettings"`
+	WS          xrayHTTP        `json:"wsSettings"`
+	HTTPUpgrade xrayHTTP        `json:"httpupgradeSettings"`
+	XHTTP       *xrayHTTP       `json:"xhttpSettings"`
+	SplitHTTP   *xrayHTTP       `json:"splithttpSettings"`
 	GRPC        struct {
 		ServiceName string `json:"serviceName"`
 		Authority   string `json:"authority"`
