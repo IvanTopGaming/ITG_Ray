@@ -100,7 +100,7 @@ func TestSyncOne_IgnoresProviderNameFromReplacedURL(t *testing.T) {
 		if err := store.Save([]subscription.Stored{current}); err != nil {
 			return nil, subscription.SyncMeta{}, err
 		}
-		return existing, subscription.SyncMeta{Status: "ok", Headers: subscription.Headers{ProfileTitle: "Old Provider"}}, nil
+		return []server.Server{server.New(vless.Config{Address: "old-node.example", Port: 443, UUID: "demo"}, server.OriginSubscription, old.ID)}, subscription.SyncMeta{Status: "ok", Headers: subscription.Headers{ProfileTitle: "Old Provider"}}, nil
 	})
 	d.syncOne(context.Background(), old)
 	stored, err := store.Load()
@@ -109,6 +109,13 @@ func TestSyncOne_IgnoresProviderNameFromReplacedURL(t *testing.T) {
 	}
 	if stored[0].Name != current.Name || !stored[0].LastSyncAt.IsZero() {
 		t.Fatalf("outdated response changed current subscription: %+v", stored[0])
+	}
+	saved, err := server.Load(d.serversPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(saved) != 0 {
+		t.Fatalf("outdated response restored old URL servers: %+v", saved)
 	}
 }
 
@@ -142,7 +149,7 @@ func TestRunSub_UsesCurrentSubscriptionURL(t *testing.T) {
 func TestSyncOne_Success_WritesServersAndOKMeta(t *testing.T) {
 	dir := t.TempDir()
 	serversPath := writeSeedServers(t, dir, nil)
-	st := &metaCaptureStore{}
+	st := &metaCaptureStore{subs: []subscription.Stored{{ID: "s1", URL: "https://x.test"}}}
 
 	merged := []server.Server{{ID: "srv1", Name: "X", Vless: vless.Config{Address: "a.test", Port: 443, UUID: "u"}}}
 	ui := &subscription.Userinfo{
@@ -192,7 +199,7 @@ func TestSyncOne_Failure_DoesNotTouchServers_RecordsError(t *testing.T) {
 	dir := t.TempDir()
 	seed := []server.Server{{ID: "preexisting", Name: "Pre", Vless: vless.Config{Address: "p.test", Port: 443, UUID: "u"}}}
 	serversPath := writeSeedServers(t, dir, seed)
-	st := &metaCaptureStore{}
+	st := &metaCaptureStore{subs: []subscription.Stored{{ID: "s1", URL: "https://x.test"}}}
 
 	syncFn := func(_ context.Context, _ subscription.Subscription, _ []server.Server, _ time.Duration) ([]server.Server, subscription.SyncMeta, error) {
 		return nil, subscription.SyncMeta{Status: "error", Message: "network unreachable"}, errors.New("network unreachable")
@@ -220,7 +227,7 @@ func TestSyncOne_Failure_DoesNotTouchServers_RecordsError(t *testing.T) {
 }
 
 func TestSyncOne_FailureMessage_TruncatedTo120Chars(t *testing.T) {
-	st := &metaCaptureStore{}
+	st := &metaCaptureStore{subs: []subscription.Stored{{ID: "s1", URL: "https://x.test"}}}
 	long := make([]byte, 500)
 	for i := range long {
 		long[i] = 'x'
@@ -229,7 +236,7 @@ func TestSyncOne_FailureMessage_TruncatedTo120Chars(t *testing.T) {
 		return nil, subscription.SyncMeta{Status: "error", Message: string(long)}, errors.New(string(long))
 	}
 	d := mkDriver(t, st, t.TempDir()+"/servers.json", syncFn)
-	d.syncOne(context.Background(), subscription.Stored{ID: "s1"})
+	d.syncOne(context.Background(), subscription.Stored{ID: "s1", URL: "https://x.test"})
 	if len(st.log) != 1 {
 		t.Fatalf("expected 1 update, got %d", len(st.log))
 	}
@@ -244,7 +251,7 @@ func TestSyncOne_FailureMessage_TruncatedTo120Chars(t *testing.T) {
 }
 
 func TestSyncOne_CtxCanceledMidSync_NoMetaUpdate(t *testing.T) {
-	st := &metaCaptureStore{}
+	st := &metaCaptureStore{subs: []subscription.Stored{{ID: "s1", URL: "https://x.test"}}}
 	syncFn := func(ctx context.Context, _ subscription.Subscription, _ []server.Server, _ time.Duration) ([]server.Server, subscription.SyncMeta, error) {
 		<-ctx.Done()
 		return nil, subscription.SyncMeta{}, ctx.Err()
@@ -254,7 +261,7 @@ func TestSyncOne_CtxCanceledMidSync_NoMetaUpdate(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() { time.Sleep(20 * time.Millisecond); cancel() }()
 
-	d.syncOne(ctx, subscription.Stored{ID: "s1"})
+	d.syncOne(ctx, subscription.Stored{ID: "s1", URL: "https://x.test"})
 
 	if got := len(st.log); got != 0 {
 		t.Fatalf("UpdateMeta should not be called on shutdown; got %d calls", got)
@@ -262,7 +269,7 @@ func TestSyncOne_CtxCanceledMidSync_NoMetaUpdate(t *testing.T) {
 }
 
 func TestRunSub_FirstTickWithinJitterWindow(t *testing.T) {
-	st := &metaCaptureStore{}
+	st := &metaCaptureStore{subs: []subscription.Stored{{ID: "s1", URL: "https://x.test"}}}
 	st.subs = []subscription.Stored{{ID: "s1", URL: "https://a.test", UpdateInterval: subscription.Duration(time.Hour)}}
 
 	syncCh := make(chan time.Time, 4)
@@ -300,7 +307,7 @@ func TestRunSub_FirstTickWithinJitterWindow(t *testing.T) {
 }
 
 func TestRunSub_ZeroIntervalUsesDriverDefault(t *testing.T) {
-	st := &metaCaptureStore{}
+	st := &metaCaptureStore{subs: []subscription.Stored{{ID: "s1", URL: "https://x.test"}}}
 	// UpdateInterval not set → driver default applies. We set DefaultSubInterval
 	// to a small value so we can observe a SECOND tick within the test window.
 	st.subs = []subscription.Stored{{ID: "s1", URL: "https://a.test"}}
@@ -344,7 +351,7 @@ func TestRunSub_ZeroIntervalUsesDriverDefault(t *testing.T) {
 }
 
 func TestRunSub_CtxCancel_ExitsPromptly(t *testing.T) {
-	st := &metaCaptureStore{}
+	st := &metaCaptureStore{subs: []subscription.Stored{{ID: "s1", URL: "https://x.test"}}}
 	st.subs = []subscription.Stored{{ID: "s1", URL: "https://a.test", UpdateInterval: subscription.Duration(time.Hour)}}
 	d := NewDriver(Config{
 		Subs:        st,
