@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/itg-team/itg-ray/internal/config"
 	"github.com/itg-team/itg-ray/internal/hub"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/subscription"
@@ -663,4 +666,48 @@ func TestSubsService_SyncOne_XrayVariantsPersistAcrossRefreshes(t *testing.T) {
 	require.Equal(t, first[0].ID, second[1].ID)
 	require.Equal(t, first[1].ID, second[0].ID)
 	require.True(t, second[1].Favorite)
+}
+
+func TestSubsService_SyncIdentityMatchesSettings(t *testing.T) {
+	dir := t.TempDir()
+	cfg := config.Defaults()
+	cfg.Subscriptions.UserAgent = "Global/1"
+	require.NoError(t, config.Save(filepath.Join(dir, "config.json"), cfg))
+	id := strings.Repeat("b", 64)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hwid.dat"), []byte(id), 0600))
+	var requests atomic.Int64
+	headers := make(chan http.Header, 4)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		headers <- r.Header.Clone()
+		_, _ = w.Write([]byte("vless://u@node.example:443#demo"))
+	}))
+	t.Cleanup(ts.Close)
+	svc, store := newSubsServiceForTest(t, dir)
+	svc.d.ResolveInput = subscription.NewInputResolver(dir, "test")
+	sub := subscription.Stored{ID: "s1", URL: ts.URL, UserAgent: "Override/1"}
+	require.NoError(t, store.Save([]subscription.Stored{sub}))
+	require.NoError(t, svc.SyncOne("s1"))
+	h := <-headers
+	require.Equal(t, id, h.Get("x-hwid"))
+	require.Equal(t, "Override/1", h.Get("User-Agent"))
+	sub.UserAgent = ""
+	require.NoError(t, store.Save([]subscription.Stored{sub}))
+	require.NoError(t, svc.SyncOne("s1"))
+	h = <-headers
+	require.Equal(t, id, h.Get("x-hwid"))
+	require.Equal(t, "Global/1", h.Get("User-Agent"))
+	cfg.Subscriptions.HWIDEnabled = false
+	cfg.Subscriptions.UserAgent = "Global/2"
+	require.NoError(t, config.Save(filepath.Join(dir, "config.json"), cfg))
+	require.NoError(t, svc.SyncOne("s1"))
+	h = <-headers
+	require.Empty(t, h.Get("x-hwid"))
+	require.Equal(t, "Global/2", h.Get("User-Agent"))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte("{"), 0600))
+	require.Error(t, svc.SyncOne("s1"))
+	require.EqualValues(t, 3, requests.Load())
+	subs, err := store.Load()
+	require.NoError(t, err)
+	require.Equal(t, "error", subs[0].LastStatus)
 }

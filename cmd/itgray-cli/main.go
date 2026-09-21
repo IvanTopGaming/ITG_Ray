@@ -12,6 +12,7 @@ import (
 )
 
 var (
+	Version = "dev"
 	dataDir string
 	verbose bool
 )

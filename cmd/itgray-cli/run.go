@@ -42,9 +42,10 @@ func resolveServerIPv4(host string) (string, error) {
 // `defer cleanup()` so cancellation runs before parent ctx unwinds.
 func startRefreshDriver(parent context.Context) func() {
 	d := refresh.NewDriver(refresh.Config{
-		Subs:        &subscription.FileStore{Path: subsPath()},
-		ServersPath: serversPath(),
-		Log:         slog.Default(),
+		ResolveInput: subscription.NewInputResolver(dataDir, Version),
+		Subs:         &subscription.FileStore{Path: subsPath()},
+		ServersPath:  serversPath(),
+		Log:          slog.Default(),
 	})
 	ctx, cancel := context.WithCancel(parent)
 	done := make(chan struct{})

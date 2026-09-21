@@ -1,16 +1,15 @@
-package bindings
+package subscription
 
 import (
 	"testing"
 
-	"github.com/itg-team/itg-ray/internal/hub"
+	"github.com/itg-team/itg-ray/internal/config"
 	"github.com/itg-team/itg-ray/internal/hwid"
-	"github.com/itg-team/itg-ray/internal/subscription"
 	"github.com/stretchr/testify/require"
 )
 
-func base() (hub.SubscriptionSettings, hwid.DeviceInfo) {
-	return hub.SubscriptionSettings{
+func base() (config.Subscriptions, hwid.DeviceInfo) {
+	return config.Subscriptions{
 			UserAgent:       "ITGRay/1.0",
 			HWIDEnabled:     true,
 			SendDeviceOS:    true,
@@ -23,7 +22,7 @@ func base() (hub.SubscriptionSettings, hwid.DeviceInfo) {
 
 func TestResolveIdentity_AllOn_FullSet(t *testing.T) {
 	settings, info := base()
-	sub := subscription.Stored{}
+	sub := Stored{}
 	ua, h, os_, ver, model := resolveIdentity(settings, sub, "abcd1234", info)
 	require.Equal(t, "ITGRay/1.0", ua)
 	require.Equal(t, "abcd1234", h)
@@ -35,7 +34,7 @@ func TestResolveIdentity_AllOn_FullSet(t *testing.T) {
 func TestResolveIdentity_HWIDDisabled_AllIDFieldsEmpty(t *testing.T) {
 	settings, info := base()
 	settings.HWIDEnabled = false
-	sub := subscription.Stored{}
+	sub := Stored{}
 	ua, h, os_, ver, model := resolveIdentity(settings, sub, "abcd", info)
 	require.Equal(t, "ITGRay/1.0", ua)
 	require.Empty(t, h)
@@ -46,14 +45,14 @@ func TestResolveIdentity_HWIDDisabled_AllIDFieldsEmpty(t *testing.T) {
 
 func TestResolveIdentity_PerSubUAOverridesGlobal(t *testing.T) {
 	settings, info := base()
-	sub := subscription.Stored{UserAgent: "Custom/9.9"}
+	sub := Stored{UserAgent: "Custom/9.9"}
 	ua, _, _, _, _ := resolveIdentity(settings, sub, "abcd", info)
 	require.Equal(t, "Custom/9.9", ua)
 }
 
 func TestResolveIdentity_PerSubUAEmpty_FallsBackToGlobal(t *testing.T) {
 	settings, info := base()
-	sub := subscription.Stored{UserAgent: ""}
+	sub := Stored{UserAgent: ""}
 	ua, _, _, _, _ := resolveIdentity(settings, sub, "abcd", info)
 	require.Equal(t, "ITGRay/1.0", ua)
 }
@@ -62,7 +61,7 @@ func TestResolveIdentity_PartialMetadata(t *testing.T) {
 	settings, info := base()
 	settings.SendDeviceOS = false
 	settings.SendDeviceModel = false
-	sub := subscription.Stored{}
+	sub := Stored{}
 	_, _, os_, ver, model := resolveIdentity(settings, sub, "abcd", info)
 	require.Empty(t, os_, "os disabled")
 	require.Equal(t, "Ubuntu 24.04", ver)
@@ -72,7 +71,7 @@ func TestResolveIdentity_PartialMetadata(t *testing.T) {
 func TestResolveIdentity_AllUAEmpty_FallsBackToITGRayDev(t *testing.T) {
 	settings, info := base()
 	settings.UserAgent = ""
-	sub := subscription.Stored{UserAgent: ""}
+	sub := Stored{UserAgent: ""}
 	ua, _, _, _, _ := resolveIdentity(settings, sub, "abcd", info)
 	require.Equal(t, "ITGRay/dev", ua, "last-resort default when both UA fields empty")
 }

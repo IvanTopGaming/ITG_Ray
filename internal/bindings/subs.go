@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/itg-team/itg-ray/internal/hub"
-	"github.com/itg-team/itg-ray/internal/hwid"
 	"github.com/itg-team/itg-ray/internal/logging"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/subscription"
@@ -60,12 +59,8 @@ type SubsDeps struct {
 	// contend on one lock; when nil, the constructor creates a private one.
 	StoreLock *StoreLock
 
-	// Identity-header inputs for SyncOne. Resolved at startup and held;
-	// SettingsView is a function so toggle changes take effect on the
-	// next sync without restart.
 	SettingsView func() hub.SettingsView
-	HWID         string
-	DeviceInfo   hwid.DeviceInfo
+	ResolveInput subscription.InputResolver
 }
 
 // SubsService implements the Subs.* Wails bindings. C.T7 ships List + Add
@@ -326,14 +321,21 @@ func (s *SubsService) SyncOne(id string) error {
 	}
 
 	input := found.ToSyncInput()
-	if s.d.SettingsView != nil {
-		input.UserAgent, input.HWID, input.DeviceOS, input.OSVersion, input.DeviceModel =
-			resolveIdentity(s.d.SettingsView().Subscriptions, *found, s.d.HWID, s.d.DeviceInfo)
+	var incoming []server.Server
+	var meta subscription.SyncMeta
+	var syncErr error
+	if s.d.ResolveInput != nil {
+		resolved, resolveErr := s.d.ResolveInput(*found)
+		syncErr = resolveErr
+		if resolveErr == nil {
+			input = resolved
+		}
 	}
-
-	// The fetch runs outside the store lock so subscriptions refresh in
-	// parallel instead of queueing behind each other's network round-trip.
-	incoming, meta, syncErr := subscription.FetchParse(ctx, input, syncTimeout)
+	if syncErr == nil {
+		incoming, meta, syncErr = subscription.FetchParse(ctx, input, syncTimeout)
+	} else {
+		meta = subscription.SyncMeta{LastUpdate: time.Now(), Status: "error", Message: logging.RedactError(syncErr)}
+	}
 
 	// Capture the upstream-fetch outcome before the Save branch may
 	// overwrite syncErr — Userinfo is meaningful exactly when the fetch

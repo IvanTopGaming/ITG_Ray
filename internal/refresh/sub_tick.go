@@ -91,7 +91,11 @@ func (d *Driver) syncWithRetry(ctx context.Context, sub subscription.Stored, exi
 		syncErr error
 	)
 	for attempt := 0; ; attempt++ {
-		merged, meta, syncErr = d.syncFunc(ctx, sub.ToSyncInput(), existing, syncFetchTimeout)
+		input, err := d.resolveInput(sub)
+		if err != nil {
+			return nil, subscription.SyncMeta{LastUpdate: d.now(), Status: "error", Message: logging.RedactError(err)}, err
+		}
+		merged, meta, syncErr = d.syncFunc(ctx, input, existing, syncFetchTimeout)
 		if syncErr == nil || !subscription.IsTransient(syncErr) || attempt >= len(d.subFetchRetryBackoff) {
 			return merged, meta, syncErr
 		}
