@@ -1,5 +1,9 @@
 // cmd/itgray-electron/src/main/bridge.test.ts
 import { test } from "node:test";
+import childProcess from "node:child_process";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
+import * as paths from "./paths";
 import assert from "node:assert/strict";
 import { BridgeSupervisor } from "./bridge";
 
@@ -35,4 +39,67 @@ test("handleExit clears child + client on transition to failed", () => {
     undefined,
     "client must be cleared so callers do not RPC into a closed pipe",
   );
+});
+
+class FakeBridgeProcess extends EventEmitter {
+  stdin = new PassThrough();
+  stdout = new PassThrough();
+  stderr = new PassThrough();
+
+  constructor() {
+    super();
+    this.stdin.once("finish", () => this.emit("exit", 0, null));
+  }
+
+  publish(topic: string, payload: unknown): void {
+    this.stdout.write(JSON.stringify({ jsonrpc: "2.0", method: `event:${topic}`, params: payload }) + "\n");
+  }
+}
+
+test("bridge event consumers follow restarted clients and ignore the old client", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const children: FakeBridgeProcess[] = [];
+  t.mock.method(paths, "bundledBinary", () => "/synthetic/bridge");
+  t.mock.method(childProcess, "spawn", () => {
+    const child = new FakeBridgeProcess();
+    children.push(child);
+    return child;
+  });
+  const bridge = new BridgeSupervisor();
+  t.after(() => bridge.stop());
+  const rendererStatuses: string[] = [];
+  const notificationStatuses: string[] = [];
+  const synced: unknown[] = [];
+  bridge.on("vpn.status", (payload) => rendererStatuses.push(payload.status));
+  bridge.on("vpn.status", (payload) => notificationStatuses.push(payload.status));
+  bridge.on("sub.synced", (payload) => synced.push(payload));
+  bridge.start();
+  children[0].publish("vpn.status", { status: "connected" });
+  children[0].emit("exit", 1, null);
+  children[0].publish("vpn.status", { status: "stale" });
+  t.mock.timers.tick(1000);
+  children[0].emit("exit", 1, null);
+  assert.equal(bridge.getState(), "running");
+  children[1].publish("vpn.status", { status: "idle" });
+  children[1].publish("sub.synced", { id: "subscription-1" });
+  children[1].emit("exit", 1, null);
+  t.mock.timers.tick(5000);
+  children[2].publish("vpn.status", { status: "connected" });
+  assert.deepEqual(rendererStatuses, ["connected", "idle", "connected"]);
+  assert.deepEqual(notificationStatuses, ["connected", "idle", "connected"]);
+  assert.deepEqual(synced, [{ id: "subscription-1" }]);
+});
+
+test("stopping the bridge detaches its event forwarders", async (t) => {
+  const child = new FakeBridgeProcess();
+  t.mock.method(paths, "bundledBinary", () => "/synthetic/bridge");
+  t.mock.method(childProcess, "spawn", () => child);
+  const bridge = new BridgeSupervisor();
+  const statuses: string[] = [];
+  bridge.on("vpn.status", (payload) => statuses.push(payload.status));
+  bridge.start();
+  child.publish("vpn.status", { status: "connected" });
+  await bridge.stop();
+  child.publish("vpn.status", { status: "idle" });
+  assert.deepEqual(statuses, ["connected"]);
 });

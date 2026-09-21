@@ -112,9 +112,7 @@ export async function serverEdit(
   mutationInFlight = true;
   setState({ ...state, loading: true, lastError: null });
   try {
-    const result: unknown = await Edit(id, uri, name);
-    // Wails returns Go multi-return as a tuple [view, vlessChanged].
-    const vlessChanged = Array.isArray(result) ? Boolean(result[1]) : false;
+    const { vlessChanged } = await Edit(id, uri, name);
     setState({ ...state, loading: false });
     return { vlessChanged };
   } catch (err: any) {

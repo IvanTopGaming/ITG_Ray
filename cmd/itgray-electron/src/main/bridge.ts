@@ -3,6 +3,20 @@ import { spawn, ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { bundledBinary } from "./paths";
 import { RpcClient } from "./rpc";
+import type { EventTopic } from "../shared/protocol";
+
+export const BRIDGE_TOPICS: Exclude<EventTopic, "bridge.state">[] = [
+  "chain.error",
+  "geo.progress",
+  "helper.state",
+  "log.line",
+  "probe.result",
+  "rules.changed",
+  "servers.changed",
+  "sub.synced",
+  "vpn.speed",
+  "vpn.status",
+];
 
 export type BridgeState = "starting" | "running" | "restarting" | "failed";
 
@@ -13,6 +27,7 @@ export class BridgeSupervisor extends EventEmitter {
   private restartWindowStart = 0;
   private state: BridgeState = "starting";
   private restartTimer?: NodeJS.Timeout;
+  private eventUnsubscribers: (() => void)[] = [];
 
   start(): void {
     this.spawnOnce();
@@ -29,6 +44,7 @@ export class BridgeSupervisor extends EventEmitter {
 
   /** Graceful shutdown — closes stdin so the bridge sees EOF and exits. */
   async stop(timeoutMs = 5000): Promise<void> {
+    this.detachClientEvents();
     if (this.restartTimer) {
       clearTimeout(this.restartTimer);
       this.restartTimer = undefined;
@@ -63,16 +79,20 @@ export class BridgeSupervisor extends EventEmitter {
       }
     });
     child.on("exit", (code, signal) => {
-      this.handleExit(code, signal);
+      if (this.child === child) this.handleExit(code, signal);
     });
 
     this.child = child;
     this.client = new RpcClient(child.stdin!, child.stdout!);
+    this.eventUnsubscribers = BRIDGE_TOPICS.map((topic) =>
+      this.client!.on(topic, (payload) => this.emit(topic, payload)),
+    );
     this.setState("running");
   }
 
   private handleExit(code: number | null, signal: NodeJS.Signals | null): void {
     if (!this.child) return; // intentional shutdown via stop()
+    this.detachClientEvents();
     const now = Date.now();
     if (now - this.restartWindowStart > 60_000) {
       this.restartWindowStart = now;
@@ -96,6 +116,11 @@ export class BridgeSupervisor extends EventEmitter {
       this.restartTimer = undefined;
       this.spawnOnce();
     }, backoff);
+  }
+
+  private detachClientEvents(): void {
+    for (const unsubscribe of this.eventUnsubscribers) unsubscribe();
+    this.eventUnsubscribers = [];
   }
 
   private setState(state: BridgeState, reason?: string): void {

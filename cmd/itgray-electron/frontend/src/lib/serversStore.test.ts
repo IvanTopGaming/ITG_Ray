@@ -98,7 +98,7 @@ describe("serversStore mutations", () => {
   });
 
   it("serverEdit returns vlessChanged from backend", async () => {
-    editMock.mockResolvedValue([fixtureServer, true]);
+    editMock.mockResolvedValue({ view: fixtureServer, vlessChanged: true });
     const result = await serverEdit("m1", "vless://new", "DE-new");
     expect(result.vlessChanged).toBe(true);
     expect(editMock).toHaveBeenCalledWith("m1", "vless://new", "DE-new");
@@ -116,10 +116,8 @@ describe("serversStore mutations", () => {
     expect(getServersState().lastError).toContain("disconnect first");
   });
 
-  it("serverEdit defaults vlessChanged=false when backend returns non-array", async () => {
-    // Defensive: today the Wails runtime emits Go multi-returns as [view, bool],
-    // but if codegen ever flattens to just `view`, our store should not crash.
-    editMock.mockResolvedValue(fixtureServer);
+  it("serverEdit preserves false for a name-only edit", async () => {
+    editMock.mockResolvedValue({ view: fixtureServer, vlessChanged: false });
     const result = await serverEdit("m1", "vless://x", "DE");
     expect(result.vlessChanged).toBe(false);
   });
