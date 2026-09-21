@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 const useDashMock = vi.fn();
@@ -86,6 +86,42 @@ describe("Dashboard", () => {
     renderDash();
     expect(screen.getByText("DISCONNECTED")).toBeInTheDocument();
     expect(screen.getByText("No active connection")).toBeInTheDocument();
+  });
+
+  it.each(["idle", "error"])("offers disconnect from %s with an error and no servers", async (status) => {
+    useDashMock.mockReturnValue({
+      ...baseDash,
+      status,
+      lastError: { kind: "chain_crashed", message: "tunnel stopped", at: Date.now() },
+    });
+    dashDisconnectMock.mockResolvedValue(undefined);
+    const { rerender } = renderDash();
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect", exact: true }));
+    await waitFor(() => expect(dashDisconnectMock).toHaveBeenCalledTimes(1));
+    expect(dashConnectMock).not.toHaveBeenCalled();
+    useDashMock.mockReturnValue(baseDash);
+    rerender(<MemoryRouter><Dashboard /></MemoryRouter>);
+    expect(screen.queryByRole("button", { name: "Disconnect", exact: true })).not.toBeInTheDocument();
+    expect(screen.getByText("DISCONNECTED")).toBeInTheDocument();
+  });
+
+  it("allows another disconnect attempt after cleanup fails", async () => {
+    useDashMock.mockReturnValue({
+      ...baseDash,
+      status: "error",
+      lastError: { kind: "disconnect_failed", message: "route cleanup failed", at: Date.now() },
+    });
+    dashDisconnectMock.mockRejectedValueOnce(new Error("route cleanup failed"));
+    dashDisconnectMock.mockResolvedValueOnce(undefined);
+    renderDash();
+    expect(screen.getByText("Disconnect failed")).toBeInTheDocument();
+    expect(screen.getByText("Retry disconnect to finish cleanup.")).toBeInTheDocument();
+    expect(screen.queryByText("Click the orb to retry.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry disconnect" }));
+    await waitFor(() => expect(dashDisconnectMock).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: "Retry disconnect" }));
+    await waitFor(() => expect(dashDisconnectMock).toHaveBeenCalledTimes(2));
+    expect(dashConnectMock).not.toHaveBeenCalled();
   });
 
   it("shows empty QuickSwitch state when allServers is empty", () => {

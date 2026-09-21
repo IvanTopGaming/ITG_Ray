@@ -37,6 +37,7 @@
     "title": "Dashboard",
     "description": "Connect, switch servers, and watch live traffic.",
     "errorFallback": "error",
+    "retryDisconnect": "Retry disconnect",
     "orb": {
       "connect": "Connect",
       "disconnect": "Disconnect",
@@ -53,6 +54,8 @@
       "geoLoading": "LOADING GEO DATABASES… {{pct}}%"
     },
     "connectionFailed": "Connection failed",
+    "disconnectFailed": "Disconnect failed",
+    "retryDisconnectHint": "Retry disconnect to finish cleanup.",
     "noActiveConnection": "No active connection",
     "clickToRetry": "Click the orb to retry.",
     "clickToConnect": "Click the orb to connect.",

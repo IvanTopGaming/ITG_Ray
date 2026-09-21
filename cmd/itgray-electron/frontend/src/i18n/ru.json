@@ -37,6 +37,7 @@
     "title": "Панель",
     "description": "Подключение, смена сервера и живой трафик.",
     "errorFallback": "ошибка",
+    "retryDisconnect": "Повторить отключение",
     "orb": {
       "connect": "Подключить",
       "disconnect": "Отключить",
@@ -53,6 +54,8 @@
       "geoLoading": "Загрузка геобаз… {{pct}}%"
     },
     "connectionFailed": "Не удалось подключиться",
+    "disconnectFailed": "Не удалось отключиться",
+    "retryDisconnectHint": "Повтори отключение, чтобы завершить очистку.",
     "noActiveConnection": "Нет активного подключения",
     "clickToRetry": "Нажмите на сферу, чтобы повторить.",
     "clickToConnect": "Нажмите на сферу, чтобы подключиться.",

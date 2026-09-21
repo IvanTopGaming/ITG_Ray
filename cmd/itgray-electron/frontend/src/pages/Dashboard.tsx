@@ -199,7 +199,19 @@ export function Dashboard() {
               status={eff}
               mode={dash.mode}
               server={dash.currentServer}
+              errorKind={dash.lastError?.kind}
             />
+            {eff === "error" && (
+              <button
+                type="button"
+                onClick={() => { void dashDisconnect().catch(() => {}); }}
+                className="self-start rounded-[10px] border border-white/[0.10] bg-transparent px-3.5 py-1.5 text-xs font-medium text-white/[0.92] transition-colors hover:bg-white/[0.05]"
+              >
+                {t(dash.lastError?.kind === "disconnect_failed"
+                  ? "dashboard.retryDisconnect"
+                  : "dashboard.orb.disconnect")}
+              </button>
+            )}
           </div>
 
           <div className="h-[140px] w-px shrink-0 bg-white/10" />
@@ -312,23 +324,26 @@ function ActiveRoute({
   status,
   mode,
   server,
+  errorKind,
 }: {
   status: OrbStatus;
   mode: Mode;
   server: ServerView | null;
+  errorKind?: string;
 }) {
   const { t } = useTranslation();
+  const disconnectFailed = errorKind === "disconnect_failed";
   if (status === "idle" || status === "error" || !server) {
     return (
       <div className="flex h-[48px] flex-col">
         <div className="h-[28px] text-[24px] font-bold leading-[28px] tracking-tight">
           {status === "error"
-            ? t("dashboard.connectionFailed")
+            ? t(disconnectFailed ? "dashboard.disconnectFailed" : "dashboard.connectionFailed")
             : t("dashboard.noActiveConnection")}
         </div>
         <div className="mt-1 h-[16px] font-mono text-[12px] leading-[16px] tabular-nums text-white/55">
           {status === "error"
-            ? t("dashboard.clickToRetry")
+            ? t(disconnectFailed ? "dashboard.retryDisconnectHint" : "dashboard.clickToRetry")
             : t("dashboard.clickToConnect")}
         </div>
       </div>

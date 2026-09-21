@@ -566,14 +566,46 @@ describe("dashDisconnect", () => {
     await p;
   });
 
-  it("falls back to idle when Disconnect rejects so the error surfaces", async () => {
+  it("retains error status when Disconnect rejects even after dismissing the banner", async () => {
     getSnapshotMock.mockResolvedValue(baseSnapshot);
     await __bootstrapForTest();
     fireEvent("vpn:status", { status: "connected", serverId: "a", mode: "tun" });
     runDisconnectMock.mockRejectedValueOnce(new Error("helper gone"));
     await expect(dashDisconnect()).rejects.toThrow("helper gone");
-    expect(getDashState().status).toBe("idle");
+    expect(getDashState().status).toBe("error");
+    clearLastError();
     expect(effectiveStatus(getDashState())).toBe("error");
+  });
+});
+
+describe("dashDisconnect recovery", () => {
+  it("retries failed cleanup without a server and clears the error on successful idle acknowledgement", async () => {
+    getSnapshotMock.mockResolvedValue({ ...baseSnapshot, status: "error" });
+    await __bootstrapForTest();
+    fireEvent("chain:error", { kind: "chain_crashed", message: "tunnel stopped" });
+    runDisconnectMock.mockRejectedValueOnce(new Error("route cleanup failed"));
+    await expect(dashDisconnect()).rejects.toThrow("route cleanup failed");
+    expect(effectiveStatus(getDashState())).toBe("error");
+    expect(getDashState().lastError?.kind).toBe("disconnect_failed");
+    runDisconnectMock.mockImplementationOnce(async () => {
+      fireEvent("vpn:status", { status: "idle" });
+    });
+    await dashDisconnect();
+    expect(runDisconnectMock).toHaveBeenCalledTimes(2);
+    expect(effectiveStatus(getDashState())).toBe("idle");
+    expect(getDashState().lastError).toBeNull();
+  });
+
+  it("settles to idle when an already-stopped backend acknowledges without emitting a status", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    fireEvent("chain:error", { kind: "chain_crashed", message: "tunnel stopped" });
+    runDisconnectMock.mockResolvedValueOnce(undefined);
+    await dashDisconnect();
+    expect(effectiveStatus(getDashState())).toBe("idle");
+    expect(getDashState().lastError).toBeNull();
+    expect(getDashState().connectedAt).toBeNull();
+    expect(getDashState().endpoint).toBeNull();
   });
 });
 
