@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -61,6 +63,21 @@ type Stored struct {
 	Expire         *time.Time `json:"expire,omitempty"`
 }
 
+func NameFromURL(rawURL string) string {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
+}
+
+func (s Stored) DisplayName() string {
+	if name := strings.TrimSpace(s.Name); name != "" {
+		return name
+	}
+	return NameFromURL(s.URL)
+}
+
 // ToSyncInput converts a Stored entry into the in-memory Subscription type
 // consumed by Sync(). Auth defaults to AuthNone() because Sync calls
 // sub.Auth(req) unconditionally.
@@ -79,7 +96,7 @@ func (s Stored) ToSyncInput() Subscription {
 type Store interface {
 	Load() ([]Stored, error)
 	Save(subs []Stored) error
-	UpdateMeta(id string, at time.Time, status, message string, ui *Userinfo) error
+	UpdateMeta(id, sourceURL string, at time.Time, status, message string, headers *Headers) error
 }
 
 // FileStore persists Stored entries as JSON at Path, using atomic file replace.
@@ -128,12 +145,7 @@ func (s FileStore) Save(subs []Stored) error {
 	return nil
 }
 
-// UpdateMeta updates the metadata for one subscription. status is the clean
-// enum ("ok"|"error"|""), message is human-readable detail, and ui (when
-// non-nil) overwrites the quota/expiry fields. ui=nil preserves prior values
-// — a transient sync failure does not blank a subscription's traffic display.
-// Unknown id is a no-op (no error).
-func (s FileStore) UpdateMeta(id string, at time.Time, status, message string, ui *Userinfo) error {
+func (s FileStore) UpdateMeta(id, sourceURL string, at time.Time, status, message string, headers *Headers) error {
 	mu := lockForPath(s.Path)
 	mu.Lock()
 	defer mu.Unlock()
@@ -142,12 +154,19 @@ func (s FileStore) UpdateMeta(id string, at time.Time, status, message string, u
 		return err
 	}
 	for i := range subs {
-		if subs[i].ID != id {
+		if subs[i].ID != id || subs[i].URL != sourceURL {
 			continue
 		}
 		subs[i].LastSyncAt = at
 		subs[i].LastStatus = status
 		subs[i].LastMessage = message
+		var ui *Userinfo
+		if headers != nil {
+			if title := cleanProfileTitle(headers.ProfileTitle); title != "" {
+				subs[i].Name = title
+			}
+			ui = headers.Userinfo
+		}
 		if ui != nil {
 			// Field-by-field: only overwrite values the header actually
 			// supplied. A malformed or partial Subscription-Userinfo must

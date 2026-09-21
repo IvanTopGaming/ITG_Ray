@@ -27,7 +27,6 @@ func newSubCmd() *cobra.Command {
 		Short: "add a subscription URL",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name, _ := cmd.Flags().GetString("name")
 			ua, _ := cmd.Flags().GetString("ua")
 			st := subsStore()
 			subs, err := st.Load()
@@ -36,7 +35,7 @@ func newSubCmd() *cobra.Command {
 			}
 			id := fmt.Sprintf("s%d", time.Now().Unix())
 			subs = append(subs, subscription.Stored{
-				ID: id, Name: name, URL: args[0], UserAgent: ua,
+				ID: id, Name: subscription.NameFromURL(args[0]), URL: args[0], UserAgent: ua,
 			})
 			if err := st.Save(subs); err != nil {
 				return err
@@ -45,7 +44,6 @@ func newSubCmd() *cobra.Command {
 			return nil
 		},
 	}
-	addCmd.Flags().String("name", "", "display name")
 	addCmd.Flags().String("ua", "", "User-Agent override")
 
 	listCmd := &cobra.Command{
@@ -66,7 +64,7 @@ func newSubCmd() *cobra.Command {
 				if status == "" {
 					status = "-"
 				}
-				fmt.Printf("%s\t%s\t%s\t%s\t%s\n", s.ID, s.Name, lastSync, status, s.URL)
+				fmt.Printf("%s\t%s\t%s\t%s\t%s\n", s.ID, s.DisplayName(), lastSync, status, s.URL)
 			}
 			return nil
 		},
@@ -116,12 +114,12 @@ func newSubCmd() *cobra.Command {
 					// subscription.Sync) — never fall back to the raw err.Error(),
 					// which can embed the full subscription URL/token.
 					fmt.Printf("%s\tERROR: %s\n", s.ID, meta.Message)
-					_ = st.UpdateMeta(s.ID, time.Now(), "error", truncate(meta.Message, 120), nil)
+					_ = st.UpdateMeta(s.ID, s.URL, time.Now(), "error", truncate(meta.Message, 120), nil)
 					continue
 				}
 				existing = merged
 				fmt.Printf("%s\t%s\t%s\n", s.ID, meta.Status, meta.Message)
-				_ = st.UpdateMeta(s.ID, time.Now(), "ok", meta.Message, meta.Headers.Userinfo)
+				_ = st.UpdateMeta(s.ID, s.URL, time.Now(), "ok", meta.Message, &meta.Headers)
 			}
 			return server.Save(serversPath(), existing)
 		},

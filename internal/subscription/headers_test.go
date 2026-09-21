@@ -1,12 +1,38 @@
 package subscription
 
 import (
+	"encoding/base64"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestParseHeaders_ProfileTitle(t *testing.T) {
+	const title = "Мой VPN 🚀"
+	for _, tc := range []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{"plain", "  My Provider  ", "My Provider"},
+		{"plain base64 alphabet", "test", "test"},
+		{"prefixed base64", "base64:" + base64.StdEncoding.EncodeToString([]byte(title)), title},
+		{"unpadded base64", "base64:" + base64.RawStdEncoding.EncodeToString([]byte(title)), title},
+		{"legacy base64", base64.StdEncoding.EncodeToString([]byte(title)), title},
+		{"blank", "   ", ""},
+		{"malformed base64", "base64:!!!", ""},
+		{"invalid utf8", "base64:/w==", ""},
+		{"control characters", "base64:" + base64.StdEncoding.EncodeToString([]byte("VPN\nInjected")), ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := http.Header{}
+			h.Set("Profile-Title", tc.raw)
+			require.Equal(t, tc.want, ParseHeaders(h).ProfileTitle)
+		})
+	}
+}
 
 func TestParseHeaders_UserinfoFull(t *testing.T) {
 	h := http.Header{}

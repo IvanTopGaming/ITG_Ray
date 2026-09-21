@@ -2,8 +2,8 @@
 const svc = () => (window.itg.subs ?? {}) as Record<string, (...args: unknown[]) => Promise<unknown>>;
 
 export function List(): Promise<unknown> { return svc().list?.() ?? Promise.resolve([]); }
-export function Add(url: string, name: string, userAgent = ""): Promise<unknown> { return svc().add?.({ url, name, userAgent }) ?? Promise.resolve(null); }
-export function Edit(id: string, url: string, name: string, userAgent = ""): Promise<unknown> { return svc().edit?.({ id, url, name, userAgent }) ?? Promise.resolve(null); }
+export function Add(url: string, userAgent = ""): Promise<unknown> { return svc().add?.({ url, userAgent }) ?? Promise.resolve(null); }
+export function Edit(id: string, url: string, userAgent = ""): Promise<unknown> { return svc().edit?.({ id, url, userAgent }) ?? Promise.resolve(null); }
 export function Remove(id: string): Promise<unknown> { return svc().remove?.({ id }) ?? Promise.resolve(null); }
 export function SyncOne(id: string): Promise<unknown> { return svc().syncOne?.({ id }) ?? Promise.resolve(null); }
 export function SyncAll(): Promise<unknown> { return svc().syncAll?.() ?? Promise.resolve(null); }

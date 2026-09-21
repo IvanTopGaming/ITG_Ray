@@ -467,14 +467,13 @@ function SubModal({
 }: {
   modal: Exclude<ModalState, { kind: "closed" }>;
   onClose: () => void;
-  onAdd: (name: string, url: string, userAgent: string) => Promise<void>;
-  onEditSave: (id: string, name: string, url: string, userAgent: string) => Promise<void>;
+  onAdd: (url: string, userAgent: string) => Promise<void>;
+  onEditSave: (id: string, url: string, userAgent: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }) {
   const { t } = useTranslation();
   const isAdd = modal.kind === "add";
   const sub = !isAdd ? modal.sub : null;
-  const [name, setName] = useState(sub?.name ?? "");
   const [url, setUrl] = useState(sub?.url ?? "");
   const [userAgent, setUserAgent] = useState(sub?.userAgent ?? "");
   const [urlError, setUrlError] = useState<string | null>(null);
@@ -489,7 +488,7 @@ function SubModal({
     return null;
   }
 
-  const valid = !!name.trim() && !!url.trim() && validateUrl(url) === null;
+  const valid = !!url.trim() && validateUrl(url) === null;
 
   async function submit() {
     const e = validateUrl(url);
@@ -501,8 +500,8 @@ function SubModal({
     setSubmitError(null);
     setBusy(true);
     try {
-      if (isAdd) await onAdd(name.trim(), url.trim(), userAgent.trim());
-      else if (sub) await onEditSave(sub.id, name.trim(), url.trim(), userAgent.trim());
+      if (isAdd) await onAdd(url.trim(), userAgent.trim());
+      else if (sub) await onEditSave(sub.id, url.trim(), userAgent.trim());
       onClose();
     } catch (err) {
       setSubmitError(humanizeError(err));
@@ -557,15 +556,6 @@ function SubModal({
         </div>
 
         <div className="flex flex-col gap-4 px-6 py-5">
-          <Field label={t("subscriptions.name")}>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => { setName(e.target.value); setSubmitError(null); }}
-              placeholder={t("subscriptions.namePlaceholder")}
-              className="w-full rounded-lg border border-white/15 bg-white/[0.04] px-3 py-2 text-[13px] text-white placeholder:text-white/35 focus:border-accent-start/50 focus:bg-white/[0.06] focus:outline-none"
-            />
-          </Field>
           <Field label={t("subscriptions.urlLabel")} error={urlError}>
             <input
               type="text"

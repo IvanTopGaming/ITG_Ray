@@ -108,7 +108,7 @@ func (s *SubsService) List() ([]hub.SubView, error) {
 //
 // Returns the SubView so the frontend can optimistically insert the new
 // row before the next snapshot refresh arrives.
-func (s *SubsService) Add(rawURL, name, userAgent string) (hub.SubView, error) {
+func (s *SubsService) Add(rawURL, userAgent string) (hub.SubView, error) {
 	rawURL = strings.TrimSpace(rawURL)
 	if err := validateSubURL(rawURL); err != nil {
 		return hub.SubView{}, err
@@ -123,7 +123,7 @@ func (s *SubsService) Add(rawURL, name, userAgent string) (hub.SubView, error) {
 	}
 	stored := subscription.Stored{
 		ID:             generateSubID(),
-		Name:           strings.TrimSpace(name),
+		Name:           subscription.NameFromURL(rawURL),
 		URL:            rawURL,
 		UserAgent:      strings.TrimSpace(userAgent),
 		UpdateInterval: subscription.Duration(interval),
@@ -222,14 +222,7 @@ func (s *SubsService) Remove(id string) error {
 	return nil
 }
 
-// Edit updates name and/or URL of an existing subscription. When the URL
-// changes, all servers tagged with this sub's SourceID are removed from
-// servers.json before SubStore.Save persists the new metadata, so the
-// next SyncOne brings in a fresh, ghost-free server set. LastSyncAt and
-// quota fields are reset on URL change; rename-only edits preserve them.
-//
-// Returns the updated SubView for optimistic frontend reconciliation.
-func (s *SubsService) Edit(id, rawURL, name, userAgent string) (hub.SubView, error) {
+func (s *SubsService) Edit(id, rawURL, userAgent string) (hub.SubView, error) {
 	rawURL = strings.TrimSpace(rawURL)
 	if err := validateSubURL(rawURL); err != nil {
 		return hub.SubView{}, err
@@ -286,9 +279,9 @@ func (s *SubsService) Edit(id, rawURL, name, userAgent string) (hub.SubView, err
 		subs[idx].Total = 0
 		subs[idx].Expire = nil
 		subs[idx].URL = rawURL
+		subs[idx].Name = subscription.NameFromURL(rawURL)
 	}
 
-	subs[idx].Name = strings.TrimSpace(name)
 	subs[idx].UserAgent = strings.TrimSpace(userAgent)
 	if err := s.d.SubStore.Save(subs); err != nil {
 		return hub.SubView{}, fmt.Errorf("sub.Save: %w", err)
@@ -348,6 +341,24 @@ func (s *SubsService) SyncOne(id string) error {
 	// it succeeds.
 	syncOK := syncErr == nil
 
+	s.d.StoreLock.Lock()
+	current, err := s.d.SubStore.Load()
+	if err != nil {
+		s.d.StoreLock.Unlock()
+		return fmt.Errorf("sub.Load: %w", err)
+	}
+	matches := false
+	for _, sub := range current {
+		if sub.ID == id && sub.URL == input.URL {
+			matches = true
+			break
+		}
+	}
+	if !matches {
+		s.d.StoreLock.Unlock()
+		return nil
+	}
+
 	// Local override pattern: status/msg start from meta and are explicitly
 	// overridden only when the merge-and-save fails after a successful fetch.
 	// Keeps a single UpdateMeta call site at the bottom.
@@ -364,8 +375,6 @@ func (s *SubsService) SyncOne(id string) error {
 		// than before it: a snapshot taken before a concurrent sync's Save
 		// would be stale, and writing it back would drop that sync's servers.
 		saveErr := func() error {
-			s.d.StoreLock.Lock()
-			defer s.d.StoreLock.Unlock()
 			existing, lerr := s.d.ServerStore.Load()
 			if lerr != nil {
 				return fmt.Errorf("server.Load: %w", lerr)
@@ -398,14 +407,15 @@ func (s *SubsService) SyncOne(id string) error {
 	// Attach Userinfo whenever the upstream fetch succeeded; the gate must
 	// be syncOK, not syncErr, since a post-fetch Save failure overwrites
 	// syncErr but does not invalidate the parsed quota.
-	var ui *subscription.Userinfo
+	var headers *subscription.Headers
 	if syncOK {
-		ui = meta.Headers.Userinfo
+		headers = &meta.Headers
 	}
-	if err := s.d.SubStore.UpdateMeta(id, time.Now(), status, truncate(msg, 120), ui); err != nil {
+	if err := s.d.SubStore.UpdateMeta(id, input.URL, time.Now(), status, truncate(msg, 120), headers); err != nil {
 		slog.Warn("sub meta update failed", slog.String("scope", "subs"),
 			slog.String("id", id), slog.String("err", err.Error()))
 	}
+	s.d.StoreLock.Unlock()
 
 	s.d.Hub.Publish(hub.Event{
 		Name: hub.EventSubSynced,
