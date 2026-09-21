@@ -15,12 +15,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const (
-	// Version is overridden at build time via -ldflags "-X main.Version=...".
-	Version = "0.0.0-dev"
-	// PipeName is the canonical pipe path the user-side client connects to.
-	PipeName = `\\.\pipe\ITGRay.Helper.v1`
-)
+// Version is overridden at build time via -ldflags "-X main.Version=...".
+// It must stay a var: the linker can only rewrite variables, so declaring it
+// const compiles the placeholder in permanently and every build reports
+// "0.0.0-dev" no matter what the build scripts pass.
+var Version = "0.0.0-dev"
+
+// PipeName is the canonical pipe path the user-side client connects to.
+const PipeName = `\\.\pipe\ITGRay.Helper.v1`
 
 // extraCommands holds platform-specific subcommands registered via init() in
 // build-tagged files (e.g. install/uninstall on Linux). Empty on Windows.

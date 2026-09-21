@@ -35,7 +35,11 @@ ls -la "$OUT" | grep -vE '\.exe|\.dll' || true
 
 # ----- Electron AppImage -----
 echo ">> building itgray-bridge for Linux (Electron bundle)"
-( cd "$ROOT/cmd/itgray-electron" && npm run build:bridge:linux )
+# Pass VERSION through: without it build-bridge.mjs falls back to its own
+# `git describe --dirty`, and a release build is dirty by construction — the
+# workflow stamps package.json before building — so the bridge reported
+# "<tag>+dirty" in the About panel.
+( cd "$ROOT/cmd/itgray-electron" && APP_VERSION="$VERSION" npm run build:bridge:linux )
 
 echo ">> building Electron bundle (main + preload + frontend)"
 ( cd "$ROOT/cmd/itgray-electron" && npm run build:main && npm run build:preload && npm run build:frontend )
