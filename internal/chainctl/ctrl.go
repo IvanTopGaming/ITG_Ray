@@ -523,7 +523,7 @@ func (c *Controller) bringUp(ctx context.Context, srv *server.Server, mode Mode)
 			pending := c.cleanupPending
 			c.mu.Unlock()
 			if !pending {
-				c.clearSysproxyBestEffort("chainctl rollback")
+				_ = c.clearSysproxyBestEffort("chainctl rollback")
 			}
 			return mode, config.Network{}, fmt.Errorf("sysproxy.Set: %w", err)
 		}
@@ -660,7 +660,7 @@ func (c *Controller) Reconcile(ctx context.Context) {
 		// up here so a boot-time Reconcile always leaves sysproxy
 		// consistent with the (non-)running chain it just observed.
 		if rec.Mode == string(ModeSysProxy) {
-			c.clearSysproxyBestEffort("chainctl reconcile")
+			_ = c.clearSysproxyBestEffort("chainctl reconcile")
 		}
 		c.mu.Lock()
 		c.current = srv
