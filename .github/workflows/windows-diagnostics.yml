@@ -1,0 +1,39 @@
+name: Windows diagnostic script
+
+on:
+  pull_request:
+    paths:
+      - scripts/diagnose-windows-network.ps1
+      - scripts/test-windows-network-diagnostics.ps1
+      - .github/workflows/windows-diagnostics.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/diagnose-windows-network.ps1
+      - scripts/test-windows-network-diagnostics.ps1
+      - .github/workflows/windows-diagnostics.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostics:
+    runs-on: windows-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test with Windows PowerShell 5.1
+        run: ./scripts/test-windows-network-diagnostics.ps1
+      - name: Collect a report on Windows
+        run: |
+          $output = Join-Path $env:RUNNER_TEMP 'network-diagnostics'
+          ./scripts/diagnose-windows-network.ps1 -Label off -OutputDirectory $output
+          $files = @(Get-ChildItem $output -Filter '*.txt')
+          if ($files.Count -ne 1) { throw 'Expected one diagnostic report' }
+          $report = Get-Content $files[0].FullName -Raw
+          foreach ($section in @('Windows and privilege level', 'Active routes', 'DNS servers', 'HTTPS OS-route IPv4', 'HTTPS OS-route IPv6', 'Finished:')) {
+            if (-not $report.Contains($section)) { throw "Missing report section: $section" }
+          }
