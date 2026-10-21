@@ -64,7 +64,7 @@ require (
 	github.com/jsimonetti/rtnetlink v1.4.0 // indirect
 	github.com/juju/ratelimit v1.0.2 // indirect
 	github.com/keybase/go-keychain v0.0.1 // indirect
-	github.com/klauspost/compress v1.18.0 // indirect
+	github.com/klauspost/compress v1.18.7 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/libdns/acmedns v0.5.0 // indirect
 	github.com/libdns/alidns v1.0.6 // indirect
