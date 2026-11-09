@@ -108,14 +108,61 @@ func TestBufferPublishesOnlyWithSubscribers(t *testing.T) {
 	b.Add("bridge", "INFO", "loud", time.Unix(0, 0))
 	select {
 	case e := <-ch:
-		if e.Name != "log:line" {
+		if e.Name != "log:batch" {
 			t.Fatalf("event name = %q", e.Name)
 		}
-	default:
+	case <-time.After(2 * time.Second):
 		t.Fatal("expected publish with an active subscriber")
 	}
 
 	if n := b.Unsubscribe(); n != 0 {
 		t.Fatalf("Unsubscribe count = %d, want 0", n)
+	}
+}
+
+func TestBufferCoalescesBurstIntoOneBatch(t *testing.T) {
+	h := hub.New()
+	ch := h.Subscribe(8)
+	b := New(h, 10)
+	b.flushEvery = 20 * time.Millisecond
+	b.Subscribe()
+
+	for i := range 25 {
+		b.Add("sing-box", "INFO", "line", time.Unix(int64(i), 0))
+	}
+
+	var e hub.Event
+	select {
+	case e = <-ch:
+	case <-time.After(2 * time.Second):
+		t.Fatal("no batch published")
+	}
+	entries, _ := e.Payload["entries"].([]map[string]any)
+	if len(entries) != 10 {
+		t.Fatalf("batch carries %d entries, want the newest cap=10", len(entries))
+	}
+	if entries[9]["seq"] != uint64(25) {
+		t.Fatalf("last entry seq = %v, want 25", entries[9]["seq"])
+	}
+	select {
+	case extra := <-ch:
+		t.Fatalf("burst produced more than one event: %+v", extra)
+	case <-time.After(60 * time.Millisecond):
+	}
+}
+
+func TestBufferDropsPendingWhenLastSubscriberLeaves(t *testing.T) {
+	h := hub.New()
+	ch := h.Subscribe(8)
+	b := New(h, 10)
+	b.flushEvery = 20 * time.Millisecond
+	b.Subscribe()
+	b.Add("bridge", "INFO", "unseen", time.Unix(0, 0))
+	b.Unsubscribe()
+
+	select {
+	case e := <-ch:
+		t.Fatalf("published after the last subscriber left: %+v", e)
+	case <-time.After(60 * time.Millisecond):
 	}
 }

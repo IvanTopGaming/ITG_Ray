@@ -42,9 +42,16 @@ type Response struct {
 	Result json.RawMessage `json:"result,omitempty"`
 }
 
+// ReadLogsArgs selects a byte range of an engine log. Tail, when positive and
+// Offset is zero, starts the read Tail bytes before the end of the file
+// instead of at its beginning, so a reader attaching to a long-running session
+// gets the newest lines without draining the whole history first. The first
+// line of such a read is usually partial; the caller detects that from the
+// returned Offset (start = Offset - len(Data) > 0) and drops it.
 type ReadLogsArgs struct {
 	Name   string `json:"name"`
 	Offset int64  `json:"offset"`
+	Tail   int64  `json:"tail,omitempty"`
 }
 
 type ReadLogsResult struct {

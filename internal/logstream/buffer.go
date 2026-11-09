@@ -17,6 +17,13 @@ type Entry struct {
 	Message string    `json:"message"`
 }
 
+// DefaultFlushInterval is how long the buffer coalesces new entries before
+// publishing them as one log:batch event. Publishing per line used to turn a
+// busy engine log into thousands of bridge → main → renderer messages a
+// second; the renderer re-rendered on each one and froze the window, and the
+// flood evicted unrelated events (vpn:status) from the hub's bounded queues.
+const DefaultFlushInterval = 200 * time.Millisecond
+
 type Buffer struct {
 	mu     sync.Mutex
 	cap    int
@@ -24,13 +31,18 @@ type Buffer struct {
 	seq    uint64
 	subs   int
 	hub    *hub.Hub
+	// pending holds entries added while someone is subscribed that have not
+	// been published yet; flushArmed records that a flush timer is running.
+	pending    []Entry
+	flushArmed bool
+	flushEvery time.Duration
 }
 
 func New(h *hub.Hub, capPerSource int) *Buffer {
 	if capPerSource <= 0 {
 		capPerSource = 2000
 	}
-	return &Buffer{cap: capPerSource, perSrc: map[string][]Entry{}, hub: h}
+	return &Buffer{cap: capPerSource, perSrc: map[string][]Entry{}, hub: h, flushEvery: DefaultFlushInterval}
 }
 
 func (b *Buffer) Add(source, level, message string, t time.Time) {
@@ -42,12 +54,37 @@ func (b *Buffer) Add(source, level, message string, t time.Time) {
 		ring = ring[len(ring)-b.cap:]
 	}
 	b.perSrc[source] = ring
+	if b.subs > 0 && b.hub != nil {
+		b.pending = append(b.pending, e)
+		// The renderer keeps only the newest cap lines anyway; anything older
+		// in a single burst would be discarded on arrival.
+		if len(b.pending) > b.cap {
+			b.pending = b.pending[len(b.pending)-b.cap:]
+		}
+		if !b.flushArmed {
+			b.flushArmed = true
+			time.AfterFunc(b.flushEvery, b.flush)
+		}
+	}
+	b.mu.Unlock()
+}
+
+// flush publishes everything pending as a single log:batch event.
+func (b *Buffer) flush() {
+	b.mu.Lock()
+	batch := b.pending
+	b.pending = nil
+	b.flushArmed = false
 	publish := b.subs > 0
 	b.mu.Unlock()
-
-	if publish && b.hub != nil {
-		b.hub.Publish(hub.Event{Name: hub.EventLogLine, Payload: e.toMap()})
+	if !publish || len(batch) == 0 {
+		return
 	}
+	entries := make([]map[string]any, len(batch))
+	for i, e := range batch {
+		entries[i] = e.toMap()
+	}
+	b.hub.Publish(hub.Event{Name: hub.EventLogBatch, Payload: map[string]any{"entries": entries}})
 }
 
 func (e Entry) toMap() map[string]any {
@@ -98,6 +135,9 @@ func (b *Buffer) Unsubscribe() int {
 	defer b.mu.Unlock()
 	if b.subs > 0 {
 		b.subs--
+	}
+	if b.subs == 0 {
+		b.pending = nil
 	}
 	return b.subs
 }

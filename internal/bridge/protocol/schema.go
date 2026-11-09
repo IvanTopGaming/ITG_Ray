@@ -299,5 +299,5 @@ const (
 	TopicRulesChanged   EventTopic = "rules.changed"
 	TopicGeoProgress    EventTopic = "geo.progress"
 	TopicBridgeState    EventTopic = "bridge.state"
-	TopicLogLine        EventTopic = "log.line"
+	TopicLogBatch       EventTopic = "log.batch"
 )

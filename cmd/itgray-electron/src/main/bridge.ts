@@ -9,7 +9,7 @@ export const BRIDGE_TOPICS: Exclude<EventTopic, "bridge.state">[] = [
   "chain.error",
   "geo.progress",
   "helper.state",
-  "log.line",
+  "log.batch",
   "probe.result",
   "rules.changed",
   "servers.changed",

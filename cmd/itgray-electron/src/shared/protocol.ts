@@ -432,7 +432,7 @@ export type EventTopic =
   | "chain.error"
   | "geo.progress"
   | "helper.state"
-  | "log.line"
+  | "log.batch"
   | "probe.result"
   | "rules.changed"
   | "servers.changed"
