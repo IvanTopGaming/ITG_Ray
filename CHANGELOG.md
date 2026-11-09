@@ -4,6 +4,32 @@ All notable changes to ITG Ray are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.3-beta.1] - 2026-11-09
+
+Engine updates to sing-box 1.14 and Xray 26.11, a responsive Logs tab, and
+cancellable connections.
+
+### Added
+- Cancel a connection attempt by clicking the orb again while it says
+  Connecting. Anything the attempt already set up is rolled back.
+- Helper messages appear in the Logs tab, with their own source filter.
+
+### Fixed
+- The Logs tab no longer freezes the window during a long session. Before,
+  it replayed the whole session log, and you could not switch to another
+  tab until it finished. It now opens on the newest 2000 lines and adds new
+  lines as they arrive. Cleared lines stay cleared when you reopen the tab.
+- Heavy log output no longer delays or drops connection status updates.
+- The sidebar shows the version with a single `v` (`v0.1.3-beta.1`, not
+  `vv0.1.3-beta.1`).
+- About shows Xray's release number instead of an internal module version.
+
+### Changed
+- sing-box 1.14.4 and Xray 26.11.9. Generated configs no longer use options
+  that these releases deprecate.
+- Electron 42, plus security updates to the app's npm dependencies.
+- Building from source requires Go 1.27.
+
 ## [0.1.2-beta.1] - 2026-09-21
 
 Subscription import improvements and recovery fixes for VPN connections.
