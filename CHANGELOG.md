@@ -27,7 +27,7 @@ cancellable connections.
 ### Changed
 - sing-box 1.14.4 and Xray 26.11.9. Generated configs no longer use options
   that these releases deprecate.
-- Electron 42, plus security updates to the app's npm dependencies.
+- Electron 42, plus security updates to npm and Go dependencies.
 - Building from source requires Go 1.27.
 
 ## [0.1.2-beta.1] - 2026-09-21
