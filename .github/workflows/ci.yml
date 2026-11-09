@@ -68,6 +68,12 @@ jobs:
             cmd/itgray-electron/frontend/package-lock.json
       - name: install deps
         run: npm ci && npm --prefix frontend ci
+      # Electron 42 dropped its postinstall and fetches the binary lazily on the
+      # first require("electron"). node --test runs files in parallel, so
+      # several test processes raced to extract into the same dist/ and failed
+      # with "File exists". Fetch it once, up front.
+      - name: install electron binary
+        run: node node_modules/electron/install.js
       - name: typecheck main + preload
         run: npm run build:main && npm run build:preload
       - name: main-process tests
