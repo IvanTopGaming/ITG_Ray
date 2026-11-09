@@ -36,7 +36,7 @@
     "@types/node": "^20.0.0",
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
-    "electron": "^41.10.3",
+    "electron": "^42.11.18",
     "electron-builder": "^26.15.3",
     "typescript": "^5.6.0",
     "wait-on": "^7.2.0"
@@ -51,7 +51,9 @@
     "protocols": [
       {
         "name": "ITG Ray",
-        "schemes": ["itgray"]
+        "schemes": [
+          "itgray"
+        ]
       }
     ],
     "directories": {
@@ -72,23 +74,49 @@
       {
         "from": "dist-bridge",
         "to": "bridge",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "resources",
         "to": "resources",
-        "filter": ["tray-*.png"]
+        "filter": [
+          "tray-*.png"
+        ]
       }
     ],
     "win": {
       "icon": "resources/icon.ico",
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "extraResources": [
-        { "from": "../../dist/itgray-helper.exe", "to": "helper/itgray-helper.exe" },
-        { "from": "../../dist/itgray-cli.exe", "to": "cli/itgray-cli.exe" },
-        { "from": "../../dist/sing-box.exe", "to": "cores/sing-box.exe" },
-        { "from": "../../dist/xray.exe", "to": "cores/xray.exe" },
-        { "from": "../../dist/wintun.dll", "to": "wintun.dll" }
+        {
+          "from": "../../dist/itgray-helper.exe",
+          "to": "helper/itgray-helper.exe"
+        },
+        {
+          "from": "../../dist/itgray-cli.exe",
+          "to": "cli/itgray-cli.exe"
+        },
+        {
+          "from": "../../dist/sing-box.exe",
+          "to": "cores/sing-box.exe"
+        },
+        {
+          "from": "../../dist/xray.exe",
+          "to": "cores/xray.exe"
+        },
+        {
+          "from": "../../dist/wintun.dll",
+          "to": "wintun.dll"
+        }
       ]
     },
     "nsis": {
@@ -100,24 +128,59 @@
       "artifactName": "ITGRay-Setup-${version}.${ext}"
     },
     "linux": {
-      "target": [{ "target": "AppImage", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "category": "Network",
       "extraResources": [
-        { "from": "../../dist/itgray-helper", "to": "helper/itgray-helper" },
-        { "from": "../../dist/itgray-cli", "to": "cli/itgray-cli" },
-        { "from": "../../dist/sing-box", "to": "cores/sing-box" },
-        { "from": "../../dist/xray", "to": "cores/xray" }
+        {
+          "from": "../../dist/itgray-helper",
+          "to": "helper/itgray-helper"
+        },
+        {
+          "from": "../../dist/itgray-cli",
+          "to": "cli/itgray-cli"
+        },
+        {
+          "from": "../../dist/sing-box",
+          "to": "cores/sing-box"
+        },
+        {
+          "from": "../../dist/xray",
+          "to": "cores/xray"
+        }
       ],
       "artifactName": "ITGRay-${version}.${ext}"
     },
     "mac": {
-      "target": [{ "target": "dmg", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "category": "public.app-category.utilities",
       "identity": null,
       "extraResources": [
-        { "from": "../../dist/itgray-cli-darwin-amd64", "to": "cli/itgray-cli" },
-        { "from": "../../dist/sing-box-darwin-amd64", "to": "cores/sing-box" },
-        { "from": "../../dist/xray-darwin-amd64", "to": "cores/xray" }
+        {
+          "from": "../../dist/itgray-cli-darwin-amd64",
+          "to": "cli/itgray-cli"
+        },
+        {
+          "from": "../../dist/sing-box-darwin-amd64",
+          "to": "cores/sing-box"
+        },
+        {
+          "from": "../../dist/xray-darwin-amd64",
+          "to": "cores/xray"
+        }
       ],
       "artifactName": "ITGRay-${version}.${ext}"
     },
