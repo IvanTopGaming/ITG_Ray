@@ -93,3 +93,38 @@ func TestReadLogsChunksLargeFile(t *testing.T) {
 		t.Fatalf("expected next 8-byte chunk at off 16, got %d bytes off=%d", len(second.Data), second.Offset)
 	}
 }
+
+func TestReadLogsTailStartsNearEnd(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ITGRAY_RUNTIME_BASE", dir)
+	path := filepath.Join(dir, "xray.log")
+	if err := os.WriteFile(path, []byte("old-1\nold-2\nnew-3\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	h := NewReadLogsHandler()
+	read := func(a protocol.ReadLogsArgs) protocol.ReadLogsResult {
+		args, _ := json.Marshal(a)
+		raw, err := h(context.Background(), args)
+		if err != nil {
+			t.Fatalf("handler err: %v", err)
+		}
+		var r protocol.ReadLogsResult
+		if err := json.Unmarshal(raw, &r); err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+
+	tail := read(protocol.ReadLogsArgs{Name: "xray.log", Tail: 8})
+	if string(tail.Data) != "2\nnew-3\n" || tail.Offset != 18 {
+		t.Fatalf("tail read bad: %q off=%d", tail.Data, tail.Offset)
+	}
+	whole := read(protocol.ReadLogsArgs{Name: "xray.log", Tail: 100})
+	if string(whole.Data) != "old-1\nold-2\nnew-3\n" {
+		t.Fatalf("tail larger than file must read from start: %q", whole.Data)
+	}
+	resumed := read(protocol.ReadLogsArgs{Name: "xray.log", Offset: 6, Tail: 8})
+	if string(resumed.Data) != "old-2\nnew-3\n" {
+		t.Fatalf("tail must not apply once an offset is set: %q", resumed.Data)
+	}
+}

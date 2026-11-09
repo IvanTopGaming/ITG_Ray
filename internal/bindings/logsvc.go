@@ -10,19 +10,18 @@ import (
 	"github.com/itg-team/itg-ray/internal/sysopen"
 )
 
-// startTailLimit bounds how much history Start hands back when the Logs tab
-// opens. The buffer holds up to capPerSource lines per source, which across
-// bridge/sing-box/xray/helper is thousands of entries; sending all of them
-// over the bridge and keeping them in the renderer only to display the newest
-// screenful is pure overhead. Live lines keep arriving via log:line, and the
-// full history is still reachable through logs.export.
-const startTailLimit = 500
+// startTailLimit is how much history Start hands back when the Logs tab
+// opens, and matches the number of lines the renderer retains: the tab always
+// shows the newest 2000 lines across sources, then follows live log:batch
+// events. The full history is still reachable through logs.export.
+const startTailLimit = 2000
 
+// LogDeps wires the Logs service. The engine-log poller is owned by the
+// bridge and runs for its whole lifetime, so Start/Stop only gate whether new
+// lines are pushed to the renderer.
 type LogDeps struct {
-	Buffer      *logstream.Buffer
-	StartPoller func()
-	StopPoller  func()
-	LogDir      string
+	Buffer *logstream.Buffer
+	LogDir string
 }
 
 type LogService struct{ d LogDeps }
@@ -30,9 +29,7 @@ type LogService struct{ d LogDeps }
 func NewLogService(d LogDeps) *LogService { return &LogService{d: d} }
 
 func (s *LogService) Start() (protocol.LogsStartResult, error) {
-	if n := s.d.Buffer.Subscribe(); n == 1 && s.d.StartPoller != nil {
-		s.d.StartPoller()
-	}
+	s.d.Buffer.Subscribe()
 	var out []protocol.LogsEntry
 	for _, e := range s.d.Buffer.Tail(startTailLimit) {
 		out = append(out, protocol.LogsEntry{
@@ -47,9 +44,7 @@ func (s *LogService) Start() (protocol.LogsStartResult, error) {
 }
 
 func (s *LogService) Stop() error {
-	if n := s.d.Buffer.Unsubscribe(); n == 0 && s.d.StopPoller != nil {
-		s.d.StopPoller()
-	}
+	s.d.Buffer.Unsubscribe()
 	return nil
 }
 

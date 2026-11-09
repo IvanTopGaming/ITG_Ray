@@ -57,6 +57,9 @@ func NewReadLogsHandler() Handler {
 		if info.Size() < offset {
 			offset, truncated = 0, true
 		}
+		if args.Tail > 0 && offset == 0 && info.Size() > args.Tail {
+			offset = info.Size() - args.Tail
+		}
 		if _, err := f.Seek(offset, io.SeekStart); err != nil {
 			slog.Error("read logs failed", slog.String("scope", "helper"),
 				slog.String("stage", "seek"), slog.String("name", args.Name), slog.String("err", logging.RedactError(err)))

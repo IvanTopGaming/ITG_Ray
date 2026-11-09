@@ -465,6 +465,90 @@ describe("dashConnect", () => {
   });
 });
 
+describe("cancelling a connect in progress", () => {
+  it("dashDisconnect while connecting stops the chain and lands on idle without an error", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    runConnectMock.mockResolvedValue(undefined);
+    await dashConnect("s1");
+    fireEvent("vpn:status", { status: "connecting" });
+    runDisconnectMock.mockResolvedValue(undefined);
+
+    await dashDisconnect();
+
+    expect(runDisconnectMock).toHaveBeenCalledTimes(1);
+    expect(getDashState().status).toBe("idle");
+    expect(getDashState().lastError).toBeNull();
+  });
+
+  // Disconnect must not overtake a Connect RPC that is still on the wire —
+  // the late Start would bring the chain up after the user cancelled it.
+  it("waits for an in-flight Connect before sending Disconnect", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    const order: string[] = [];
+    let resolveConnect: () => void = () => {};
+    runConnectMock.mockImplementationOnce(
+      () => new Promise<void>((res) => { resolveConnect = () => { order.push("connect"); res(); }; }),
+    );
+    runDisconnectMock.mockImplementation(async () => { order.push("disconnect"); });
+
+    const connecting = dashConnect("s1");
+    const cancel = dashDisconnect();
+    expect(getDashState().status).toBe("disconnecting");
+    resolveConnect();
+    await Promise.all([connecting, cancel]);
+
+    expect(order).toEqual(["connect", "disconnect"]);
+    expect(getDashState().status).toBe("idle");
+  });
+
+  it("ignores a late connecting event once the cancel has started", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    let resolveConnect: () => void = () => {};
+    runConnectMock.mockImplementationOnce(() => new Promise<void>((res) => { resolveConnect = res; }));
+    let resolveDisconnect: () => void = () => {};
+    runDisconnectMock.mockImplementationOnce(() => new Promise<void>((res) => { resolveDisconnect = res; }));
+
+    const connecting = dashConnect("s1");
+    const cancel = dashDisconnect();
+    fireEvent("vpn:status", { status: "connecting" });
+    expect(getDashState().status).toBe("disconnecting");
+    resolveConnect();
+    await connecting;
+    await vi.waitFor(() => expect(runDisconnectMock).toHaveBeenCalled());
+    fireEvent("vpn:status", { status: "connecting" });
+    expect(getDashState().status).toBe("disconnecting");
+    resolveDisconnect();
+    await cancel;
+    expect(getDashState().status).toBe("idle");
+  });
+
+  it("skips the Connect of a server switch cancelled while the old chain stops", async () => {
+    getSnapshotMock.mockResolvedValue(baseSnapshot);
+    await __bootstrapForTest();
+    fireEvent("vpn:status", { status: "connected", serverId: "old" });
+    let finishOldStop: () => void = () => {};
+    runDisconnectMock.mockImplementationOnce(
+      () => new Promise<void>((res) => { finishOldStop = res; }),
+    );
+    runDisconnectMock.mockResolvedValue(undefined);
+    runConnectMock.mockResolvedValue(undefined);
+
+    const switching = dashConnect("new");
+    await Promise.resolve();
+    const cancel = dashDisconnect();
+    finishOldStop();
+    fireEvent("vpn:status", { status: "idle" });
+    await Promise.all([switching, cancel]);
+
+    expect(runConnectMock).not.toHaveBeenCalled();
+    expect(getDashState().status).toBe("idle");
+    expect(getDashState().lastError).toBeNull();
+  });
+});
+
 describe("dashConnect optimistic UI", () => {
   beforeEach(() => {
     __resetForTest();

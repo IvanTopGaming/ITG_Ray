@@ -248,10 +248,8 @@ func main() {
 
 	logPoller := logstream.NewPoller(logBuf, newLogReader(logHelperAddr))
 	logSvc := bindings.NewLogService(bindings.LogDeps{
-		Buffer:      logBuf,
-		StartPoller: func() { logPoller.Start(context.Background()) },
-		StopPoller:  logPoller.Stop,
-		LogDir:      bridgeLogDir(dataDir),
+		Buffer: logBuf,
+		LogDir: bridgeLogDir(dataDir),
 	})
 
 	d := dispatcher.New()
@@ -405,6 +403,13 @@ func main() {
 		},
 	})
 	go func() { _ = refreshDriver.Run(ctx) }()
+
+	// Tail the engine logs for the whole bridge lifetime, not only while the
+	// Logs tab is open. Starting the poller on tab open meant every first
+	// visit began with an empty buffer and a catch-up read of the session
+	// logs; keeping it running means the tab opens straight onto the newest
+	// lines and only has to pick up what arrives afterwards.
+	logPoller.Start(ctx)
 
 	// Announce bridge readiness. Renderer gates mutation buttons on
 	// this state; "restarting"/"failed" are emitted by Electron main

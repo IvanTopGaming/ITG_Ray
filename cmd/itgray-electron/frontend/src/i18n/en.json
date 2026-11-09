@@ -43,7 +43,8 @@
       "disconnect": "Disconnect",
       "retry": "Try connecting again",
       "connecting": "Connecting",
-      "disconnecting": "Disconnecting"
+      "disconnecting": "Disconnecting",
+      "cancel": "Cancel connecting"
     },
     "statusLine": {
       "idle": "DISCONNECTED",
@@ -577,8 +578,7 @@
     "clear": "Clear",
     "paused": "Auto-scroll paused",
     "jump": "Jump to latest",
-    "status": "{{sources}} sources · {{lines}} lines · buffer 2000/source",
-    "olderHidden": "↑ {{count}} earlier lines hidden — use Export for full history",
+    "status": "{{sources}} sources · {{lines}} lines · last 2000 kept",
     "empty": "No log lines yet — connect to start the engine"
   }
 }

@@ -49,18 +49,17 @@ func TestLogServiceStartReturnsEverythingBelowTheLimit(t *testing.T) {
 	}
 }
 
-func TestLogServiceStartStartsPollerOnFirstSubscriberOnly(t *testing.T) {
+func TestLogServiceStartSubscribesAndStopUnsubscribes(t *testing.T) {
 	buf := logstream.New(hub.New(), 10)
-	starts := 0
-	svc := NewLogService(LogDeps{Buffer: buf, StartPoller: func() { starts++ }})
+	svc := NewLogService(LogDeps{Buffer: buf})
 
 	if _, err := svc.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	if _, err := svc.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
+	if err := svc.Stop(); err != nil {
+		t.Fatalf("Stop: %v", err)
 	}
-	if starts != 1 {
-		t.Fatalf("poller should start once, started %d times", starts)
+	if n := buf.Subscribe(); n != 1 {
+		t.Fatalf("Start/Stop must leave the subscriber count balanced, got %d after one more Subscribe", n)
 	}
 }

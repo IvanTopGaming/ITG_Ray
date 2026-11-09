@@ -217,6 +217,10 @@ export function extractEndpoint(
 function onVpnStatus(payload: any) {
   if (!payload || typeof payload.status !== "string") return;
   const nextStatus = payload.status as ChainStatus;
+  // A cancel can land while the Connect RPC is still in flight; its
+  // "connecting" event then arrives after the optimistic "disconnecting" and
+  // would flash the spinner back on until the backend's own transition.
+  if (cancelInFlight && nextStatus === "connecting") return;
   let next = { ...state, status: nextStatus };
 
   if (nextStatus === "connected") {
@@ -423,6 +427,11 @@ export function effectiveStatus(s: DashState): ChainStatus | "error" {
 }
 
 let connectInFlight: Promise<void> | null = null;
+// connectGen invalidates connect attempts the user has cancelled: doConnect
+// captures it up front and bails out (without surfacing an error) once a
+// cancel has bumped it. cancelInFlight is set while that cancel runs.
+let connectGen = 0;
+let cancelInFlight = false;
 
 export async function dashConnect(serverId: string): Promise<void> {
   if (connectInFlight) {
@@ -442,6 +451,7 @@ async function doConnect(serverId: string): Promise<void> {
   // Read the pre-click status before the optimistic update below overwrites
   // it — the "switch server while connected" path keys off it.
   const wasConnected = state.status === "connected";
+  const gen = connectGen;
 
   // Optimistic UI: immediately reflect the user's chosen server so the
   // active-row indicator flips before the backend completes Disconnect+
@@ -465,9 +475,10 @@ async function doConnect(serverId: string): Promise<void> {
       await Disconnect();
       await waitForIdle();
     }
+    if (gen !== connectGen) return;
     await Connect(serverId, state.mode);
   } catch (err: any) {
-    if (err?.message === "superseded") return;
+    if (err?.message === "superseded" || gen !== connectGen) return;
     // Back to idle, not left in "connecting": effectiveStatus only maps to
     // "error" from idle, so keeping the optimistic status would hide the
     // failure behind a spinner that never resolves.
@@ -484,11 +495,19 @@ async function doConnect(serverId: string): Promise<void> {
   }
 }
 
+// dashDisconnect also cancels a connect that is still in progress: the
+// backend's Stop cancels the bring-up context and unwinds whatever it already
+// set up. Any Connect RPC still in flight is awaited first so the Disconnect
+// cannot overtake it and leave the late Start to bring the chain up anyway.
 export async function dashDisconnect(): Promise<void> {
+  const cancelling = state.status === "connecting";
+  connectGen++;
   // Same reasoning as doConnect: show the transition from the click rather
   // than from the backend event, which teardown often outruns.
   setState({ ...state, status: "disconnecting" });
+  cancelInFlight = cancelling;
   try {
+    if (connectInFlight) await connectInFlight.catch(() => {});
     await Disconnect();
     clearLastError();
     onVpnStatus({ status: "idle" });
@@ -503,6 +522,8 @@ export async function dashDisconnect(): Promise<void> {
       },
     });
     throw err;
+  } finally {
+    cancelInFlight = false;
   }
 }
 
@@ -633,6 +654,7 @@ export function __resetForTest(): void {
   }
   bootstrapInFlight = null;
   connectInFlight = null;
+  cancelInFlight = false;
   autoConnectDone = false;
   autoProbedIds.clear();
   autoProbeInFlight = false;

@@ -38,6 +38,6 @@ const EventRulesChanged = "rules:changed"
 // download progress to the frontend.
 const EventGeoProgress = "geo:progress"
 
-// EventLogLine is published per captured log line (bridge + engine) while
-// the Logs page is open.
-const EventLogLine = "log:line"
+// EventLogBatch carries the log lines (bridge + engine) captured since the
+// previous batch, as {"entries": [...]}, while the Logs page is open.
+const EventLogBatch = "log:batch"
