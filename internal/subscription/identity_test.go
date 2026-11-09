@@ -10,14 +10,14 @@ import (
 
 func base() (config.Subscriptions, hwid.DeviceInfo) {
 	return config.Subscriptions{
-			UserAgent:       "ITGRay/1.0",
-			HWIDEnabled:     true,
-			SendDeviceOS:    true,
-			SendOSVersion:   true,
-			SendDeviceModel: true,
-		}, hwid.DeviceInfo{
-			OS: "Linux", Version: "Ubuntu 24.04", Model: "MacBookPro18,2",
-		}
+		UserAgent:       "ITGRay/1.0",
+		HWIDEnabled:     true,
+		SendDeviceOS:    true,
+		SendOSVersion:   true,
+		SendDeviceModel: true,
+	}, hwid.DeviceInfo{
+		OS: "Linux", Version: "Ubuntu 24.04", Model: "MacBookPro18,2",
+	}
 }
 
 func TestResolveIdentity_AllOn_FullSet(t *testing.T) {

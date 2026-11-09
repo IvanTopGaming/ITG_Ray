@@ -66,7 +66,7 @@ registers the helper service and ships the Wintun driver.
 
 ## 🔨 Build from source
 
-> Prerequisites: **Go 1.26+**, **Node 22+**, npm. Cross-building the Windows
+> Prerequisites: **Go 1.27+**, **Node 22+**, npm. Cross-building the Windows
 > installer additionally requires **wine**.
 
 ```bash

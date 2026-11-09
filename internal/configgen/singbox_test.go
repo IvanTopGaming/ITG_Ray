@@ -122,7 +122,7 @@ func TestBuildSingbox_FakeIP(t *testing.T) {
 	require.Equal(t, "tls", remoteServer["type"],
 		"remote server must use DoT (type=tls) so DNS queries are encrypted to the upstream resolver — plain UDP/53 leaks domains in cleartext to the exit server's network")
 
-	require.Equal(t, true, dns["independent_cache"], "sing-box requires independent_cache for FakeIP")
+	require.NotContains(t, dns, "independent_cache", "deprecated in sing-box 1.14: the cache is always per-transport now")
 
 	// 1.12+: route.default_domain_resolver is mandatory-warned (hard-required in 1.14).
 	route := doc["route"].(map[string]any)

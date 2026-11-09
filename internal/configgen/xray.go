@@ -136,9 +136,11 @@ func buildStream(c *vless.Config) map[string]any {
 	}
 	switch c.Transport {
 	case vless.TransportWS:
+		// Host goes in its own field: xray deprecated headers.Host for
+		// WebSocket and warns that it will be removed.
 		ss["wsSettings"] = map[string]any{
-			"path":    c.Path,
-			"headers": map[string]any{"Host": c.WSHost},
+			"path": c.Path,
+			"host": c.WSHost,
 		}
 	case vless.TransportGRPC:
 		ss["grpcSettings"] = map[string]any{

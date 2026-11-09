@@ -15,7 +15,12 @@ echo ">> building itgray-cli (version=$VERSION)"
 GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o "$OUT/itgray-cli" "$ROOT/cmd/itgray-cli"
 
 SINGBOX_TAGS="with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_naive_outbound,with_purego,badlinkname,tfogo_checklinkname0"
-SINGBOX_LDFLAGS="-s -w -buildid= -X internal/godebug.defaultGODEBUG=multipathtcp=0 -checklinkname=0"
+# Mirrors upstream release/LDFLAGS: sing-box 1.14 moved its GODEBUG defaults
+# to runtime.godebugDefault (the old internal/godebug symbol is silently
+# ignored by newer toolchains), and stamping constant.Version makes the engine
+# log its real version instead of "unknown".
+SINGBOX_VERSION="$(cd "$ROOT" && go list -m -f '{{.Version}}' github.com/sagernet/sing-box)"
+SINGBOX_LDFLAGS="-s -w -buildid= -X 'github.com/sagernet/sing-box/constant.Version=${SINGBOX_VERSION#v}' -X runtime.godebugDefault=multipathtcp=0,tlssha1=1 -checklinkname=0"
 
 echo ">> building sing-box (tags=$SINGBOX_TAGS)"
 GOOS=linux GOARCH=amd64 go build -mod=mod -trimpath \

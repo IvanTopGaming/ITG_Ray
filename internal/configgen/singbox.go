@@ -156,9 +156,11 @@ func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
 			"rules": []map[string]any{
 				{"query_type": []string{"A", "AAAA"}, "server": "fakeip"},
 			},
-			"final":             "remote",
-			"independent_cache": true,
-			"strategy":          strategy,
+			// No independent_cache: sing-box 1.14 deprecated it (removal in
+			// 1.16) because the DNS cache is now always keyed per transport,
+			// which is the isolation FakeIP needs.
+			"final":    "remote",
+			"strategy": strategy,
 		}
 	}
 	return map[string]any{
