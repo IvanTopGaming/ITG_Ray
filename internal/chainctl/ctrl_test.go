@@ -87,15 +87,37 @@ func setup(t *testing.T) (*Controller, *fakeHelper, *hub.Hub, *memStore) {
 	return c, fh, h, store
 }
 
+// minWait is the floor for every "wait until X happens" helper below. The
+// per-call budgets (1-2s) are plenty locally but not on windows-latest under
+// -race, where these waits timed out at random across unrelated PRs. A longer
+// deadline never slows a passing test, since the helpers return as soon as the
+// condition holds; it only delays the report of a real failure. Negative
+// checks ("no event within N ms") use their own select and are unaffected.
+const minWait = 10 * time.Second
+
+func withSlack(d time.Duration) time.Duration {
+	if d < minWait {
+		return minWait
+	}
+	return d
+}
+
 // waitFor polls fn until it returns true or the deadline elapses.
 func waitFor(t *testing.T, d time.Duration, fn func() bool) {
 	t.Helper()
-	require.Eventually(t, fn, d, 10*time.Millisecond)
+	require.Eventually(t, fn, withSlack(d), 10*time.Millisecond)
 }
 
 // waitForEvent drains rcv until it sees an event with name == want or
 // the deadline elapses. Returns the matching event or fails the test.
 func waitForEvent(t *testing.T, rcv <-chan hub.Event, want string, d time.Duration) hub.Event {
+	t.Helper()
+	return waitForEventWithin(t, rcv, want, withSlack(d))
+}
+
+// waitForEventWithin is waitForEvent with an exact budget, for callers that
+// already applied the slack to an overall deadline.
+func waitForEventWithin(t *testing.T, rcv <-chan hub.Event, want string, d time.Duration) hub.Event {
 	t.Helper()
 	deadline := time.After(d)
 	for {
@@ -122,9 +144,10 @@ func waitForEvent(t *testing.T, rcv <-chan hub.Event, want string, d time.Durati
 // waitForEvent calls with fresh deadlines.
 func waitForVpnStatus(t *testing.T, rcv <-chan hub.Event, want string, timeout time.Duration) hub.Event {
 	t.Helper()
+	timeout = withSlack(timeout)
 	deadline := time.Now().Add(timeout)
 	for time.Until(deadline) > 0 {
-		ev := waitForEvent(t, rcv, hub.EventVPNStatus, time.Until(deadline))
+		ev := waitForEventWithin(t, rcv, hub.EventVPNStatus, time.Until(deadline))
 		if ev.Payload["status"] == want {
 			return ev
 		}
