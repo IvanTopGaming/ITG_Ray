@@ -6,7 +6,7 @@ ITG Ray combines Go services with an Electron/React VPN interface. `cmd/itgray-c
 
 ## Build, Test, and Development Commands
 
-Use Go 1.26+ and Node 22+. From the repository root:
+Use Go 1.27+ and Node 22+. From the repository root:
 
 - `go test -race -count=1 -timeout 120s ./...` — run Go tests as CI does.
 - `golangci-lint run` — run the Go lint checks.

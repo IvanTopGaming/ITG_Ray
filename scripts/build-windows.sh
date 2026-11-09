@@ -34,7 +34,12 @@ cp "$ROOT/third_party/wintun/wintun.dll" "$OUT/wintun.dll"
 # (e.g. maxminddb, wgctrl) that the rest of the module never imports, so a
 # go-mod-tidy run can't keep them in go.sum.
 SINGBOX_TAGS="with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_naive_outbound,with_purego,badlinkname,tfogo_checklinkname0"
-SINGBOX_LDFLAGS="-s -w -buildid= -X internal/godebug.defaultGODEBUG=multipathtcp=0 -checklinkname=0"
+# Mirrors upstream release/LDFLAGS: sing-box 1.14 moved its GODEBUG defaults
+# to runtime.godebugDefault (the old internal/godebug symbol is silently
+# ignored by newer toolchains), and stamping constant.Version makes the engine
+# log its real version instead of "unknown".
+SINGBOX_VERSION="$(cd "$ROOT" && go list -m -f '{{.Version}}' github.com/sagernet/sing-box)"
+SINGBOX_LDFLAGS="-s -w -buildid= -X 'github.com/sagernet/sing-box/constant.Version=${SINGBOX_VERSION#v}' -X runtime.godebugDefault=multipathtcp=0,tlssha1=1 -checklinkname=0"
 
 echo ">> building sing-box.exe (tags=$SINGBOX_TAGS)"
 GOOS=windows GOARCH=amd64 go build -mod=mod -trimpath \

@@ -80,7 +80,8 @@ func TestBuildXray_TLS_WebSocket(t *testing.T) {
 	require.Equal(t, "ws", stream["network"])
 	ws := stream["wsSettings"].(map[string]any)
 	require.Equal(t, "/ws", ws["path"])
-	require.Equal(t, "cdn.example.com", ws["headers"].(map[string]any)["Host"])
+	require.Equal(t, "cdn.example.com", ws["host"])
+	require.NotContains(t, ws, "headers", "headers.Host is deprecated in xray; host has its own field")
 }
 
 // TestBuildXray_ServerIPOverride verifies that when XrayInput.ServerIP is set,

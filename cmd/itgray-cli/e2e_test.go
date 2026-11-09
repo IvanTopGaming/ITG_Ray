@@ -104,6 +104,13 @@ func startTargetServer(t *testing.T, sink *string) string {
 
 // startXrayVlessServer runs a VLESS+none+tcp server with a freeport listener
 // and a direct outbound. Returns a stop function.
+//
+// Since xray 26.11 a freedom outbound behind a server inbound (vless, vmess,
+// trojan, shadowsocks, ...) blackholes private and loopback destinations by
+// default, as SSRF protection. The smoke target listens on 127.0.0.1, so the
+// test server opts loopback back in with an explicit finalRules allow, which
+// takes precedence over the built-in block. Client configs are unaffected:
+// their inbound is socks, which gets no default rule.
 func startXrayVlessServer(t *testing.T, port int) func() {
 	t.Helper()
 	cfg := fmt.Sprintf(`{
@@ -113,7 +120,10 @@ func startXrayVlessServer(t *testing.T, port int) func() {
         "settings":{"clients":[{"id":"00000000-0000-0000-0000-000000000001"}],"decryption":"none"},
         "streamSettings":{"network":"tcp","security":"none"}
       }],
-      "outbounds": [{"protocol":"freedom","tag":"out"}]
+      "outbounds": [{
+        "protocol":"freedom","tag":"out",
+        "settings":{"finalRules":[{"action":"allow","ip":["127.0.0.0/8"]}]}
+      }]
     }`, port)
 
 	a := core.NewXrayAdapter()
