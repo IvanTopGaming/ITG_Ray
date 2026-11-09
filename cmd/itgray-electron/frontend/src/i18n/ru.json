@@ -43,7 +43,8 @@
       "disconnect": "Отключить",
       "retry": "Попробовать снова",
       "connecting": "Подключение",
-      "disconnecting": "Отключение"
+      "disconnecting": "Отключение",
+      "cancel": "Отменить подключение"
     },
     "statusLine": {
       "idle": "Отключено",

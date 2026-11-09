@@ -43,7 +43,8 @@
       "disconnect": "Disconnect",
       "retry": "Try connecting again",
       "connecting": "Connecting",
-      "disconnecting": "Disconnecting"
+      "disconnecting": "Disconnecting",
+      "cancel": "Cancel connecting"
     },
     "statusLine": {
       "idle": "DISCONNECTED",

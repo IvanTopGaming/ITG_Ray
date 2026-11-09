@@ -85,6 +85,9 @@ export function Dashboard() {
     : 0;
   const orbDisabled =
     dash.status === "connecting" || dash.status === "disconnecting";
+  // The orb itself stays clickable while connecting so the attempt can be
+  // cancelled; only the mode toggle and quick switch lock for the transition.
+  const orbLocked = dash.status === "disconnecting";
 
   // Selected server is what the orb will connect to. When connected it
   // tracks currentServer; when idle/error the user picks via QuickSwitch.
@@ -101,7 +104,7 @@ export function Dashboard() {
       } catch {
         /* lastError set */
       }
-    } else if (eff === "connected") {
+    } else if (eff === "connected" || eff === "connecting") {
       try {
         await dashDisconnect();
       } catch {
@@ -187,7 +190,7 @@ export function Dashboard() {
               status={eff}
               size={104}
               onClick={handleOrbClick}
-              disabled={orbDisabled}
+              disabled={orbLocked}
               ariaLabel={ariaLabelFor(eff, t)}
               progress={geoPct}
             />
@@ -274,7 +277,7 @@ function ariaLabelFor(
     case "error":
       return t("dashboard.orb.retry");
     case "connecting":
-      return t("dashboard.orb.connecting");
+      return t("dashboard.orb.cancel");
     case "disconnecting":
       return t("dashboard.orb.disconnecting");
   }

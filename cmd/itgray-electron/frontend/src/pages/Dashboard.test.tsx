@@ -105,6 +105,23 @@ describe("Dashboard", () => {
     expect(screen.getByText("DISCONNECTED")).toBeInTheDocument();
   });
 
+  it("cancels an in-progress connect when the orb is clicked again", async () => {
+    useDashMock.mockReturnValue({ ...baseDash, status: "connecting" });
+    dashDisconnectMock.mockResolvedValue(undefined);
+    renderDash();
+    const orb = screen.getByRole("button", { name: "Cancel connecting" });
+    expect(orb).not.toBeDisabled();
+    fireEvent.click(orb);
+    await waitFor(() => expect(dashDisconnectMock).toHaveBeenCalledTimes(1));
+    expect(dashConnectMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps the orb locked while disconnecting", () => {
+    useDashMock.mockReturnValue({ ...baseDash, status: "disconnecting" });
+    renderDash();
+    expect(screen.getByRole("button", { name: "Disconnecting" })).toBeDisabled();
+  });
+
   it("allows another disconnect attempt after cleanup fails", async () => {
     useDashMock.mockReturnValue({
       ...baseDash,
