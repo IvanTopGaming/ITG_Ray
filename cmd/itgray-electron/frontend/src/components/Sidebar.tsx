@@ -96,9 +96,16 @@ function StatusFooter() {
         <span className={clsx("h-1.5 w-1.5 rounded-full", meta.dot)} />
         {t(meta.labelKey)}
       </span>
-      {version && <span>v{version}</span>}
+      {version && <span>{formatVersion(version)}</span>}
     </div>
   );
+}
+
+// Release builds stamp the bridge with the git tag ("v0.1.2-beta.1") while
+// other builds may carry a bare semver, so normalise to exactly one leading v
+// instead of prefixing blindly (which rendered "vv0.1.2-beta.1").
+export function formatVersion(version: string): string {
+  return `v${version.trim().replace(/^v/i, "")}`;
 }
 
 function SectionLabel({
