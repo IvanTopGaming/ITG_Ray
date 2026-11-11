@@ -9,7 +9,8 @@ import { MemoryRouter } from "react-router-dom";
 // crash.
 vi.mock("@/lib/dashStore", () => ({
   getDashState: () => ({ status: "idle" }),
-  useDash: () => ({ allServers: [] }),
+  useDash: () => ({ allServers: [], status: "idle", routingMode: "rule" }),
+  dashSetRoutingMode: () => Promise.resolve(),
 }));
 vi.mock("@/lib/settings", () => ({
   setCurrentRulesSignature: () => {},

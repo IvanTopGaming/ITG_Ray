@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { ClaimAutoConnect, GetSnapshot } from "@/lib/itg/AppService";
-import { Connect, Disconnect } from "@/lib/itg/RunService";
+import { Connect, Disconnect, GetRoutingMode, SetRoutingMode } from "@/lib/itg/RunService";
 import { Update as UpdateSettings } from "@/lib/itg/SettingsService";
 import { seedConnectSnapshotFromSnapshot } from "@/lib/settings";
 import { TestLatency } from "@/lib/itg/ServersService";
@@ -12,6 +12,11 @@ type Snapshot = hub.Snapshot;
 
 export type ChainStatus = "idle" | "connecting" | "connected" | "disconnecting" | "error";
 export type Mode = "tun" | "sysproxy";
+export type RoutingMode = "rule" | "global" | "direct";
+
+function asRoutingMode(v: unknown): RoutingMode | null {
+  return v === "rule" || v === "global" || v === "direct" ? v : null;
+}
 
 export type SpeedPoint = { t: number; downBps: number; upBps: number };
 
@@ -28,6 +33,7 @@ export type DashState = {
   endpoint: { socksPort: number; httpPort: number } | null;
   lastError: { kind: string; message: string; at: number } | null;
   bootstrapped: boolean;
+  routingMode: RoutingMode;
   probeState: Map<string, "probing" | "ok" | "error">;
 };
 
@@ -104,6 +110,7 @@ const initialState = (): DashState => ({
   endpoint: null,
   lastError: loadPersistedError(),
   bootstrapped: false,
+  routingMode: "rule",
   probeState: new Map(),
 });
 
@@ -188,6 +195,7 @@ async function doBootstrap(): Promise<void> {
       allServers: servers,
       bootstrapped: true,
     });
+    if (nextStatus === "connected") void refreshRoutingMode();
     maybeAutoProbe(servers);
     // Detached from bootstrap: auto-connect is best-effort and must never
     // take the snapshot down with it (connect failures land in lastError).
@@ -222,6 +230,7 @@ function onVpnStatus(payload: any) {
   // would flash the spinner back on until the backend's own transition.
   if (cancelInFlight && nextStatus === "connecting") return;
   let next = { ...state, status: nextStatus };
+  if (nextStatus === "idle" || nextStatus === "error") next.routingMode = "rule";
 
   if (nextStatus === "connected") {
     if (typeof payload.serverId === "string") {
@@ -351,6 +360,7 @@ function registerEventHandlers() {
   EventsOn("sub:synced", onSubSynced);
   EventsOn("servers:changed", onSubSynced);
   EventsOn("probe:result", onProbeResult);
+  EventsOn("routing:mode", onRoutingMode);
 }
 
 // Servers the auto-probe has already swept this session, and whether a sweep
@@ -668,3 +678,35 @@ export async function __bootstrapForTest(): Promise<void> {
 // Module init
 registerEventHandlers();
 bootstrap();
+
+function onRoutingMode(payload: any) {
+  const mode = asRoutingMode(payload?.mode);
+  if (!mode || mode === state.routingMode) return;
+  setState({ ...state, routingMode: mode });
+}
+
+async function refreshRoutingMode(): Promise<void> {
+  try {
+    const res = (await GetRoutingMode()) as { mode?: unknown } | null;
+    const mode = asRoutingMode(res?.mode);
+    if (mode && state.status === "connected") setState({ ...state, routingMode: mode });
+  } catch {
+    /* keep the current value */
+  }
+}
+
+export async function dashSetRoutingMode(mode: RoutingMode): Promise<void> {
+  if (state.status !== "connected" || state.routingMode === mode) return;
+  const prev = state.routingMode;
+  setState({ ...state, routingMode: mode });
+  try {
+    await SetRoutingMode(mode);
+  } catch (err: any) {
+    setState({
+      ...state,
+      routingMode: prev,
+      lastError: { kind: "routing_mode_failed", message: err?.message ?? String(err), at: Date.now() },
+    });
+    throw err;
+  }
+}

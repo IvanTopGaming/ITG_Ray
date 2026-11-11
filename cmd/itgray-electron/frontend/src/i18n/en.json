@@ -593,5 +593,15 @@
     "jump": "Jump to latest",
     "status": "{{sources}} sources · {{lines}} lines · last 2000 kept",
     "empty": "No log lines yet — connect to start the engine"
+  },
+  "routingMode": {
+    "label": "Routing mode",
+    "rule": "By rules",
+    "global": "All via proxy",
+    "direct": "All direct",
+    "pill": {
+      "global": "Everything via proxy — rules paused",
+      "direct": "Everything direct — VPN bypassed"
+    }
   }
 }

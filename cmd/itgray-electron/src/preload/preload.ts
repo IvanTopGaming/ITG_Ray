@@ -116,6 +116,8 @@ contextBridge.exposeInMainWorld("itg", {
     connect: (params: { serverId: string; mode: string }) =>
       rpc("run.connect", params),
     disconnect: () => rpc("run.disconnect"),
+    setRoutingMode: (params: { mode: string }) => rpc("run.setRoutingMode", params),
+    getRoutingMode: () => rpc("run.getRoutingMode"),
   },
   tray: {
     report: (state: Record<string, unknown>) => ipcRenderer.send("tray.report", state),

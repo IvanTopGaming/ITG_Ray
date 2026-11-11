@@ -153,6 +153,11 @@ export function Dashboard() {
           <p className="mt-1 text-[13px] text-white/50">
             {t("dashboard.description")}
           </p>
+          {dash.status === "connected" && dash.routingMode && dash.routingMode !== "rule" && (
+            <span className="mt-2 inline-flex items-center rounded-full bg-amber-500/15 px-3 py-1 text-[11.5px] font-medium text-amber-200">
+              {t(`routingMode.pill.${dash.routingMode}`)}
+            </span>
+          )}
         </div>
         <ModeToggle
           value={dash.mode}

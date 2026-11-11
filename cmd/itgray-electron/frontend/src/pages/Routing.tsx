@@ -24,6 +24,7 @@ import { consumePendingImportLink, subscribePendingImport } from "@/lib/deeplink
 import { cn } from "@/lib/cn";
 import { summarise } from "@/lib/ruleSummary";
 import { useDash } from "@/lib/dashStore";
+import { RoutingModeSwitch } from "@/components/RoutingModeSwitch";
 import { useTranslation } from "react-i18next";
 
 const SNAP_EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
@@ -276,6 +277,7 @@ export function Routing() {
           <p className="mt-1 text-[12px] text-white/55">{t("routing.description")}</p>
         </div>
         <div className="flex items-center gap-2">
+          <RoutingModeSwitch />
           <motion.button
             type="button"
             onClick={() => { setImportInitial(""); setImportOpen(true); }}
