@@ -2,6 +2,7 @@ import type { TrayStrings } from "./tray-i18n";
 
 export type TrayStatus = "idle" | "connecting" | "connected" | "disconnecting" | "error";
 export type TrayMode = "tun" | "sysproxy";
+export type TrayRoutingMode = "rule" | "global" | "direct";
 
 export interface TrayServer {
   id: string;
@@ -18,6 +19,7 @@ export interface TrayView {
   servers: TrayServer[];
   hasSubs: boolean;
   syncing: boolean;
+  routingMode: TrayRoutingMode;
 }
 
 export type TrayCommand =
@@ -25,6 +27,7 @@ export type TrayCommand =
   | { kind: "disconnect" }
   | { kind: "selectServer"; id: string }
   | { kind: "setMode"; mode: TrayMode }
+  | { kind: "setRoutingMode"; mode: TrayRoutingMode }
   | { kind: "syncAll" }
   | { kind: "cancelSync" }
   | { kind: "open" }
@@ -149,6 +152,20 @@ export function buildTrayMenu(view: TrayView, t: TrayStrings): TrayItem[] {
         { label: t.modeTun, type: "radio", checked: view.mode === "tun", enabled: !modeLocked, command: { kind: "setMode", mode: "tun" } },
         { label: t.modeSysproxy, type: "radio", checked: view.mode === "sysproxy", enabled: !modeLocked, command: { kind: "setMode", mode: "sysproxy" } },
       ],
+    },
+    {
+      label: t.routing,
+      submenu: ([
+        ["rule", t.routingRule],
+        ["global", t.routingGlobal],
+        ["direct", t.routingDirect],
+      ] as const).map(([mode, label]) => ({
+        label,
+        type: "radio" as const,
+        checked: view.routingMode === mode,
+        enabled: view.status === "connected",
+        command: { kind: "setRoutingMode" as const, mode },
+      })),
     },
     SEP,
     view.syncing

@@ -239,3 +239,26 @@ test("a menu exists before the first snapshot arrives", () => {
   assert.equal(f.menus.length, 1);
   assert.ok(f.menus[0].some((i) => i.label === "Quit ITG Ray"));
 });
+
+test("routing.mode events drive the view and idle resets to rule", async () => {
+  const f = fixture();
+  await f.ctl.refresh();
+  f.ctl.onVpnStatus({ status: "connected", serverId: "a" });
+  f.ctl.onRoutingMode({ mode: "global" });
+  assert.equal(f.ctl.view().routingMode, "global");
+  f.ctl.onRoutingMode({ mode: "bogus" });
+  assert.equal(f.ctl.view().routingMode, "global");
+  f.ctl.onVpnStatus({ status: "idle" });
+  assert.equal(f.ctl.view().routingMode, "rule");
+});
+
+test("setRoutingMode goes to the bridge without a renderer and to the renderer when present", async () => {
+  const f = fixture();
+  await f.ctl.refresh();
+  f.ctl.onVpnStatus({ status: "connected", serverId: "a" });
+  await f.ctl.dispatch({ kind: "setRoutingMode", mode: "direct" });
+  assert.deepEqual(f.calls.at(-1), { method: "run.setRoutingMode", params: { mode: "direct" } });
+  f.setRenderer(true);
+  await f.ctl.dispatch({ kind: "setRoutingMode", mode: "global" });
+  assert.deepEqual(f.sent.at(-1), { kind: "setRoutingMode", mode: "global" });
+});

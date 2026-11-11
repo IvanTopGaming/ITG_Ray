@@ -140,6 +140,7 @@ app.whenReady().then(async () => {
   trayController = controller;
   supervisor.on("vpn.status", (p) => controller.onVpnStatus(p));
   supervisor.on("vpn.speed", (p) => controller.onVpnSpeed(p));
+  supervisor.on("routing.mode", (p) => controller.onRoutingMode(p));
   supervisor.on("servers.changed", () => void controller.refresh());
   supervisor.on("sub.synced", () => void controller.refresh());
   supervisor.on("state", (p: { state?: string }) => {

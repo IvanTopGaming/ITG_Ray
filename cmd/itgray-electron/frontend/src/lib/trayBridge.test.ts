@@ -9,11 +9,13 @@ let lastServer: string | null = null;
 const mockConnect = vi.fn(async () => {});
 const mockDisconnect = vi.fn(async () => {});
 const mockSwitchMode = vi.fn(async () => {});
+const mockSetRoutingMode = vi.fn(async () => {});
 
 vi.mock("@/lib/dashStore", () => ({
   dashConnect: (...a: unknown[]) => mockConnect(...(a as [])),
   dashDisconnect: () => mockDisconnect(),
   dashSwitchMode: (...a: unknown[]) => mockSwitchMode(...(a as [])),
+  dashSetRoutingMode: (...a: unknown[]) => mockSetRoutingMode(...(a as [])),
   getDashState: () => dash,
   loadLastServerId: () => lastServer,
   useDash: () => dash,
@@ -76,5 +78,10 @@ describe("runTrayCommand", () => {
     expect(d.subs.syncAll).toHaveBeenCalledTimes(1);
     expect(d.subs.cancelAll).toHaveBeenCalledTimes(1);
     expect(d.navigate).toHaveBeenCalledWith("/logs");
+  });
+
+  it("routes setRoutingMode to the dash store", async () => {
+    await runTrayCommand({ kind: "setRoutingMode", mode: "direct" }, deps());
+    expect(mockSetRoutingMode).toHaveBeenCalledWith("direct");
   });
 });
