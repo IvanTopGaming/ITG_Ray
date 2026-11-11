@@ -380,4 +380,16 @@ describe("moveRuleAcrossGroups", () => {
     expect(screen.getByText("Finland")).toBeInTheDocument();
     expect(screen.queryByText(/server is gone/i)).toBeNull();
   });
+
+  it.each([
+    ["dns", /address doesn't resolve/i],
+    ["config", /config isn't supported/i],
+    ["disabled", /server is disabled/i],
+  ])("explains an unusable binding with reason %s", (reason, text) => {
+    const bound = { ...user, rules: [{ id: "r9", name: "Video", enabled: true, action: "proxy", server_id: "x", server_name: "NL", binding: { state: "unusable", reason }, conditions: { processes: ["firefox"] } }] };
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, bound], loading: false, lastError: null, bootstrapped: true });
+    renderRouting();
+    expect(screen.getByText(text)).toBeInTheDocument();
+    expect(screen.getByText(/using main/i)).toBeInTheDocument();
+  });
 });

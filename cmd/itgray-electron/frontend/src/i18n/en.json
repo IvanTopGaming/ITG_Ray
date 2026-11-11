@@ -573,7 +573,13 @@
     },
     "binding": {
       "missing": "Server is gone — pick another",
-      "unusable": "Server unavailable at connect — using main"
+      "unusable": "Using main server",
+      "reason": {
+        "dns": "Server address doesn't resolve",
+        "config": "Server config isn't supported",
+        "disabled": "Server is disabled",
+        "other": "Server unavailable at connect"
+      }
     }
   },
   "logs": {

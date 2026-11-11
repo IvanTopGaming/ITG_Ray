@@ -874,10 +874,13 @@ function BindingChip({ rule }: { rule: RuleView }) {
   const state = rule.binding?.state;
   const name = servers.find((s) => s.id === rule.server_id)?.name ?? rule.server_name ?? rule.server_id;
   if (state === "missing" || state === "unusable") {
+    const reason = rule.binding?.reason;
+    const reasonKey = reason === "dns" || reason === "config" || reason === "disabled" ? reason : "other";
     return (
       <span className="flex items-center gap-1 rounded bg-amber-500/15 px-2 py-0.5 text-[10.5px] text-amber-200">
-        <span>{t(state === "missing" ? "routing.binding.missing" : "routing.binding.unusable")}</span>
+        <span>{state === "missing" ? t("routing.binding.missing") : t(`routing.binding.reason.${reasonKey}`)}</span>
         <span className="text-amber-100/70">{name}</span>
+        {state === "unusable" && <span className="text-amber-100/60">· {t("routing.binding.unusable")}</span>}
       </span>
     );
   }
