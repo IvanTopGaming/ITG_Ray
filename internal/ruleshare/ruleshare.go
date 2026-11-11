@@ -55,6 +55,7 @@ func Encode(name string, groups []rules.Group) (string, error) {
 		for j := range g.Rules {
 			rs[j] = g.Rules[j]
 			rs[j].ID = ""
+			rs[j].ClearServerBinding()
 		}
 		norm[i] = rules.Group{Name: g.Name, Enabled: g.Enabled, Rules: rs}
 	}
@@ -102,6 +103,7 @@ func Decode(link string) (Payload, error) {
 				return Payload{}, fmt.Errorf("ruleshare: rule %q: %w", chk.Name, err)
 			}
 			env.Groups[gi].Rules[ri].ID = ""
+			env.Groups[gi].Rules[ri].ClearServerBinding()
 		}
 		env.Groups[gi].ID = ""
 	}

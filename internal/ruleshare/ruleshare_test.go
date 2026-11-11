@@ -148,3 +148,40 @@ func TestEncodeRejectsNoRules(t *testing.T) {
 		t.Errorf("err = %v, want ErrEmpty", err)
 	}
 }
+
+func boundGroups() []rules.Group {
+	g := sampleGroups()
+	g[0].Rules[0].ServerID = "srv-local"
+	g[0].Rules[0].ServerSourceID = "sub-local"
+	g[0].Rules[0].ServerName = "NL 2"
+	return g
+}
+
+func TestExport_DropsServerBinding(t *testing.T) {
+	link, err := Encode("n", boundGroups())
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	p, err := Decode(link)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	r := p.Groups[0].Rules[0]
+	if r.ServerID != "" || r.ServerSourceID != "" || r.ServerName != "" {
+		t.Fatalf("binding leaked into export: %+v", r)
+	}
+	if len(r.Conditions.Domains) != 1 || r.Conditions.Domains[0].Value != "netflix.com" {
+		t.Fatalf("conditions lost: %+v", r.Conditions)
+	}
+}
+
+func TestImport_DropsForeignServerBinding(t *testing.T) {
+	link := encodeEnvelope(t, wireEnvelope{V: CurrentSchema, Kind: "rules", Name: "n", Groups: boundGroups()})
+	p, err := Decode(link)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if r := p.Groups[0].Rules[0]; r.ServerID != "" || r.ServerSourceID != "" || r.ServerName != "" {
+		t.Fatalf("foreign binding kept on import: %+v", r)
+	}
+}
