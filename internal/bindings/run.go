@@ -107,5 +107,9 @@ func (r *RunService) GetRoutingMode() (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	return r.d.Routing.Mode(ctx)
+	m, err := r.d.Routing.Mode(ctx)
+	if err != nil || !clashapi.ValidMode(m) {
+		return "rule", nil
+	}
+	return m, nil
 }

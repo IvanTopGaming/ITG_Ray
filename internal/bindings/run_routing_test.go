@@ -86,3 +86,16 @@ func TestGetRoutingMode(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "rule", m)
 }
+
+type unreachableRouting struct{ fakeRouting }
+
+func (*unreachableRouting) Mode(context.Context) (string, error) {
+	return "", errors.New(`clash api GET /configs: dial tcp 127.0.0.1:13356: connect: connection refused`)
+}
+
+func TestGetRoutingMode_ChainWithoutClashAPIReportsRule(t *testing.T) {
+	svc, _ := routingSvc(t, true, &unreachableRouting{})
+	m, err := svc.GetRoutingMode()
+	require.NoError(t, err)
+	require.Equal(t, "rule", m)
+}
