@@ -172,6 +172,15 @@ export function createTrayController(deps: TrayControllerDeps): TrayController {
     hasSubs = Array.isArray(snap.subs) && snap.subs.length > 0;
     const l = snap.settings?.general?.language;
     if (typeof l === "string") languageSetting = l;
+    if (status === "connected") {
+      try {
+        const res = (await deps.rpc("run.getRoutingMode")) as { mode?: unknown } | null;
+        const rm = asRoutingMode(res?.mode);
+        if (rm) routingMode = rm;
+      } catch (err) {
+        warn("tray: routing mode read failed", err);
+      }
+    }
   }
 
   async function refresh(): Promise<void> {

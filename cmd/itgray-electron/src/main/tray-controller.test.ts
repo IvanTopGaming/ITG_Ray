@@ -262,3 +262,28 @@ test("setRoutingMode goes to the bridge without a renderer and to the renderer w
   await f.ctl.dispatch({ kind: "setRoutingMode", mode: "global" });
   assert.deepEqual(f.sent.at(-1), { kind: "setRoutingMode", mode: "global" });
 });
+
+test("refresh reads the live routing mode of an adopted chain", async () => {
+  const f = fixture({
+    rpc: async (method) => {
+      if (method === "app.getSnapshot") return { ...snapshot, status: "connected", currentServer: { id: "a" } };
+      if (method === "run.getRoutingMode") return { mode: "global" };
+      return {};
+    },
+  });
+  await f.ctl.refresh();
+  assert.equal(f.ctl.view().routingMode, "global");
+});
+
+test("refresh does not ask for the routing mode while idle", async () => {
+  const methods: string[] = [];
+  const f = fixture({
+    rpc: async (method) => {
+      methods.push(method);
+      return method === "app.getSnapshot" ? snapshot : {};
+    },
+  });
+  await f.ctl.refresh();
+  assert.ok(!methods.includes("run.getRoutingMode"));
+  assert.equal(f.ctl.view().routingMode, "rule");
+});
