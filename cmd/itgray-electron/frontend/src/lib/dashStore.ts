@@ -70,7 +70,7 @@ function persistError(err: DashState["lastError"]): void {
 // while a chain is live, so it is null on an idle boot).
 const LAST_SERVER_KEY = "itg.dashStore.lastServerId";
 
-function loadLastServerId(): string | null {
+export function loadLastServerId(): string | null {
   try {
     return localStorage.getItem(LAST_SERVER_KEY);
   } catch {

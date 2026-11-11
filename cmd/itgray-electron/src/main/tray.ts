@@ -1,13 +1,13 @@
 // cmd/itgray-electron/src/main/tray.ts
-import { Tray, Menu, app, nativeImage, BrowserWindow } from "electron";
+import { Tray, Menu, nativeImage, BrowserWindow, type MenuItemConstructorOptions } from "electron";
 import path from "node:path";
 import { isDevMode } from "./paths";
+import type { TrayCommand, TrayItem, TrayStatus } from "./tray-menu";
 
-type Status = "idle" | "connecting" | "connected" | "error";
-
-const STATUS_TO_ICON: Record<Status, string> = {
+const STATUS_TO_ICON: Record<TrayStatus, string> = {
   idle: "tray-idle.png",
   connecting: "tray-connecting.png",
+  disconnecting: "tray-connecting.png",
   connected: "tray-connected.png",
   error: "tray-error.png",
 };
@@ -21,18 +21,38 @@ function resourcePath(file: string): string {
   return path.join(process.resourcesPath, "resources", file);
 }
 
+export function toMenuTemplate(items: TrayItem[], onCommand: (cmd: TrayCommand) => void): MenuItemConstructorOptions[] {
+  return items.map((item) => {
+    if (item.type === "separator") return { type: "separator" };
+    const opts: MenuItemConstructorOptions = {
+      label: item.label,
+      enabled: item.enabled ?? true,
+    };
+    if (item.submenu) opts.submenu = toMenuTemplate(item.submenu, onCommand);
+    if (item.type === "radio") {
+      opts.type = "radio";
+      opts.checked = item.checked ?? false;
+    }
+    const cmd = item.command;
+    if (cmd) opts.click = () => onCommand(cmd);
+    return opts;
+  });
+}
+
 /**
- * Creates the system tray, sets the initial idle icon, wires the menu
- * and click handler. Returns the Tray reference (the caller MUST keep it
- * alive — losing the reference triggers GC and the icon disappears on
- * Linux) plus a setStatus(s) updater.
+ * Creates the system tray, sets the initial idle icon and the click handler.
+ * Returns the Tray reference (the caller MUST keep it alive — losing the
+ * reference triggers GC and the icon disappears on Linux) plus setters the
+ * tray controller drives.
  */
 export function createTray(
   getWindow: () => BrowserWindow | null,
   summonWindow: () => void,
 ): {
   tray: Tray;
-  setStatus: (s: Status) => void;
+  setIcon: (s: TrayStatus) => void;
+  setTooltip: (text: string) => void;
+  setMenu: (items: TrayItem[], onCommand: (cmd: TrayCommand) => void) => void;
 } {
   const initial = nativeImage.createFromPath(resourcePath(STATUS_TO_ICON.idle));
   const tray = new Tray(initial);
@@ -53,19 +73,22 @@ export function createTray(
     }
   };
 
-  const menu = Menu.buildFromTemplate([
-    { label: "Show / Hide", click: showOrHide },
-    { type: "separator" },
-    { label: "Quit ITG Ray", click: () => app.quit() },
-  ]);
-  tray.setContextMenu(menu);
   tray.on("click", showOrHide);
 
+  let lastTooltip = "";
   return {
     tray,
-    setStatus(s: Status) {
+    setIcon(s: TrayStatus) {
       const file = STATUS_TO_ICON[s] ?? STATUS_TO_ICON.idle;
       tray.setImage(nativeImage.createFromPath(resourcePath(file)));
+    },
+    setTooltip(text: string) {
+      if (text === lastTooltip) return;
+      lastTooltip = text;
+      tray.setToolTip(text);
+    },
+    setMenu(items: TrayItem[], onCommand: (cmd: TrayCommand) => void) {
+      tray.setContextMenu(Menu.buildFromTemplate(toMenuTemplate(items, onCommand)));
     },
   };
 }
