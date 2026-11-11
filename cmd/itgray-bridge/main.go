@@ -28,6 +28,7 @@ import (
 	"github.com/itg-team/itg-ray/internal/logging"
 	"github.com/itg-team/itg-ray/internal/logstream"
 	"github.com/itg-team/itg-ray/internal/refresh"
+	"github.com/itg-team/itg-ray/internal/routebind"
 	"github.com/itg-team/itg-ray/internal/rules"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/subscription"
@@ -98,6 +99,7 @@ func main() {
 	dataDir := defaultDataDir()
 	configPath := filepath.Join(dataDir, "config.json")
 	serverStore := serversFileStore{path: filepath.Join(dataDir, "servers.json")}
+	bindingIssues := &routebind.Issues{}
 	subStore := subscription.FileStore{Path: filepath.Join(dataDir, "subscriptions.json")}
 
 	configStore := bindings.NewConfigStore(configPath, handlers.Version, BuildDate)
@@ -213,7 +215,7 @@ func main() {
 		Helper:       helperClient,
 		Sysproxy:     sysproxy.New(),
 		Hub:          h,
-		BuildConfigs: buildConfigs(dataDir, configPath, ruleStore, geoMgr),
+		BuildConfigs: buildConfigs(dataDir, configPath, ruleStore, geoMgr, bindingIssues),
 		Network:      networkLoader,
 		KillSwitch:   killSwitchLoader,
 	})

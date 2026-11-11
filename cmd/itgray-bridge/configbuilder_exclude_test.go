@@ -28,7 +28,7 @@ func tunExcludeAddress(t *testing.T, mode chainctl.Mode) (any, bool) {
 		SysProxy: config.SysProxy{HTTPPort: 8888, SOCKSPort: 1080},
 		IPv6Mode: "prefer-v4",
 	}
-	build := buildConfigs(t.TempDir(), "", nil, nil)
+	build := buildConfigs(t.TempDir(), "", nil, nil, nil)
 	sbJSON, _, err := build(&srv, mode, net)
 	if err != nil {
 		t.Fatalf("buildConfigs(%s): %v", mode, err)
@@ -127,7 +127,7 @@ func TestBuildConfigs_TUN_DualStackAddress(t *testing.T) {
 		SysProxy: config.SysProxy{HTTPPort: 8888, SOCKSPort: 1080},
 		IPv6Mode: "prefer-v4",
 	}
-	build := buildConfigs(t.TempDir(), "", nil, nil)
+	build := buildConfigs(t.TempDir(), "", nil, nil, nil)
 	sbJSON, _, err := build(&srv, chainctl.ModeTUN, net)
 	if err != nil {
 		t.Fatalf("buildConfigs: %v", err)
