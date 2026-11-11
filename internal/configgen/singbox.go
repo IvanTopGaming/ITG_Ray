@@ -314,6 +314,9 @@ func hasEquivalentLanBypass(routeRules any) bool {
 		if m["outbound"] != "direct" {
 			return false
 		}
+		if _, conditional := m["clash_mode"]; conditional {
+			return false
+		}
 		present := map[string]bool{}
 		switch xs := m["ip_cidr"].(type) {
 		case []any:
@@ -464,10 +467,18 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 	}
 
 	if in.ClashAPI != nil {
+		globalLan := map[string]any{"clash_mode": "Global"}
+		for k, v := range lanBypassRule() {
+			globalLan[k] = v
+		}
 		clashRules := []any{
 			map[string]any{"clash_mode": "Direct", "outbound": "direct"},
-			map[string]any{"clash_mode": "Global", "outbound": "proxy"},
+			globalLan,
 		}
+		if in.Mode == ModeTun && in.TunIPv6 != "" && in.FakeIPv6Range == "" {
+			clashRules = append(clashRules, map[string]any{"clash_mode": "Global", "ip_cidr": []any{"::/0"}, "outbound": "block"})
+		}
+		clashRules = append(clashRules, map[string]any{"clash_mode": "Global", "outbound": "proxy"})
 		switch existing := route["rules"].(type) {
 		case []any:
 			route["rules"] = append(clashRules, existing...)

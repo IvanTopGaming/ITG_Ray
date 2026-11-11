@@ -127,7 +127,7 @@ func TestBuildSingbox_ExtraProxiesAndClashAPI(t *testing.T) {
 
 	hijack := indexWhere(rs, func(r map[string]any) bool { return r["action"] == "hijack-dns" })
 	direct := indexWhere(rs, func(r map[string]any) bool { return r["clash_mode"] == "Direct" })
-	global := indexWhere(rs, func(r map[string]any) bool { return r["clash_mode"] == "Global" })
+	global := indexWhere(rs, func(r map[string]any) bool { return r["clash_mode"] == "Global" && r["ip_cidr"] == nil })
 	user := indexWhere(rs, func(r map[string]any) bool { return r["process_name"] != nil })
 	require.True(t, hijack >= 0 && direct > hijack && global > hijack, "clash rules after hijack-dns: %v", rs)
 	require.True(t, user > direct && user > global, "clash rules before user rules: %v", rs)
@@ -163,4 +163,75 @@ func TestBuildSingbox_SysproxyExtraProxies(t *testing.T) {
 	user := indexWhere(rs, func(r map[string]any) bool { return r["process_name"] != nil })
 	require.Equal(t, "proxy-a", rs[user]["outbound"])
 	require.True(t, indexWhere(rs, func(r map[string]any) bool { return r["clash_mode"] == "Global" }) < user)
+}
+
+func clashGlobalIndexes(rs []map[string]any) (lan, v6block, proxy int) {
+	lan, v6block, proxy = -1, -1, -1
+	for i, r := range rs {
+		if r["clash_mode"] != "Global" {
+			continue
+		}
+		cidrs, _ := r["ip_cidr"].([]any)
+		switch {
+		case r["outbound"] == "proxy" && cidrs == nil:
+			proxy = i
+		case r["outbound"] == "block" && len(cidrs) == 1 && cidrs[0] == "::/0":
+			v6block = i
+		case r["outbound"] == "direct":
+			for _, c := range cidrs {
+				if c == "192.168.0.0/16" {
+					lan = i
+				}
+			}
+		}
+	}
+	return
+}
+
+func TestBuildSingbox_GlobalModeKeepsLanBypassAndV6Block_DefaultModel(t *testing.T) {
+	raw, err := BuildSingbox(&SingboxInput{
+		Mode: ModeTun, TunName: "ITGRay-TUN", TunIPv4: "198.18.0.1/15", TunIPv6: "fdfe:dcba:9876::1/126",
+		XraySOCKSHost: "127.0.0.1", XraySOCKSPort: 1081,
+		Rules:    rules.DefaultModel(),
+		ClashAPI: &ClashAPI{Port: ClashAPIPort, Secret: "x"},
+	})
+	require.NoError(t, err)
+	_, rs := routeOf(t, raw)
+	lan, v6, proxy := clashGlobalIndexes(rs)
+	require.True(t, lan >= 0 && lan < proxy, "LAN bypass must precede Global→proxy: %v", rs)
+	require.True(t, v6 >= 0 && v6 < proxy, "::/0 block must precede Global→proxy when IPv6 is disabled: %v", rs)
+}
+
+func TestBuildSingbox_GlobalModeKeepsLanBypass_Sysproxy(t *testing.T) {
+	raw, err := BuildSingbox(&SingboxInput{
+		Mode: ModeSysProxy, SocksInboundPort: 1080, XraySOCKSHost: "127.0.0.1", XraySOCKSPort: 1081,
+		Rules:    rules.DefaultModel(),
+		ClashAPI: &ClashAPI{Port: ClashAPIPort, Secret: "x"},
+	})
+	require.NoError(t, err)
+	_, rs := routeOf(t, raw)
+	lan, v6, proxy := clashGlobalIndexes(rs)
+	require.True(t, lan >= 0 && lan < proxy, "LAN bypass must precede Global→proxy: %v", rs)
+	require.Equal(t, -1, v6)
+}
+
+func TestBuildSingbox_RuleModeKeepsUnconditionalLanBypass_SafetyDisabled(t *testing.T) {
+	m := rules.DefaultModel()
+	for i := range m.Groups {
+		m.Groups[i].Enabled = false
+	}
+	raw, err := BuildSingbox(&SingboxInput{
+		Mode: ModeTun, TunName: "ITGRay-TUN", TunIPv4: "198.18.0.1/15",
+		XraySOCKSHost: "127.0.0.1", XraySOCKSPort: 1081,
+		Rules:    m,
+		ClashAPI: &ClashAPI{Port: ClashAPIPort, Secret: "x"},
+	})
+	require.NoError(t, err)
+	_, rs := routeOf(t, raw)
+	found := indexWhere(rs, func(r map[string]any) bool {
+		_, conditional := r["clash_mode"]
+		cidrs, _ := r["ip_cidr"].([]any)
+		return !conditional && r["outbound"] == "direct" && len(cidrs) > 1
+	})
+	require.True(t, found >= 0, "unconditional LAN bypass missing: %v", rs)
 }
