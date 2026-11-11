@@ -299,10 +299,12 @@
       "label": "Protocol {{p}}"
     },
     "server": {
-      "label": "Through",
+      "label": "Server",
       "current": "Current server",
       "search": "Search servers…",
-      "none": "Nothing found"
+      "none": "Nothing found",
+      "currentHint": "Follows the server picked on the dashboard",
+      "manual": "Added manually"
     }
   },
   "settings": {

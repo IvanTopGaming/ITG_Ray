@@ -1,3 +1,4 @@
+import type React from "react";
 import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import type { Action } from "@/lib/rulesStore";
@@ -30,7 +31,7 @@ function actionWrapperTint(action: Action): string {
   }
 }
 
-export function ActionSelector({ value, onChange }: { value: Action; onChange: (v: Action) => void }) {
+export function ActionSelector({ value, onChange, children }: { value: Action; onChange: (v: Action) => void; children?: React.ReactNode }) {
   const { t } = useTranslation();
   return (
     <div
@@ -65,6 +66,7 @@ export function ActionSelector({ value, onChange }: { value: Action; onChange: (
           );
         })}
       </div>
+      {children}
     </div>
   );
 }

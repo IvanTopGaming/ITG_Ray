@@ -271,25 +271,26 @@ export function RuleEditor() {
             void _c;
             setDraft({ ...rest, action });
           }}
-        />
-        {draft.action === "proxy" && (
-          <ServerPicker
-            value={draft.server_id ?? null}
-            fallbackName={draft.server_name}
-            servers={allServers}
-            onChange={(s) => {
-              const { server_id: _a, server_source_id: _b, server_name: _c, ...rest } = draft;
-              void _a;
-              void _b;
-              void _c;
-              setDraft(
-                s
-                  ? { ...rest, server_id: s.id, server_source_id: s.sourceId || undefined, server_name: s.name }
-                  : rest,
-              );
-            }}
-          />
-        )}
+        >
+          {draft.action === "proxy" && (
+            <ServerPicker
+              value={draft.server_id ?? null}
+              fallbackName={draft.server_name}
+              servers={allServers}
+              onChange={(s) => {
+                const { server_id: _a, server_source_id: _b, server_name: _c, ...rest } = draft;
+                void _a;
+                void _b;
+                void _c;
+                setDraft(
+                  s
+                    ? { ...rest, server_id: s.id, server_source_id: s.sourceId || undefined, server_name: s.name }
+                    : rest,
+                );
+              }}
+            />
+          )}
+        </ActionSelector>
       </motion.section>
 
       <ConfirmDialog
