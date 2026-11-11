@@ -6,6 +6,8 @@ import {
   Remove as RemoveSub,
   SyncOne as SyncOneSub,
   SyncAll as SyncAllSubs,
+  CancelSync as CancelSyncSub,
+  CancelAll as CancelAllSubs,
 } from "@/lib/itg/SubsService";
 import { EventsOn } from "@/lib/itg/runtime";
 import { backendToFrontend, type Sub } from "./subsAdapter";
@@ -25,7 +27,10 @@ export type InFlight = {
 export type SubsState = {
   load: LoadState;
   inFlight: InFlight;
+  canceled: Set<string>;
 };
+
+export const CANCELED_NOTICE_MS = 4000;
 
 let state: SubsState = {
   load: { kind: "loading" },
@@ -35,6 +40,7 @@ let state: SubsState = {
     adding: false,
     editing: new Set(),
   },
+  canceled: new Set(),
 };
 
 const listeners = new Set<() => void>();
@@ -63,7 +69,13 @@ let eventsRegistered = false;
 function ensureEventsRegistered(): void {
   if (eventsRegistered) return;
   eventsRegistered = true;
-  EventsOn("sub:synced", () => {
+  EventsOn("sub:synced", (payload?: unknown) => {
+    const id = (payload as { id?: unknown } | undefined)?.id;
+    if (typeof id === "string" && state.inFlight.syncing.has(id)) {
+      const syncing = new Set(state.inFlight.syncing);
+      syncing.delete(id);
+      setState({ ...state, inFlight: { ...state.inFlight, syncing } });
+    }
     scheduleRefetch();
   });
 }
@@ -120,8 +132,35 @@ export type SubsActions = {
   remove: (id: string) => Promise<void>;
   syncOne: (id: string) => Promise<void>;
   syncAll: () => Promise<void>;
+  cancelSync: (id: string) => Promise<void>;
+  cancelAll: () => Promise<void>;
   refresh: () => Promise<void>;
 };
+
+const canceledTimers = new Map<string, number>();
+
+function markCanceled(ids: Iterable<string>): void {
+  const canceled = new Set(state.canceled);
+  for (const id of ids) {
+    canceled.add(id);
+    const prev = canceledTimers.get(id);
+    if (prev !== undefined) window.clearTimeout(prev);
+    canceledTimers.set(id, window.setTimeout(() => {
+      canceledTimers.delete(id);
+      const next = new Set(state.canceled);
+      next.delete(id);
+      setState({ ...state, canceled: next });
+    }, CANCELED_NOTICE_MS));
+  }
+  setState({ ...state, canceled });
+}
+
+export function isSyncCanceledError(err: unknown): boolean {
+  const s = err instanceof Error ? err.message : String(err);
+  return /sync canceled/i.test(s);
+}
+
+let cancelAllRequested = false;
 
 // Module-scope action implementations. Tasks 6-9 replace the throwing stubs.
 async function addAction(url: string, userAgent?: string): Promise<void> {
@@ -206,6 +245,10 @@ async function syncOneAction(id: string): Promise<void> {
   });
   try {
     await SyncOneSub(id);
+  } catch (err) {
+    if (!isSyncCanceledError(err)) throw err;
+    markCanceled([id]);
+    scheduleRefetch();
   } finally {
     const syncingDone = new Set(state.inFlight.syncing);
     syncingDone.delete(id);
@@ -225,13 +268,34 @@ async function syncAllAction(): Promise<void> {
     },
     inFlight: { ...state.inFlight, syncing: syncingNext },
   });
+  cancelAllRequested = false;
   try {
     await SyncAllSubs();
   } finally {
+    if (cancelAllRequested) {
+      cancelAllRequested = false;
+      const unfinished = ids.filter(id => state.inFlight.syncing.has(id));
+      if (unfinished.length > 0) markCanceled(unfinished);
+      scheduleRefetch();
+    }
     const syncingDone = new Set(state.inFlight.syncing);
     for (const id of ids) syncingDone.delete(id);
     setState({ ...state, inFlight: { ...state.inFlight, syncing: syncingDone } });
   }
+}
+
+async function cancelSyncAction(id: string): Promise<void> {
+  const tracked = state.inFlight.syncing.has(id);
+  await CancelSyncSub(id);
+  if (!tracked) {
+    markCanceled([id]);
+    scheduleRefetch();
+  }
+}
+
+async function cancelAllAction(): Promise<void> {
+  cancelAllRequested = true;
+  await CancelAllSubs();
 }
 
 const actions: SubsActions = {
@@ -240,6 +304,8 @@ const actions: SubsActions = {
   remove: removeAction,
   syncOne: syncOneAction,
   syncAll: syncAllAction,
+  cancelSync: cancelSyncAction,
+  cancelAll: cancelAllAction,
   refresh,
 };
 
@@ -254,7 +320,11 @@ export function __resetForTests(): void {
   state = {
     load: { kind: "loading" },
     inFlight: { syncing: new Set(), removing: new Set(), adding: false, editing: new Set() },
+    canceled: new Set(),
   };
+  for (const timer of canceledTimers.values()) window.clearTimeout(timer);
+  canceledTimers.clear();
+  cancelAllRequested = false;
   listeners.clear();
   initStarted = false;
   eventsRegistered = false;

@@ -90,6 +90,8 @@ type SubsService interface {
 	Remove(p SubsRemoveParams) (Empty, error)
 	SyncOne(p SubsSyncOneParams) (hub.SubView, error)
 	SyncAll(p Empty) (Empty, error)
+	CancelSync(p SubsCancelSyncParams) (Empty, error)
+	CancelAll(p Empty) (Empty, error)
 }
 
 type SubsAddParams struct {
@@ -108,6 +110,10 @@ type SubsRemoveParams struct {
 }
 
 type SubsSyncOneParams struct {
+	ID string `json:"id"`
+}
+
+type SubsCancelSyncParams struct {
 	ID string `json:"id"`
 }
 

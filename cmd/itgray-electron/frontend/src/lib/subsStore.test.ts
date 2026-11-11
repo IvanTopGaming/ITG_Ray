@@ -7,6 +7,8 @@ const mockEdit = vi.fn();
 const mockRemove = vi.fn();
 const mockSyncOne = vi.fn();
 const mockSyncAll = vi.fn();
+const mockCancelSync = vi.fn();
+const mockCancelAll = vi.fn();
 const mockEventsOn = vi.fn((_eventName: string, _callback: (...data: unknown[]) => void) => () => {});
 
 vi.mock("@/lib/itg/SubsService", () => ({
@@ -16,6 +18,8 @@ vi.mock("@/lib/itg/SubsService", () => ({
   Remove: (...args: unknown[]) => mockRemove(...args),
   SyncOne: (...args: unknown[]) => mockSyncOne(...args),
   SyncAll: (...args: unknown[]) => mockSyncAll(...args),
+  CancelSync: (...args: unknown[]) => mockCancelSync(...args),
+  CancelAll: (...args: unknown[]) => mockCancelAll(...args),
 }));
 vi.mock("@/lib/itg/runtime", () => ({
   EventsOn: (eventName: string, callback: (...data: unknown[]) => void) => mockEventsOn(eventName, callback),
@@ -548,5 +552,118 @@ describe("humanizeError", () => {
   it("falls back to the raw string with the 'Error: ' prefix stripped", async () => {
     const { humanizeError } = await import("./subsStore");
     expect(humanizeError(new Error("Error: weird thing"))).toBe("weird thing");
+  });
+});
+
+describe("subsStore cancel", () => {
+  const seed = [
+    { id: "s1", name: "a", url: "https://1", lastSyncAt: "0001-01-01T00:00:00Z", lastSyncStatus: "", serverCount: 0, updateInterval: 3600 },
+    { id: "s2", name: "b", url: "https://2", lastSyncAt: "0001-01-01T00:00:00Z", lastSyncStatus: "", serverCount: 0, updateInterval: 3600 },
+  ];
+  let syncedHandler: ((payload?: unknown) => void) | null = null;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    syncedHandler = null;
+    mockEventsOn.mockImplementation((_n: string, h: (...data: unknown[]) => void) => {
+      syncedHandler = h;
+      return () => {};
+    });
+    const mod = await import("./subsStore");
+    mod.__resetForTests();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    mockEventsOn.mockImplementation(() => () => {});
+  });
+
+  async function mount() {
+    mockList.mockResolvedValue(seed);
+    const { useSubs } = await import("./subsStore");
+    const hook = renderHook(() => useSubs());
+    await act(async () => { await vi.runAllTimersAsync(); });
+    return hook;
+  }
+
+  it("a canceled syncOne resolves quietly, marks the row canceled and refetches", async () => {
+    const { result } = await mount();
+    let rejectSync: ((e: Error) => void) | null = null;
+    mockSyncOne.mockImplementationOnce(() => new Promise<void>((_, rej) => { rejectSync = rej; }));
+    mockCancelSync.mockImplementationOnce(async () => { rejectSync!(new Error("subscription sync canceled")); });
+
+    let syncPromise!: Promise<void>;
+    await act(async () => {
+      syncPromise = result.current.actions.syncOne("s1");
+      await Promise.resolve();
+    });
+    const listCalls = mockList.mock.calls.length;
+    await act(async () => {
+      await result.current.actions.cancelSync("s1");
+      await syncPromise;
+    });
+
+    expect(mockCancelSync).toHaveBeenCalledWith("s1");
+    expect(result.current.state.inFlight.syncing.has("s1")).toBe(false);
+    expect(result.current.state.canceled.has("s1")).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(60); });
+    expect(mockList.mock.calls.length).toBe(listCalls + 1);
+  });
+
+  it("the canceled mark expires after CANCELED_NOTICE_MS", async () => {
+    const { result } = await mount();
+    mockSyncOne.mockRejectedValueOnce(new Error("subscription sync canceled"));
+    await act(async () => { await result.current.actions.syncOne("s1"); });
+    expect(result.current.state.canceled.has("s1")).toBe(true);
+    const { CANCELED_NOTICE_MS } = await import("./subsStore");
+    await act(async () => { await vi.advanceTimersByTimeAsync(CANCELED_NOTICE_MS + 10); });
+    expect(result.current.state.canceled.has("s1")).toBe(false);
+  });
+
+  it("non-cancel errors still reject and are not marked canceled", async () => {
+    const { result } = await mount();
+    mockSyncOne.mockRejectedValueOnce(new Error("network gone"));
+    await act(async () => {
+      await expect(result.current.actions.syncOne("s1")).rejects.toThrow(/network gone/);
+    });
+    expect(result.current.state.canceled.size).toBe(0);
+  });
+
+  it("cancelAll marks only the subscriptions that had not finished yet", async () => {
+    const { result } = await mount();
+    let resolveAll: (() => void) | null = null;
+    mockSyncAll.mockImplementationOnce(() => new Promise<void>(res => { resolveAll = res; }));
+    mockCancelAll.mockResolvedValueOnce(undefined);
+
+    let allPromise!: Promise<void>;
+    await act(async () => {
+      allPromise = result.current.actions.syncAll();
+      await Promise.resolve();
+    });
+    act(() => { syncedHandler!({ id: "s2", status: "ok" }); });
+    expect(result.current.state.inFlight.syncing.has("s2")).toBe(false);
+    expect(result.current.state.inFlight.syncing.has("s1")).toBe(true);
+
+    await act(async () => {
+      await result.current.actions.cancelAll();
+      resolveAll!();
+      await allPromise;
+    });
+
+    expect(mockCancelAll).toHaveBeenCalledTimes(1);
+    expect(result.current.state.canceled.has("s1")).toBe(true);
+    expect(result.current.state.canceled.has("s2")).toBe(false);
+    expect(result.current.state.inFlight.syncing.size).toBe(0);
+  });
+
+  it("canceling a sync the page did not start (e.g. after Add) refetches to restore status", async () => {
+    const { result } = await mount();
+    mockCancelSync.mockResolvedValueOnce(undefined);
+    const listCalls = mockList.mock.calls.length;
+    await act(async () => { await result.current.actions.cancelSync("s2"); });
+    expect(result.current.state.canceled.has("s2")).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(60); });
+    expect(mockList.mock.calls.length).toBe(listCalls + 1);
   });
 });

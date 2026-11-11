@@ -25,6 +25,8 @@ type fakeSubs struct {
 	gotEditID, gotEditURL, gotEditUA string
 	gotRemoveID, gotSyncOneID        string
 	syncAllCalled                    bool
+	gotCancelID                      string
+	cancelAllCalled                  bool
 }
 
 func (f *fakeSubs) List() ([]hub.SubView, error) {
@@ -49,6 +51,51 @@ func (f *fakeSubs) SyncOne(id string) error {
 func (f *fakeSubs) SyncAll() error {
 	f.syncAllCalled = true
 	return f.syncAllErr
+}
+func (f *fakeSubs) CancelSync(id string) {
+	f.gotCancelID = id
+}
+func (f *fakeSubs) CancelAll() {
+	f.cancelAllCalled = true
+}
+
+func TestSubsCancelSyncPassesID(t *testing.T) {
+	fake := &fakeSubs{}
+	h := SubsHandlers{Svc: fake}
+	if _, err := h.CancelSync(context.Background(), json.RawMessage(`{"id":"u9"}`)); err != nil {
+		t.Fatalf("CancelSync: %v", err)
+	}
+	if fake.gotCancelID != "u9" {
+		t.Fatalf("id: got %q", fake.gotCancelID)
+	}
+}
+
+func TestSubsCancelSyncInvalidParams(t *testing.T) {
+	h := SubsHandlers{Svc: &fakeSubs{}}
+	if _, err := h.CancelSync(context.Background(), json.RawMessage(`{`)); err == nil {
+		t.Fatalf("expected error on malformed params")
+	}
+}
+
+func TestSubsCancelAllNoArgs(t *testing.T) {
+	fake := &fakeSubs{}
+	h := SubsHandlers{Svc: fake}
+	if _, err := h.CancelAll(context.Background(), nil); err != nil {
+		t.Fatalf("CancelAll: %v", err)
+	}
+	if !fake.cancelAllCalled {
+		t.Fatalf("CancelAll not invoked")
+	}
+}
+
+func TestSubsCancelNilSvc(t *testing.T) {
+	h := SubsHandlers{}
+	if _, err := h.CancelSync(context.Background(), json.RawMessage(`{"id":"x"}`)); err != nil {
+		t.Fatalf("CancelSync: %v", err)
+	}
+	if _, err := h.CancelAll(context.Background(), nil); err != nil {
+		t.Fatalf("CancelAll: %v", err)
+	}
 }
 
 func TestSubsListReturnsViews(t *testing.T) {

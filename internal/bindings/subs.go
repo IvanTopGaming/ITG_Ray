@@ -45,6 +45,8 @@ var errInvalidURL = errors.New("subscription URL must be http or https")
 // from servers.go.
 var errSubNotFound = errors.New("subscription not found")
 
+var ErrSyncCanceled = errors.New("subscription sync canceled")
+
 // SubsDeps groups dependencies passed in from main.go. SubStore reads/writes
 // the persisted subscriptions; ServerStore is reused so List can compute
 // the per-sub server count without re-walking the on-disk servers.json,
@@ -66,7 +68,76 @@ type SubsDeps struct {
 // SubsService implements the Subs.* Wails bindings. C.T7 ships List + Add
 // + Remove + SyncOne + SyncAll. Edit / Export / per-sub UpdateInterval
 // changes land in later tasks.
-type SubsService struct{ d SubsDeps }
+type SubsService struct {
+	d       SubsDeps
+	cancels syncCancels
+}
+
+type syncCancels struct {
+	mu   sync.Mutex
+	next uint64
+	byID map[string]map[uint64]context.CancelFunc
+	all  map[uint64]context.CancelFunc
+}
+
+func (c *syncCancels) track(id string, cancel context.CancelFunc) func() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.byID == nil {
+		c.byID = make(map[string]map[uint64]context.CancelFunc)
+	}
+	if c.byID[id] == nil {
+		c.byID[id] = make(map[uint64]context.CancelFunc)
+	}
+	c.next++
+	key := c.next
+	c.byID[id][key] = cancel
+	return func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		delete(c.byID[id], key)
+		if len(c.byID[id]) == 0 {
+			delete(c.byID, id)
+		}
+	}
+}
+
+func (c *syncCancels) trackAll(cancel context.CancelFunc) func() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.all == nil {
+		c.all = make(map[uint64]context.CancelFunc)
+	}
+	c.next++
+	key := c.next
+	c.all[key] = cancel
+	return func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		delete(c.all, key)
+	}
+}
+
+func (c *syncCancels) cancel(id string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, cancel := range c.byID[id] {
+		cancel()
+	}
+}
+
+func (c *syncCancels) cancelAll() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, cancel := range c.all {
+		cancel()
+	}
+	for _, byKey := range c.byID {
+		for _, cancel := range byKey {
+			cancel()
+		}
+	}
+}
 
 // NewSubsService constructs a new SubsService. SubsDeps is passed by value
 // because the struct is small (a handful of interface/pointer fields) and the
@@ -299,12 +370,25 @@ func (s *SubsService) Edit(id, rawURL, userAgent string) (hub.SubView, error) {
 // the frontend's applySubSync reducer treats an ERROR status as a UI
 // signal (red badge) just as much as OK is (green badge with new count).
 //
-// The Wails binding signature drops ctx (Wails v2.11 does not auto-inject
-// it for service methods); subscription.Sync receives a fresh
-// context.Background() bounded by syncTimeout (30s). Accepted tradeoff:
-// no per-call cancellation from the frontend.
+// The fetch is bounded by syncTimeout (30s) and can be aborted early via
+// CancelSync / CancelAll; a canceled sync returns ErrSyncCanceled and leaves
+// servers.json and the sub's meta untouched.
 func (s *SubsService) SyncOne(id string) error {
-	ctx := context.Background()
+	return s.syncOne(context.Background(), id)
+}
+
+func (s *SubsService) CancelSync(id string) {
+	s.cancels.cancel(id)
+}
+
+func (s *SubsService) CancelAll() {
+	s.cancels.cancelAll()
+}
+
+func (s *SubsService) syncOne(parent context.Context, id string) error {
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
+	defer s.cancels.track(id, cancel)()
 	subs, err := s.d.SubStore.Load()
 	if err != nil {
 		return fmt.Errorf("sub.Load: %w", err)
@@ -342,6 +426,11 @@ func (s *SubsService) SyncOne(id string) error {
 	// itself succeeded, regardless of whether the disk write that follows
 	// it succeeds.
 	syncOK := syncErr == nil
+
+	if ctx.Err() != nil {
+		slog.Info("sub sync canceled", slog.String("scope", "subs"), slog.String("id", id))
+		return ErrSyncCanceled
+	}
 
 	s.d.StoreLock.Lock()
 	current, err := s.d.SubStore.Load()
@@ -448,19 +537,36 @@ func (s *SubsService) SyncAll() error {
 		return fmt.Errorf("sub.Load: %w", err)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defer s.cancels.trackAll(cancel)()
+
 	var (
-		mu         sync.Mutex
-		ok, failed int
-		wg         sync.WaitGroup
+		mu                   sync.Mutex
+		ok, failed, canceled int
+		wg                   sync.WaitGroup
 	)
 	sem := make(chan struct{}, maxConcurrentSyncs)
+queue:
 	for _, sub := range subs {
-		sem <- struct{}{}
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			break queue
+		}
+		if ctx.Err() != nil {
+			<-sem
+			break
+		}
 		wg.Go(func() {
 			defer func() { <-sem }()
-			err := s.SyncOne(sub.ID)
+			err := s.syncOne(ctx, sub.ID)
 			mu.Lock()
 			defer mu.Unlock()
+			if errors.Is(err, ErrSyncCanceled) {
+				canceled++
+				return
+			}
 			if err != nil {
 				failed++
 				slog.Warn("sub sync skipped", slog.String("scope", "subs"),
@@ -473,7 +579,7 @@ func (s *SubsService) SyncAll() error {
 	wg.Wait()
 
 	slog.Info("subs sync complete", slog.String("scope", "subs"),
-		slog.Int("ok", ok), slog.Int("failed", failed))
+		slog.Int("ok", ok), slog.Int("failed", failed), slog.Int("canceled", canceled))
 	return nil
 }
 
