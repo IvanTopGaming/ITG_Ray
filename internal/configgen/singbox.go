@@ -26,6 +26,16 @@ const (
 
 // SingboxInput collects everything BuildSingbox needs to emit a sing-box config.
 // TunName and TunIPv4 are only consumed when Mode == ModeTun.
+type SingboxProxy struct {
+	Tag  string
+	Port int
+}
+
+type ClashAPI struct {
+	Port   int
+	Secret string
+}
+
 type SingboxInput struct {
 	Mode Mode
 	// SocksInboundPort / HTTPInboundPort are the loopback proxy listeners.
@@ -73,6 +83,10 @@ type SingboxInput struct {
 	// this in before BuildSingbox so sing-box loads rule-sets locally with
 	// no network at startup. Empty → no geo rules referenced.
 	GeoRuleSets map[string]string
+
+	ExtraProxies []SingboxProxy
+	RuleOutbound func(r *rules.Rule) string
+	ClashAPI     *ClashAPI
 }
 
 // logLevelOrDefault returns a valid sing-box log level, defaulting to
@@ -436,7 +450,7 @@ func applyTunModeKillswitch(route map[string]any, lanBypassPrepended bool, block
 // engine driving routing decisions. The "proxy" outbound is a SOCKS5 client
 // pointed at the embedded xray-core's local listener.
 func BuildSingbox(in *SingboxInput) ([]byte, error) {
-	ruleBytes, err := rules.Compile(in.Rules)
+	ruleBytes, err := rules.CompileWith(in.Rules, in.RuleOutbound)
 	if err != nil {
 		slog.Error("singbox build failed", slog.String("scope", "configgen"),
 			slog.String("stage", "compile rules"), slog.String("err", err.Error()))
@@ -447,6 +461,19 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 		slog.Error("singbox build failed", slog.String("scope", "configgen"),
 			slog.String("stage", "unmarshal route"), slog.String("err", err.Error()))
 		return nil, err
+	}
+
+	if in.ClashAPI != nil {
+		clashRules := []any{
+			map[string]any{"clash_mode": "Direct", "outbound": "direct"},
+			map[string]any{"clash_mode": "Global", "outbound": "proxy"},
+		}
+		switch existing := route["rules"].(type) {
+		case []any:
+			route["rules"] = append(clashRules, existing...)
+		default:
+			route["rules"] = clashRules
+		}
 	}
 
 	// Prepend sniff action rule (sing-box 1.13+: legacy inbound sniff fields replaced by route rule actions).
@@ -549,6 +576,28 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 			{"type": "block", "tag": "block"},
 		},
 		"route": route,
+	}
+	if len(in.ExtraProxies) > 0 {
+		outbounds := doc["outbounds"].([]map[string]any)
+		for _, p := range in.ExtraProxies {
+			outbounds = append(outbounds, map[string]any{
+				"type":        "socks",
+				"tag":         p.Tag,
+				"server":      in.XraySOCKSHost,
+				"server_port": p.Port,
+				"version":     "5",
+			})
+		}
+		doc["outbounds"] = outbounds
+	}
+	if in.ClashAPI != nil {
+		doc["experimental"] = map[string]any{
+			"clash_api": map[string]any{
+				"external_controller": fmt.Sprintf("127.0.0.1:%d", in.ClashAPI.Port),
+				"secret":              in.ClashAPI.Secret,
+				"default_mode":        "Rule",
+			},
+		}
 	}
 	if tags := collectRuleSetTags(route); len(tags) > 0 {
 		decls := make([]map[string]any, 0, len(tags))

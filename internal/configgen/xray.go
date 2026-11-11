@@ -26,39 +26,65 @@ type XrayInput struct {
 	// The override only swaps the dial target. Reality/TLS SNI is unaffected
 	// because buildStream populates serverName from c.SNI, not c.Address.
 	ServerIP string
+	Extra    []XrayServer
+}
+
+type XrayServer struct {
+	Tag       string
+	Server    vless.Config
+	ServerIP  string
+	SocksPort int
+}
+
+const ClashAPIPort = 13356
+
+func ExtraTag(serverID string) string {
+	return "proxy-" + serverID
 }
 
 // BuildXray emits an xray-core config: SOCKS5 inbound on 127.0.0.1:SocksPort,
 // VLESS outbound configured for the given server (Reality/TLS/None + transport).
 func BuildXray(in *XrayInput) ([]byte, error) {
-	stream := buildStream(&in.Server)
-
-	// Pre-resolved IP literal wins over hostname when caller supplies one
-	// (TUN/FakeIP-loop mitigation; see ServerIP doc above).
-	address := in.Server.Address
-	if in.ServerIP != "" {
-		address = in.ServerIP
-	}
-
-	out := map[string]any{
-		"protocol": "vless",
-		"tag":      "proxy",
-		"settings": map[string]any{
-			"vnext": []map[string]any{
-				{
-					"address": address,
-					"port":    int(in.Server.Port),
-					"users": []map[string]any{
-						{
-							"id":         in.Server.UUID,
-							"flow":       in.Server.Flow,
-							"encryption": orDefaultStr(in.Server.Encryption, "none"),
-						},
-					},
-				},
-			},
+	inbounds := []map[string]any{
+		{
+			"tag":      "socks-in",
+			"listen":   "127.0.0.1",
+			"port":     in.SocksPort,
+			"protocol": "socks",
+			"settings": map[string]any{"udp": true, "auth": "noauth"},
 		},
-		"streamSettings": stream,
+		{
+			"tag":      "api",
+			"listen":   "127.0.0.1",
+			"port":     XrayAPIPort,
+			"protocol": "dokodemo-door",
+			"settings": map[string]any{"address": "127.0.0.1"},
+		},
+	}
+	outbounds := []map[string]any{vlessOutbound("proxy", &in.Server, in.ServerIP)}
+	routingRules := []map[string]any{
+		{
+			"type":        "field",
+			"inboundTag":  []string{"api"},
+			"outboundTag": "api",
+		},
+	}
+	for i := range in.Extra {
+		x := &in.Extra[i]
+		inTag := "socks-in-" + x.Tag
+		inbounds = append(inbounds, map[string]any{
+			"tag":      inTag,
+			"listen":   "127.0.0.1",
+			"port":     x.SocksPort,
+			"protocol": "socks",
+			"settings": map[string]any{"udp": true, "auth": "noauth"},
+		})
+		outbounds = append(outbounds, vlessOutbound(x.Tag, &x.Server, x.ServerIP))
+		routingRules = append(routingRules, map[string]any{
+			"type":        "field",
+			"inboundTag":  []string{inTag},
+			"outboundTag": x.Tag,
+		})
 	}
 
 	doc := map[string]any{
@@ -67,33 +93,10 @@ func BuildXray(in *XrayInput) ([]byte, error) {
 			"tag":      "api",
 			"services": []string{"StatsService"},
 		},
-		"inbounds": []map[string]any{
-			{
-				"tag":      "socks-in",
-				"listen":   "127.0.0.1",
-				"port":     in.SocksPort,
-				"protocol": "socks",
-				"settings": map[string]any{"udp": true, "auth": "noauth"},
-			},
-			{
-				"tag":      "api",
-				"listen":   "127.0.0.1",
-				"port":     XrayAPIPort,
-				"protocol": "dokodemo-door",
-				"settings": map[string]any{"address": "127.0.0.1"},
-			},
-		},
-		"outbounds": []map[string]any{out},
-		"routing": map[string]any{
-			"rules": []map[string]any{
-				{
-					"type":        "field",
-					"inboundTag":  []string{"api"},
-					"outboundTag": "api",
-				},
-			},
-		},
-		"stats": map[string]any{},
+		"inbounds":  inbounds,
+		"outbounds": outbounds,
+		"routing":   map[string]any{"rules": routingRules},
+		"stats":     map[string]any{},
 		"policy": map[string]any{
 			"system": map[string]any{
 				"statsInboundUplink":    true,
@@ -104,6 +107,38 @@ func BuildXray(in *XrayInput) ([]byte, error) {
 		},
 	}
 	return json.MarshalIndent(doc, "", "  ")
+}
+
+func vlessOutbound(tag string, server *vless.Config, serverIP string) map[string]any {
+	stream := buildStream(server)
+
+	// Pre-resolved IP literal wins over hostname when caller supplies one
+	// (TUN/FakeIP-loop mitigation; see ServerIP doc above).
+	address := server.Address
+	if serverIP != "" {
+		address = serverIP
+	}
+
+	return map[string]any{
+		"protocol": "vless",
+		"tag":      tag,
+		"settings": map[string]any{
+			"vnext": []map[string]any{
+				{
+					"address": address,
+					"port":    int(server.Port),
+					"users": []map[string]any{
+						{
+							"id":         server.UUID,
+							"flow":       server.Flow,
+							"encryption": orDefaultStr(server.Encryption, "none"),
+						},
+					},
+				},
+			},
+		},
+		"streamSettings": stream,
+	}
 }
 
 func buildStream(c *vless.Config) map[string]any {
