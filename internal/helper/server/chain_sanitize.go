@@ -1,6 +1,8 @@
 package server
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"net"
 	"path/filepath"
@@ -68,9 +70,23 @@ func sanitizeCoreConfig(kind string, raw []byte, runtimeDir string) []byte {
 		}
 		for _, exp := range foldMaps(doc, "experimental") {
 			for _, api := range foldMaps(exp, "clash_api") {
+				hasSecret := false
+				for k, v := range api {
+					if strings.EqualFold(k, "secret") {
+						if sv, ok := v.(string); ok && sv != "" {
+							hasSecret = true
+						} else {
+							delete(api, k)
+						}
+					}
+				}
+				if !hasSecret {
+					api["secret"] = randomSecret()
+					changed = true
+				}
 				for k, v := range api {
 					switch strings.ToLower(k) {
-					case "external_ui", "external_ui_download_url", "external_ui_download_detour":
+					case "external_ui", "external_ui_download_url", "external_ui_download_detour", "access_control_allow_private_network":
 						delete(api, k)
 						changed = true
 					case "external_controller":
@@ -132,4 +148,10 @@ func loopbackController(addr string) string {
 		return "127.0.0.1:0"
 	}
 	return net.JoinHostPort("127.0.0.1", port)
+}
+
+func randomSecret() string {
+	b := make([]byte, 32)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }

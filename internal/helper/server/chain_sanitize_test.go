@@ -190,3 +190,36 @@ func TestSanitize_ForcesClashControllerOntoLoopback(t *testing.T) {
 		}
 	}
 }
+
+func TestSanitize_ClashAPIRequiresSecretAndDropsPrivateNetworkCORS(t *testing.T) {
+	for _, in := range []string{
+		`{"experimental":{"clash_api":{"external_controller":"127.0.0.1:1","access_control_allow_private_network":true}}}`,
+		`{"experimental":{"clash_api":{"external_controller":"127.0.0.1:1","Secret":""}}}`,
+	} {
+		out := sanitizeCoreConfig("sing-box", []byte(in), t.TempDir())
+		var doc map[string]map[string]map[string]any
+		if err := json.Unmarshal(out, &doc); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		api := doc["experimental"]["clash_api"]
+		secret := ""
+		for k, v := range api {
+			if strings.EqualFold(k, "secret") {
+				secret, _ = v.(string)
+			}
+			if strings.EqualFold(k, "access_control_allow_private_network") {
+				t.Fatalf("private-network CORS survived: %s", out)
+			}
+		}
+		if len(secret) < 32 {
+			t.Fatalf("empty clash secret not replaced: %s", out)
+		}
+	}
+}
+
+func TestSanitize_KeepsProvidedClashSecret(t *testing.T) {
+	out := sanitizeCoreConfig("sing-box", []byte(`{"experimental":{"clash_api":{"external_controller":"127.0.0.1:1","secret":"abc"}}}`), t.TempDir())
+	if v, _ := pathField(t, out, "experimental.clash_api.secret"); v != "abc" {
+		t.Fatalf("provided secret changed: %s", out)
+	}
+}
