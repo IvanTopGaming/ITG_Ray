@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"net"
 	"path/filepath"
 	"strings"
 )
@@ -67,11 +68,18 @@ func sanitizeCoreConfig(kind string, raw []byte, runtimeDir string) []byte {
 		}
 		for _, exp := range foldMaps(doc, "experimental") {
 			for _, api := range foldMaps(exp, "clash_api") {
-				for k := range api {
+				for k, v := range api {
 					switch strings.ToLower(k) {
 					case "external_ui", "external_ui_download_url", "external_ui_download_detour":
 						delete(api, k)
 						changed = true
+					case "external_controller":
+						if addr, ok := v.(string); ok {
+							if fixed := loopbackController(addr); fixed != addr {
+								api[k] = fixed
+								changed = true
+							}
+						}
 					}
 				}
 			}
@@ -116,4 +124,12 @@ func foldMaps(m map[string]any, key string) []map[string]any {
 		}
 	}
 	return out
+}
+
+func loopbackController(addr string) string {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil || port == "" {
+		return "127.0.0.1:0"
+	}
+	return net.JoinHostPort("127.0.0.1", port)
 }

@@ -168,3 +168,25 @@ func TestSanitize_ConfinesCaseVariantPaths(t *testing.T) {
 		t.Fatalf("case-variant xray path escaped sanitize: %s", xr)
 	}
 }
+
+func TestSanitize_ForcesClashControllerOntoLoopback(t *testing.T) {
+	cases := map[string]string{
+		`0.0.0.0:13356`:    "127.0.0.1:13356",
+		`:9090`:            "127.0.0.1:9090",
+		`192.168.1.5:9090`: "127.0.0.1:9090",
+		`[::]:9090`:        "127.0.0.1:9090",
+		`127.0.0.1:13356`:  "127.0.0.1:13356",
+	}
+	for in, want := range cases {
+		raw := []byte(`{"experimental":{"Clash_API":{"External_Controller":"` + in + `","secret":"s"}}}`)
+		out := sanitizeCoreConfig("sing-box", raw, t.TempDir())
+		var doc map[string]map[string]map[string]any
+		if err := json.Unmarshal(out, &doc); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		got := doc["experimental"]["Clash_API"]["External_Controller"]
+		if got != want {
+			t.Fatalf("%s: got %v want %s", in, got, want)
+		}
+	}
+}
