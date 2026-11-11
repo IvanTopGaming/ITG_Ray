@@ -146,6 +146,14 @@ export interface Rule {
   enabled: boolean;
   action: string;
   conditions: Conditions;
+  server_id?: string;
+  server_source_id?: string;
+  server_name?: string;
+}
+
+export interface RuleBindingView {
+  state: string;
+  reason?: string;
 }
 
 export interface RuleView {
@@ -154,6 +162,10 @@ export interface RuleView {
   enabled: boolean;
   action: string;
   conditions: Conditions;
+  serverId?: string;
+  serverSourceId?: string;
+  serverName?: string;
+  binding?: RuleBindingView | null;
 }
 
 export interface RulesExportGroupParams {

@@ -195,6 +195,16 @@ type RuleView struct {
 	Enabled    bool             `json:"enabled"`
 	Action     string           `json:"action"`
 	Conditions rules.Conditions `json:"conditions"`
+
+	ServerID       string           `json:"serverId,omitempty"`
+	ServerSourceID string           `json:"serverSourceId,omitempty"`
+	ServerName     string           `json:"serverName,omitempty"`
+	Binding        *RuleBindingView `json:"binding,omitempty"`
+}
+
+type RuleBindingView struct {
+	State  string `json:"state"`
+	Reason string `json:"reason,omitempty"`
 }
 
 type ImportPreview struct {

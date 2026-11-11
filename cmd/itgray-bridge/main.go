@@ -198,9 +198,12 @@ func main() {
 
 	ruleStore := rules.NewStore(dataDir)
 	rulesSvc := bindings.NewRulesService(bindings.RulesDeps{
-		Store: ruleStore,
-		Hub:   h,
+		Store:       ruleStore,
+		Hub:         h,
+		Issues:      bindingIssues,
+		ServersPath: filepath.Join(dataDir, "servers.json"),
 	})
+	watchBindings(h, ruleStore, filepath.Join(dataDir, "servers.json"), bindingIssues)
 
 	geoMgr := geo.NewManager(dataDir, func(done, total int64) {
 		h.Publish(hub.Event{
