@@ -238,10 +238,16 @@ func main() {
 		XraySOCKSPort: defaultXrayPort,
 	})
 
-	runSvc := bindings.NewRunService(bindings.RunDeps{
-		Chain: chainCtrl,
-		Hub:   h,
-	})
+	routingClient, err := newRoutingClient(dataDir)
+	if err != nil {
+		slog.Error("bridge: clash secret unavailable", slog.String("scope", "bridge"), slog.String("err", err.Error()))
+	}
+	runDeps := bindings.RunDeps{Chain: chainCtrl, Hub: h}
+	if routingClient != nil {
+		runDeps.Routing = routingClient
+		watchRouting(h, routingClient)
+	}
+	runSvc := bindings.NewRunService(runDeps)
 
 	serversSvc := bindings.NewServersService(bindings.ServersDeps{
 		ServerStore:  serverStore,
@@ -356,6 +362,8 @@ func main() {
 	run := handlers.RunHandlers{Svc: runSvc}
 	d.Register("run.connect", run.Connect)
 	d.Register("run.disconnect", run.Disconnect)
+	d.Register("run.setRoutingMode", run.SetRoutingMode)
+	d.Register("run.getRoutingMode", run.GetRoutingMode)
 
 	geoH := handlers.GeoHandlers{Svc: &geoService{
 		mgr:        geoMgr,

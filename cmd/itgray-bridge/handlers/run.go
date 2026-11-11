@@ -13,6 +13,8 @@ import (
 type Run interface {
 	Connect(serverID, mode string) error
 	Disconnect() error
+	SetRoutingMode(mode string) error
+	GetRoutingMode() (string, error)
 }
 
 // RunHandlers groups methods under the "run." namespace.
@@ -47,4 +49,30 @@ func (r RunHandlers) Disconnect(_ context.Context, _ json.RawMessage) (any, erro
 		return struct{}{}, nil
 	}
 	return struct{}{}, r.Svc.Disconnect()
+}
+
+type runRoutingModeParams struct {
+	Mode string `json:"mode"`
+}
+
+func (r RunHandlers) SetRoutingMode(_ context.Context, params json.RawMessage) (any, error) {
+	var p runRoutingModeParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, err
+	}
+	if r.Svc == nil {
+		return struct{}{}, nil
+	}
+	return struct{}{}, r.Svc.SetRoutingMode(p.Mode)
+}
+
+func (r RunHandlers) GetRoutingMode(_ context.Context, _ json.RawMessage) (any, error) {
+	if r.Svc == nil {
+		return runRoutingModeParams{Mode: "rule"}, nil
+	}
+	m, err := r.Svc.GetRoutingMode()
+	if err != nil {
+		return nil, err
+	}
+	return runRoutingModeParams{Mode: m}, nil
 }

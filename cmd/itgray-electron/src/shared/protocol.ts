@@ -247,6 +247,14 @@ export interface RunReconnectParams {
   mode: string;
 }
 
+export interface RunRoutingModeResult {
+  mode: string;
+}
+
+export interface RunSetRoutingModeParams {
+  mode: string;
+}
+
 export interface RunSwitchModeParams {
   mode: string;
 }
@@ -421,7 +429,9 @@ export interface RpcMethods {
   "rules.ruleToggle": { params: RulesRuleToggleParams; result: Empty };
   "run.connect": { params: RunConnectParams; result: Empty };
   "run.disconnect": { params: Empty; result: Empty };
+  "run.getRoutingMode": { params: Empty; result: RunRoutingModeResult };
   "run.reconnect": { params: RunReconnectParams; result: Empty };
+  "run.setRoutingMode": { params: RunSetRoutingModeParams; result: Empty };
   "run.switchMode": { params: RunSwitchModeParams; result: Empty };
   "servers.add": { params: ServersAddParams; result: ServerView };
   "servers.edit": { params: ServersEditParams; result: ServersEditResult };
@@ -452,6 +462,7 @@ export type EventTopic =
   | "helper.state"
   | "log.batch"
   | "probe.result"
+  | "routing.mode"
   | "rules.changed"
   | "servers.changed"
   | "sub.synced"

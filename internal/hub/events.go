@@ -34,6 +34,8 @@ const EventServersChanged = "servers:changed"
 // diffing payloads.
 const EventRulesChanged = "rules:changed"
 
+const EventRoutingMode = "routing:mode"
+
 // EventGeoProgress is published during geo rule-set refresh to surface
 // download progress to the frontend.
 const EventGeoProgress = "geo:progress"

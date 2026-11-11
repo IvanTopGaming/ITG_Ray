@@ -28,6 +28,16 @@ type RunService interface {
 	Disconnect(p Empty) (Empty, error)
 	Reconnect(p RunReconnectParams) (Empty, error)
 	SwitchMode(p RunSwitchModeParams) (Empty, error)
+	SetRoutingMode(p RunSetRoutingModeParams) (Empty, error)
+	GetRoutingMode(p Empty) (RunRoutingModeResult, error)
+}
+
+type RunSetRoutingModeParams struct {
+	Mode string `json:"mode"`
+}
+
+type RunRoutingModeResult struct {
+	Mode string `json:"mode"`
 }
 
 type RunConnectParams struct {
@@ -303,6 +313,7 @@ const (
 	TopicProbeResult    EventTopic = "probe.result"
 	TopicServersChanged EventTopic = "servers.changed"
 	TopicRulesChanged   EventTopic = "rules.changed"
+	TopicRoutingMode    EventTopic = "routing.mode"
 	TopicGeoProgress    EventTopic = "geo.progress"
 	TopicBridgeState    EventTopic = "bridge.state"
 	TopicLogBatch       EventTopic = "log.batch"
