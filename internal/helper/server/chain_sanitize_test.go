@@ -128,3 +128,19 @@ func TestSanitizeCoreConfig_NonJSON_ReturnedAsIs(t *testing.T) {
 		t.Fatalf("non-JSON input was altered: %s", out)
 	}
 }
+
+func TestSanitize_StripsClashExternalUI(t *testing.T) {
+	in := []byte(`{"experimental":{"clash_api":{"external_controller":"127.0.0.1:13356","secret":"s","external_ui":"/etc/x","external_ui_download_url":"https://evil/ui.zip","external_ui_download_detour":"direct"}}}`)
+	out := sanitizeCoreConfig("sing-box", in, t.TempDir())
+	for _, k := range []string{"external_ui", "external_ui_download_url", "external_ui_download_detour"} {
+		if _, ok := pathField(t, out, "experimental.clash_api."+k); ok {
+			t.Fatalf("%s survived sanitize: %s", k, out)
+		}
+	}
+	if v, _ := pathField(t, out, "experimental.clash_api.external_controller"); v != "127.0.0.1:13356" {
+		t.Fatalf("external_controller lost: %s", out)
+	}
+	if v, _ := pathField(t, out, "experimental.clash_api.secret"); v != "s" {
+		t.Fatalf("secret lost: %s", out)
+	}
+}

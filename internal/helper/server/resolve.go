@@ -41,3 +41,28 @@ func resolveServerIPv4(lookup func(string) ([]net.IP, error), host string, attem
 	}
 	return nil, fmt.Errorf("resolve server host %q: %w", host, lookupErr)
 }
+
+func extraPeerCIDRs(lookup func(string) ([]net.IP, error), main net.IP, hosts []string, attempts int, delay time.Duration) ([]string, error) {
+	seen := map[string]bool{}
+	if main != nil {
+		seen[main.String()] = true
+	}
+	var out []string
+	for _, h := range hosts {
+		ip := net.ParseIP(h).To4()
+		if ip == nil {
+			resolved, err := resolveServerIPv4(lookup, h, attempts, delay)
+			if err != nil {
+				return nil, err
+			}
+			ip = resolved
+		}
+		key := ip.String()
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, key+"/32")
+	}
+	return out, nil
+}

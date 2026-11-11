@@ -14,6 +14,8 @@ type StartChainArgs struct {
 	Mode          string          `json:"mode,omitempty"`
 	DnsAlias      string          `json:"dns_alias,omitempty"`
 	DnsServers    []string        `json:"dns_servers,omitempty"`
+
+	ExtraServerHosts []string `json:"extra_server_hosts,omitempty"`
 }
 
 // StartChainResult is what OpStartChain returns on success.

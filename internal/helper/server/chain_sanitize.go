@@ -59,6 +59,14 @@ func sanitizeCoreConfig(kind string, raw []byte, runtimeDir string) []byte {
 			if cf, ok := exp["cache_file"].(map[string]any); ok {
 				confine(cf, "path", "cache.db")
 			}
+			if api, ok := exp["clash_api"].(map[string]any); ok {
+				for _, k := range []string{"external_ui", "external_ui_download_url", "external_ui_download_detour"} {
+					if _, present := api[k]; present {
+						delete(api, k)
+						changed = true
+					}
+				}
+			}
 		}
 	case "xray":
 		if log, ok := doc["log"].(map[string]any); ok {

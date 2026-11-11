@@ -64,15 +64,16 @@ func asStopper(c *supervisor.Child) coreStopper {
 
 // chainState tracks the active session inside the helper process.
 type chainState struct {
-	sessionID string
-	stopping  bool
-	singbox   *supervisor.Child
-	xray      *supervisor.Child
-	tunLUID   uint64
-	peerRoute route.Entry // /32 host route we added for the VLESS server
-	snapshot  []route.Entry
-	dnsPrior  *dns.Settings // nil if no DNS override applied
-	dnsAlias  string
+	sessionID       string
+	stopping        bool
+	singbox         *supervisor.Child
+	xray            *supervisor.Child
+	tunLUID         uint64
+	peerRoute       route.Entry // /32 host route we added for the VLESS server
+	extraPeerRoutes []route.Entry
+	snapshot        []route.Entry
+	dnsPrior        *dns.Settings // nil if no DNS override applied
+	dnsAlias        string
 	// nrptName is the DisplayName of the NRPT rule we installed to force
 	// all DNS through the TUN's hijack-dns route engine. Empty means no
 	// rule installed (sysproxy mode, or AddNrptRule failed).
@@ -236,6 +237,9 @@ func NewStartChainHandler() Handler {
 			if donePeerRoute {
 				_ = route.Remove(state.peerRoute)
 			}
+			for _, e := range state.extraPeerRoutes {
+				_ = route.Remove(e)
+			}
 			_ = doneRouteSnap // snapshot is read-only; nothing to roll back
 			if doneRuntime {
 				_ = os.RemoveAll(runtime.BasePath())
@@ -319,6 +323,24 @@ func NewStartChainHandler() Handler {
 				return nil, fmt.Errorf("route.Add(peer): %w", err)
 			}
 			donePeerRoute = true
+
+			extraCIDRs, err := extraPeerCIDRs(net.LookupIP, serverV4, a.ExtraServerHosts, 6, 500*time.Millisecond)
+			if err != nil {
+				rollback()
+				slog.Error("chain start failed", slog.String("scope", "helper"),
+					slog.String("stage", "resolve-extra-servers"), slog.String("err", logging.RedactError(err)))
+				return nil, err
+			}
+			for _, cidr := range extraCIDRs {
+				e := route.Entry{DestCIDR: cidr, NextHop: gw.NextHop, InterfaceLUID: gw.InterfaceLUID, Metric: 0}
+				if err := route.Add(e); err != nil {
+					rollback()
+					slog.Error("chain start failed", slog.String("scope", "helper"),
+						slog.String("stage", "route-add-extra-peer"), slog.String("err", logging.RedactError(err)))
+					return nil, fmt.Errorf("route.Add(extra peer): %w", err)
+				}
+				state.extraPeerRoutes = append(state.extraPeerRoutes, e)
+			}
 		}
 
 		// Step 5: optional DNS override (TUN mode only — sysproxy doesn't touch DNS).
@@ -676,6 +698,14 @@ func stopActiveChainLocked() []string {
 			s.peerRoute = route.Entry{}
 		}
 	}
+	kept := s.extraPeerRoutes[:0]
+	for _, e := range s.extraPeerRoutes {
+		if err := removeChainRoute(e); err != nil && !errors.Is(err, windows.ERROR_NOT_FOUND) {
+			errs = append(errs, "route.Remove(extra peer): "+err.Error())
+			kept = append(kept, e)
+		}
+	}
+	s.extraPeerRoutes = kept
 	if s.snapshot != nil {
 		current, err := snapshotChainRoutes()
 		if err != nil {
