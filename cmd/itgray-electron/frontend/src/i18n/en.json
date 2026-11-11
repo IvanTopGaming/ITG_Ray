@@ -610,6 +610,7 @@
     "pill": {
       "global": "Everything via proxy — rules paused",
       "direct": "Everything direct — VPN bypassed"
-    }
+    },
+    "needsConnection": "Connect to switch the routing mode"
   }
 }

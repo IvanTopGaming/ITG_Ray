@@ -271,19 +271,19 @@ export function Routing() {
       animate="show"
       variants={pageVariants}
     >
-      <motion.header variants={sectionVariants} className="flex items-baseline justify-between pb-2">
-        <div>
+      <motion.header variants={sectionVariants} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-3 pb-2">
+        <div className="min-w-[240px] flex-1">
           <h1 className="text-[20px] font-semibold tracking-tight">{t("routing.title")}</h1>
           <p className="mt-1 text-[12px] text-white/55">{t("routing.description")}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <RoutingModeSwitch />
           <motion.button
             type="button"
             onClick={() => { setImportInitial(""); setImportOpen(true); }}
             whileTap={{ scale: 0.96 }}
             transition={{ duration: 0.18, ease: SNAP_EASE }}
-            className="flex items-center gap-1.5 rounded-md bg-white/[0.06] px-3 py-1.5 text-[12px] font-medium text-white/75 hover:bg-white/[0.10]"
+            className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-white/[0.10] bg-white/[0.06] px-3 text-[12px] font-medium text-white/75 hover:bg-white/[0.10]"
           >
             <Import className="h-3.5 w-3.5" aria-hidden="true" /> {t("routing.import")}
           </motion.button>
@@ -292,7 +292,7 @@ export function Routing() {
             onClick={() => setAdding(true)}
             whileTap={{ scale: 0.96 }}
             transition={{ duration: 0.18, ease: SNAP_EASE }}
-            className="flex items-center gap-1.5 rounded-md bg-white/[0.08] px-3 py-1.5 text-[12px] font-medium text-white/85 hover:bg-white/[0.12]"
+            className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-white/[0.10] bg-white/[0.08] px-3 text-[12px] font-medium text-white/85 hover:bg-white/[0.12]"
           >
             <Plus className="h-3.5 w-3.5" /> {t("routing.addGroup")}
           </motion.button>
