@@ -90,3 +90,47 @@ func TestDNS_DisabledIPRuleIgnored(t *testing.T) {
 	rs := dnsRulesOf(t, tunFakeIP(m))
 	require.Len(t, rs, 1)
 }
+
+func TestDNS_NonDirectIPRulesNeverQueryLocal(t *testing.T) {
+	for name, action := range map[string]rules.Action{"block": rules.ActionBlock, "other server": rules.ActionProxy} {
+		in := tunFakeIP(ipRuleModel(action, "x"))
+		in.RuleOutbound = func(r *rules.Rule) string {
+			if r.ServerID == "x" {
+				return "proxy-x"
+			}
+			return ""
+		}
+		rs := dnsRulesOf(t, in)
+		for _, r := range rs {
+			require.NotEqual(t, "local", r["server"], "%s: %v", name, rs)
+		}
+		require.Equal(t, "evaluate", rs[0]["action"], name)
+		var responds int
+		for _, r := range rs {
+			if r["action"] == "respond" {
+				require.Equal(t, true, r["match_response"], name)
+				responds++
+			}
+		}
+		require.Equal(t, 2, responds, "%s: %v", name, rs)
+	}
+}
+
+func TestDNS_DirectBeforeRespondWhenBothPresent(t *testing.T) {
+	m := ipRuleModel(rules.ActionDirect, "")
+	m.Groups = append(m.Groups, rules.Group{ID: "b", Name: "b", Enabled: true, Rules: []rules.Rule{
+		{ID: "blk", Enabled: true, Action: rules.ActionBlock, Conditions: rules.Conditions{IPCIDRs: []string{"203.0.113.0/24"}}},
+	}})
+	rs := dnsRulesOf(t, tunFakeIP(m))
+	localAt, respondAt := -1, -1
+	for i, r := range rs {
+		if r["server"] == "local" && localAt < 0 {
+			localAt = i
+		}
+		if r["action"] == "respond" && respondAt < 0 {
+			respondAt = i
+			require.Equal(t, []any{"203.0.113.0/24"}, r["ip_cidr"])
+		}
+	}
+	require.True(t, localAt > 0 && respondAt > localAt, "%v", rs)
+}

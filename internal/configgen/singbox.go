@@ -108,8 +108,10 @@ func logLevelOrDefault(level string) string {
 // every modern browser sends) doesn't match dns.rules and is caught by
 // dns.final:"remote" instead. When user rules route by IP to anything other
 // than the main proxy (direct, block, another server), A/AAAA queries are
-// first evaluated against "remote" and answers matching those IP conditions
-// are served real addresses from "local" instead of FakeIP — otherwise the
+// first evaluated against "remote"; answers matching a direct rule's IP
+// conditions are re-resolved by "local", answers matching block / other-server
+// rules get the tunnelled answer itself (no lookup leaves the real IP for
+// traffic that won't go direct), and the rest stay FakeIP — otherwise the
 // connection arrives as a domain and the IP rule can never match (see
 // fakeIPDNSRules). In any other configuration, it emits a single
 // "default" server and sets dns.final to that same tag, since this branch
@@ -193,22 +195,67 @@ func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
 func fakeIPDNSRules(in *SingboxInput) []map[string]any {
 	addrQuery := []string{"A", "AAAA"}
 	fakeip := map[string]any{"query_type": addrQuery, "server": "fakeip"}
-	ruleSets, cidrs := realIPMatchers(in)
-	if len(ruleSets) == 0 && len(cidrs) == 0 {
+	direct, other := realIPMatchers(in)
+	if direct.empty() && other.empty() {
 		return []map[string]any{fakeip}
 	}
 	out := []map[string]any{{"query_type": addrQuery, "action": "evaluate", "server": "remote"}}
-	if len(ruleSets) > 0 {
-		out = append(out, map[string]any{"match_response": true, "rule_set": ruleSets, "server": "local"})
-	}
-	if len(cidrs) > 0 {
-		out = append(out, map[string]any{"match_response": true, "ip_cidr": cidrs, "server": "local"})
-	}
+	out = append(out, direct.rules(map[string]any{"server": "local"})...)
+	out = append(out, other.rules(map[string]any{"action": "respond"})...)
 	return append(out, fakeip)
 }
 
-func realIPMatchers(in *SingboxInput) (ruleSets, cidrs []string) {
-	seenSet, seenCIDR := map[string]bool{}, map[string]bool{}
+type ipMatchers struct {
+	ruleSets []string
+	cidrs    []string
+	seen     map[string]bool
+}
+
+func (m *ipMatchers) empty() bool { return len(m.ruleSets) == 0 && len(m.cidrs) == 0 }
+
+func (m *ipMatchers) addSet(tag string) {
+	if !m.seen["set:"+tag] {
+		m.seen["set:"+tag] = true
+		m.ruleSets = append(m.ruleSets, tag)
+	}
+}
+
+func (m *ipMatchers) addCIDR(c string) {
+	if !strings.Contains(c, "/") {
+		if strings.Contains(c, ":") {
+			c += "/128"
+		} else {
+			c += "/32"
+		}
+	}
+	if !m.seen["cidr:"+c] {
+		m.seen["cidr:"+c] = true
+		m.cidrs = append(m.cidrs, c)
+	}
+}
+
+func (m *ipMatchers) rules(tail map[string]any) []map[string]any {
+	var out []map[string]any
+	if len(m.ruleSets) > 0 {
+		r := map[string]any{"match_response": true, "rule_set": m.ruleSets}
+		for k, v := range tail {
+			r[k] = v
+		}
+		out = append(out, r)
+	}
+	if len(m.cidrs) > 0 {
+		r := map[string]any{"match_response": true, "ip_cidr": m.cidrs}
+		for k, v := range tail {
+			r[k] = v
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+func realIPMatchers(in *SingboxInput) (direct, other *ipMatchers) {
+	direct = &ipMatchers{seen: map[string]bool{}}
+	other = &ipMatchers{seen: map[string]bool{}}
 	for gi := range in.Rules.Groups {
 		g := &in.Rules.Groups[gi]
 		if !g.Enabled || g.Locked {
@@ -219,31 +266,24 @@ func realIPMatchers(in *SingboxInput) (ruleSets, cidrs []string) {
 			if !r.Enabled {
 				continue
 			}
-			if r.Action == rules.ActionProxy && (in.RuleOutbound == nil || in.RuleOutbound(r) == "") {
+			target := other
+			switch {
+			case r.Action == rules.ActionDirect:
+				target = direct
+			case r.Action == rules.ActionProxy && (in.RuleOutbound == nil || in.RuleOutbound(r) == ""):
 				continue
 			}
 			for _, geo := range r.Conditions.Geo {
-				if tag, ok := strings.CutPrefix(geo, "geoip:"); ok && !seenSet["geoip-"+tag] {
-					seenSet["geoip-"+tag] = true
-					ruleSets = append(ruleSets, "geoip-"+tag)
+				if tag, ok := strings.CutPrefix(geo, "geoip:"); ok {
+					target.addSet("geoip-" + tag)
 				}
 			}
 			for _, c := range r.Conditions.IPCIDRs {
-				if !strings.Contains(c, "/") {
-					if strings.Contains(c, ":") {
-						c += "/128"
-					} else {
-						c += "/32"
-					}
-				}
-				if !seenCIDR[c] {
-					seenCIDR[c] = true
-					cidrs = append(cidrs, c)
-				}
+				target.addCIDR(c)
 			}
 		}
 	}
-	return ruleSets, cidrs
+	return direct, other
 }
 
 // defaultDomainResolverFor picks the server tag that route.default_domain_resolver
