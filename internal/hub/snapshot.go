@@ -196,9 +196,9 @@ type RuleView struct {
 	Action     string           `json:"action"`
 	Conditions rules.Conditions `json:"conditions"`
 
-	ServerID       string           `json:"serverId,omitempty"`
-	ServerSourceID string           `json:"serverSourceId,omitempty"`
-	ServerName     string           `json:"serverName,omitempty"`
+	ServerID       string           `json:"server_id,omitempty"`
+	ServerSourceID string           `json:"server_source_id,omitempty"`
+	ServerName     string           `json:"server_name,omitempty"`
 	Binding        *RuleBindingView `json:"binding,omitempty"`
 }
 

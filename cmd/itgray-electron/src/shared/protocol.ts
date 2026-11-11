@@ -162,9 +162,9 @@ export interface RuleView {
   enabled: boolean;
   action: string;
   conditions: Conditions;
-  serverId?: string;
-  serverSourceId?: string;
-  serverName?: string;
+  server_id?: string;
+  server_source_id?: string;
+  server_name?: string;
   binding?: RuleBindingView | null;
 }
 

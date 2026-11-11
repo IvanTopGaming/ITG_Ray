@@ -1,6 +1,7 @@
 package bindings
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"testing"
 
@@ -71,4 +72,19 @@ func TestRulesService_RuleAddKeepsBinding(t *testing.T) {
 	require.Equal(t, "x", got.ServerID)
 	require.Equal(t, "sub", got.ServerSourceID)
 	require.Equal(t, "srv x", got.ServerName)
+}
+
+func TestRuleView_JSONFeedsBackIntoRule(t *testing.T) {
+	svc, _, _ := newRulesService(t)
+	id, err := svc.RuleAdd("user", bindingRule("", "x"))
+	require.NoError(t, err)
+	v, err := svc.List()
+	require.NoError(t, err)
+	raw, err := json.Marshal(findView(v, id))
+	require.NoError(t, err)
+	var back rules.Rule
+	require.NoError(t, json.Unmarshal(raw, &back))
+	require.Equal(t, "x", back.ServerID)
+	require.Equal(t, "sub", back.ServerSourceID)
+	require.Equal(t, "srv x", back.ServerName)
 }
