@@ -36,3 +36,14 @@ func TestApply_MissingDoesNotRewrite(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "a", m.Groups[0].Rules[0].ServerID)
 }
+
+func TestApply_PersistsNameDrift(t *testing.T) {
+	store := rules.NewStore(t.TempDir())
+	require.NoError(t, store.Save(model(bound("a", "sub", "NL"))))
+	changed, err := Apply(store, []server.Server{srv("a", "sub", "NL renamed")})
+	require.NoError(t, err)
+	require.True(t, changed)
+	m, err := store.Load()
+	require.NoError(t, err)
+	require.Equal(t, "NL renamed", m.Groups[0].Rules[0].ServerName)
+}

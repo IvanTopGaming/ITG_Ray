@@ -25,12 +25,18 @@ export type Conditions = {
   protocols?: string[];
 };
 
+export type BindingState = "ok" | "rebound" | "missing" | "unusable";
+
 export type RuleView = {
   id: string;
   name: string;
   enabled: boolean;
   action: Action;
   conditions: Conditions;
+  server_id?: string;
+  server_source_id?: string;
+  server_name?: string;
+  binding?: { state: BindingState; reason?: string } | null;
 };
 
 export type GroupView = {
@@ -77,7 +83,15 @@ function subscribe(cb: () => void) {
 }
 
 export function rulesSignature(s: RulesState): string {
-  return JSON.stringify({ defaultAction: s.defaultAction, groups: s.groups });
+  const groups = s.groups.map((g) => ({
+    ...g,
+    rules: g.rules.map(({ binding, server_name: _n, server_source_id: _s, ...r }) => {
+      void _n;
+      void _s;
+      return binding?.state === "missing" ? { ...r, bindingMissing: true } : r;
+    }),
+  }));
+  return JSON.stringify({ defaultAction: s.defaultAction, groups });
 }
 
 function pushRulesSignature(): void {

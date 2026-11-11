@@ -88,3 +88,29 @@ func TestRuleView_JSONFeedsBackIntoRule(t *testing.T) {
 	require.Equal(t, "sub", back.ServerSourceID)
 	require.Equal(t, "srv x", back.ServerName)
 }
+
+func TestRulesService_RuleSaveUsesRawServerIdentity(t *testing.T) {
+	dir := t.TempDir()
+	srvPath := filepath.Join(dir, "servers.json")
+	require.NoError(t, server.Save(srvPath, []server.Server{{ID: "x", SourceID: "real-sub", Name: "🇳🇱 Netherlands 2", Origin: server.OriginSubscription}}))
+	h := hub.New()
+	t.Cleanup(h.Close)
+	svc := NewRulesService(RulesDeps{Store: rules.NewStore(dir), Hub: h, ServersPath: srvPath})
+	r := bindingRule("", "x")
+	r.ServerName = "Netherlands 2"
+	r.ServerSourceID = ""
+	id, err := svc.RuleAdd("user", r)
+	require.NoError(t, err)
+	v, err := svc.List()
+	require.NoError(t, err)
+	got := findView(v, id)
+	require.Equal(t, "🇳🇱 Netherlands 2", got.ServerName)
+	require.Equal(t, "real-sub", got.ServerSourceID)
+
+	edited := r
+	edited.ID = id
+	edited.ServerName = "whatever"
+	require.NoError(t, svc.RuleEdit(edited))
+	v, _ = svc.List()
+	require.Equal(t, "🇳🇱 Netherlands 2", findView(v, id).ServerName)
+}

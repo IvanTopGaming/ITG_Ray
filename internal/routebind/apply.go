@@ -10,19 +10,24 @@ func Apply(store *rules.Store, servers []server.Server) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	out, bindings := Resolve(m, servers)
-	rebound := false
-	for _, b := range bindings {
-		if b.State == StateRebound {
-			rebound = true
-			break
-		}
-	}
-	if !rebound {
+	out, _ := Resolve(m, servers)
+	if !bindingsDiffer(m, out) {
 		return false, nil
 	}
 	if err := store.Save(out); err != nil {
 		return false, err
 	}
 	return true, nil
+}
+
+func bindingsDiffer(a, b rules.Model) bool {
+	for gi := range a.Groups {
+		for ri := range a.Groups[gi].Rules {
+			x, y := a.Groups[gi].Rules[ri], b.Groups[gi].Rules[ri]
+			if x.ServerID != y.ServerID || x.ServerName != y.ServerName || x.ServerSourceID != y.ServerSourceID {
+				return true
+			}
+		}
+	}
+	return false
 }

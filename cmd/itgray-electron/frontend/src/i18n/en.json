@@ -297,6 +297,12 @@
     },
     "protocols": {
       "label": "Protocol {{p}}"
+    },
+    "server": {
+      "label": "Through",
+      "current": "Current server",
+      "search": "Search servers…",
+      "none": "Nothing found"
     }
   },
   "settings": {
@@ -564,6 +570,10 @@
       "protocols": "{{count}} protocol",
       "protocols_other": "{{count}} protocols",
       "none": "no conditions"
+    },
+    "binding": {
+      "missing": "Server is gone — pick another",
+      "unusable": "Server unavailable at connect — using main"
     }
   },
   "logs": {

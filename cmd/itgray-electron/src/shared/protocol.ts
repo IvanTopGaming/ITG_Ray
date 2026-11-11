@@ -277,6 +277,7 @@ export interface ServerView {
   favorite: boolean;
   tags?: string[];
   uri: string;
+  sourceId?: string;
 }
 
 export interface ServersAddParams {

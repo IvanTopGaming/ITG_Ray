@@ -248,6 +248,7 @@ func (s *RulesService) RuleAdd(groupID string, r rules.Rule) (string, error) {
 	if err := r.Validate(); err != nil {
 		return "", err
 	}
+	s.fillServerIdentity(&r)
 	m, err := s.store.Load()
 	if err != nil {
 		return "", err
@@ -276,6 +277,7 @@ func (s *RulesService) RuleEdit(r rules.Rule) error {
 	if err := r.Validate(); err != nil {
 		return err
 	}
+	s.fillServerIdentity(&r)
 	m, err := s.store.Load()
 	if err != nil {
 		return err
@@ -526,4 +528,25 @@ func (s *RulesService) ExportGroup(groupID string) (string, error) {
 		return "", errLockedGroup
 	}
 	return ruleshare.Encode(m.Groups[idx].Name, []rules.Group{m.Groups[idx]})
+}
+
+func (s *RulesService) fillServerIdentity(r *rules.Rule) {
+	if r.Action != rules.ActionProxy || r.ServerID == "" {
+		r.ClearServerBinding()
+		return
+	}
+	if s.serversPath == "" {
+		return
+	}
+	servers, err := server.Load(s.serversPath)
+	if err != nil {
+		return
+	}
+	for i := range servers {
+		if servers[i].ID == r.ServerID {
+			r.ServerName = servers[i].Name
+			r.ServerSourceID = servers[i].SourceID
+			return
+		}
+	}
 }

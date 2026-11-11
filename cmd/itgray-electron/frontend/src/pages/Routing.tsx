@@ -23,6 +23,7 @@ import { ImportRulesModal } from "./ImportRulesModal";
 import { consumePendingImportLink, subscribePendingImport } from "@/lib/deeplinkStore";
 import { cn } from "@/lib/cn";
 import { summarise } from "@/lib/ruleSummary";
+import { useDash } from "@/lib/dashStore";
 import { useTranslation } from "react-i18next";
 
 const SNAP_EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
@@ -802,6 +803,7 @@ function RuleRow({
           {rule.action}
         </span>
         <span className="text-white/85">{rule.name}</span>
+        <BindingChip rule={rule} />
         <span className="text-[11px] text-white/45">{summarise(rule.conditions, t)}</span>
       </motion.div>
       {!groupLocked && (
@@ -861,4 +863,21 @@ function RuleRow({
       )}
     </motion.div>
   );
+}
+
+function BindingChip({ rule }: { rule: RuleView }) {
+  const { t } = useTranslation();
+  const servers = useDash().allServers ?? [];
+  if (rule.action !== "proxy" || !rule.server_id) return null;
+  const state = rule.binding?.state;
+  const name = servers.find((s) => s.id === rule.server_id)?.name ?? rule.server_name ?? rule.server_id;
+  if (state === "missing" || state === "unusable") {
+    return (
+      <span className="flex items-center gap-1 rounded bg-amber-500/15 px-2 py-0.5 text-[10.5px] text-amber-200">
+        <span>{t(state === "missing" ? "routing.binding.missing" : "routing.binding.unusable")}</span>
+        <span className="text-amber-100/70">{name}</span>
+      </span>
+    );
+  }
+  return <span className="rounded bg-sky-500/10 px-2 py-0.5 text-[10.5px] text-sky-100/80">{name}</span>;
 }

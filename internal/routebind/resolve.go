@@ -40,6 +40,8 @@ func Resolve(m rules.Model, servers []server.Server) (rules.Model, map[string]Bi
 			if s, ok := byID[r.ServerID]; ok {
 				b.State = StateOK
 				b.ServerName = s.Name
+				r.ServerName = s.Name
+				r.ServerSourceID = s.SourceID
 				if s.Disabled {
 					b.State = StateUnusable
 					b.Reason = "disabled"
