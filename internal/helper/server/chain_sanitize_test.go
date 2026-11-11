@@ -144,3 +144,27 @@ func TestSanitize_StripsClashExternalUI(t *testing.T) {
 		t.Fatalf("secret lost: %s", out)
 	}
 }
+
+func TestSanitize_StripsClashExternalUICaseInsensitive(t *testing.T) {
+	in := []byte(`{"Experimental":{"Clash_API":{"external_controller":"127.0.0.1:13356","External_UI":"/etc/x","EXTERNAL_UI_DOWNLOAD_URL":"https://evil/ui.zip"}}}`)
+	out := sanitizeCoreConfig("sing-box", in, t.TempDir())
+	low := strings.ToLower(string(out))
+	if strings.Contains(low, "external_ui") {
+		t.Fatalf("case-variant external_ui survived sanitize: %s", out)
+	}
+	if !strings.Contains(low, "external_controller") {
+		t.Fatalf("external_controller lost: %s", out)
+	}
+}
+
+func TestSanitize_ConfinesCaseVariantPaths(t *testing.T) {
+	dir := t.TempDir()
+	sb := sanitizeCoreConfig("sing-box", []byte(`{"Log":{"Output":"/etc/evil"},"experimental":{"Cache_File":{"PATH":"/etc/evil.db"}}}`), dir)
+	if strings.Contains(string(sb), "/etc/evil") {
+		t.Fatalf("case-variant sing-box path escaped sanitize: %s", sb)
+	}
+	xr := sanitizeCoreConfig("xray", []byte(`{"LOG":{"Access":"/etc/a","ERROR":"/etc/e"}}`), dir)
+	if strings.Contains(string(xr), "/etc/") {
+		t.Fatalf("case-variant xray path escaped sanitize: %s", xr)
+	}
+}

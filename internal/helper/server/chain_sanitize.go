@@ -40,28 +40,36 @@ func sanitizeCoreConfig(kind string, raw []byte, runtimeDir string) []byte {
 
 	changed := false
 	confine := func(m map[string]any, key, fallback string) {
-		v, ok := m[key].(string)
-		if !ok || v == "" {
-			return
-		}
-		if !withinDir(v, runtimeDir) {
-			m[key] = filepath.Join(runtimeDir, fallback)
-			changed = true
+		for k, raw := range m {
+			if !strings.EqualFold(k, key) {
+				continue
+			}
+			v, ok := raw.(string)
+			if !ok || v == "" {
+				continue
+			}
+			if !withinDir(v, runtimeDir) {
+				m[k] = filepath.Join(runtimeDir, fallback)
+				changed = true
+			}
 		}
 	}
 
 	switch kind {
 	case "sing-box":
-		if log, ok := doc["log"].(map[string]any); ok {
+		for _, log := range foldMaps(doc, "log") {
 			confine(log, "output", "sing-box-log.txt")
 		}
-		if exp, ok := doc["experimental"].(map[string]any); ok {
-			if cf, ok := exp["cache_file"].(map[string]any); ok {
+		for _, exp := range foldMaps(doc, "experimental") {
+			for _, cf := range foldMaps(exp, "cache_file") {
 				confine(cf, "path", "cache.db")
 			}
-			if api, ok := exp["clash_api"].(map[string]any); ok {
-				for _, k := range []string{"external_ui", "external_ui_download_url", "external_ui_download_detour"} {
-					if _, present := api[k]; present {
+		}
+		for _, exp := range foldMaps(doc, "experimental") {
+			for _, api := range foldMaps(exp, "clash_api") {
+				for k := range api {
+					switch strings.ToLower(k) {
+					case "external_ui", "external_ui_download_url", "external_ui_download_detour":
 						delete(api, k)
 						changed = true
 					}
@@ -69,7 +77,7 @@ func sanitizeCoreConfig(kind string, raw []byte, runtimeDir string) []byte {
 			}
 		}
 	case "xray":
-		if log, ok := doc["log"].(map[string]any); ok {
+		for _, log := range foldMaps(doc, "log") {
 			confine(log, "access", "xray-access.log")
 			confine(log, "error", "xray-error.log")
 		}
@@ -95,4 +103,17 @@ func withinDir(path, dir string) bool {
 		clean = filepath.Clean(filepath.Join(d, path))
 	}
 	return clean == d || strings.HasPrefix(clean, d+string(filepath.Separator))
+}
+
+func foldMaps(m map[string]any, key string) []map[string]any {
+	var out []map[string]any
+	for k, v := range m {
+		if !strings.EqualFold(k, key) {
+			continue
+		}
+		if sub, ok := v.(map[string]any); ok {
+			out = append(out, sub)
+		}
+	}
+	return out
 }
