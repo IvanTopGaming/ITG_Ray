@@ -106,7 +106,12 @@ func logLevelOrDefault(level string) string {
 // fakeip server type returns synthetic IPs in 198.18.0.0/15 for A/AAAA
 // queries; every other query type (e.g. the HTTPS/SVCB queries virtually
 // every modern browser sends) doesn't match dns.rules and is caught by
-// dns.final:"remote" instead. In any other configuration, it emits a single
+// dns.final:"remote" instead. When user rules route by IP to anything other
+// than the main proxy (direct, block, another server), A/AAAA queries are
+// first evaluated against "remote" and answers matching those IP conditions
+// are served real addresses from "local" instead of FakeIP — otherwise the
+// connection arrives as a domain and the IP rule can never match (see
+// fakeIPDNSRules). In any other configuration, it emits a single
 // "default" server and sets dns.final to that same tag, since this branch
 // declares no dns.rules at all and every query would otherwise hit final.
 // Without dns.final, sing-box's DNS engine silently falls back to an
@@ -167,9 +172,7 @@ func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
 				fakeipServer,
 				{"tag": "local", "type": "tls", "server": localGeoResolver, "detour": "direct"},
 			},
-			"rules": []map[string]any{
-				{"query_type": []string{"A", "AAAA"}, "server": "fakeip"},
-			},
+			"rules": fakeIPDNSRules(in),
 			// No independent_cache: sing-box 1.14 deprecated it (removal in
 			// 1.16) because the DNS cache is now always keyed per transport,
 			// which is the isolation FakeIP needs.
@@ -185,6 +188,62 @@ func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
 		"final":    "default",
 		"strategy": strategy,
 	}
+}
+
+func fakeIPDNSRules(in *SingboxInput) []map[string]any {
+	addrQuery := []string{"A", "AAAA"}
+	fakeip := map[string]any{"query_type": addrQuery, "server": "fakeip"}
+	ruleSets, cidrs := realIPMatchers(in)
+	if len(ruleSets) == 0 && len(cidrs) == 0 {
+		return []map[string]any{fakeip}
+	}
+	out := []map[string]any{{"query_type": addrQuery, "action": "evaluate", "server": "remote"}}
+	if len(ruleSets) > 0 {
+		out = append(out, map[string]any{"match_response": true, "rule_set": ruleSets, "server": "local"})
+	}
+	if len(cidrs) > 0 {
+		out = append(out, map[string]any{"match_response": true, "ip_cidr": cidrs, "server": "local"})
+	}
+	return append(out, fakeip)
+}
+
+func realIPMatchers(in *SingboxInput) (ruleSets, cidrs []string) {
+	seenSet, seenCIDR := map[string]bool{}, map[string]bool{}
+	for gi := range in.Rules.Groups {
+		g := &in.Rules.Groups[gi]
+		if !g.Enabled || g.Locked {
+			continue
+		}
+		for ri := range g.Rules {
+			r := &g.Rules[ri]
+			if !r.Enabled {
+				continue
+			}
+			if r.Action == rules.ActionProxy && (in.RuleOutbound == nil || in.RuleOutbound(r) == "") {
+				continue
+			}
+			for _, geo := range r.Conditions.Geo {
+				if tag, ok := strings.CutPrefix(geo, "geoip:"); ok && !seenSet["geoip-"+tag] {
+					seenSet["geoip-"+tag] = true
+					ruleSets = append(ruleSets, "geoip-"+tag)
+				}
+			}
+			for _, c := range r.Conditions.IPCIDRs {
+				if !strings.Contains(c, "/") {
+					if strings.Contains(c, ":") {
+						c += "/128"
+					} else {
+						c += "/32"
+					}
+				}
+				if !seenCIDR[c] {
+					seenCIDR[c] = true
+					cidrs = append(cidrs, c)
+				}
+			}
+		}
+	}
+	return ruleSets, cidrs
 }
 
 // defaultDomainResolverFor picks the server tag that route.default_domain_resolver
