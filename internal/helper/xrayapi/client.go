@@ -8,6 +8,7 @@ package xrayapi
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	statsservice "github.com/xtls/xray-core/app/stats/command"
@@ -28,7 +29,8 @@ type Client struct {
 // No dial happens until the first Counters call.
 func New(addr string) *Client { return &Client{addr: addr} }
 
-// Counters returns the cumulative outbound proxy uplink/downlink bytes.
+// Counters returns the cumulative uplink/downlink bytes summed over every
+// proxy outbound (the main "proxy" and each per-rule "proxy-<id>").
 // Lazy-dials on first call; on any error returns (0, 0, err) and clears
 // the cached connection so the next call retries.
 func (c *Client) Counters(ctx context.Context) (up, down uint64, err error) {
@@ -46,34 +48,23 @@ func (c *Client) Counters(ctx context.Context) (up, down uint64, err error) {
 		c.client = statsservice.NewStatsServiceClient(conn)
 	}
 
-	up, errU := c.queryCounter(ctx, "outbound>>>proxy>>>traffic>>>uplink")
-	down, errD := c.queryCounter(ctx, "outbound>>>proxy>>>traffic>>>downlink")
-	if errU != nil || errD != nil {
+	resp, err := c.client.QueryStats(ctx, &statsservice.QueryStatsRequest{Pattern: "outbound>>>proxy", Reset_: false})
+	if err != nil {
 		_ = c.resetLocked()
-		if errU != nil {
-			return 0, 0, errU
+		return 0, 0, fmt.Errorf("QueryStats(outbound>>>proxy): %w", err)
+	}
+	for _, st := range resp.GetStat() {
+		if st == nil || st.Value < 0 {
+			continue
 		}
-		return 0, 0, errD
+		switch {
+		case strings.HasSuffix(st.Name, ">>>traffic>>>uplink"):
+			up += uint64(st.Value)
+		case strings.HasSuffix(st.Name, ">>>traffic>>>downlink"):
+			down += uint64(st.Value)
+		}
 	}
 	return up, down, nil
-}
-
-func (c *Client) queryCounter(ctx context.Context, name string) (uint64, error) {
-	resp, err := c.client.GetStats(ctx, &statsservice.GetStatsRequest{
-		Name:   name,
-		Reset_: false,
-	})
-	if err != nil {
-		return 0, fmt.Errorf("GetStats(%s): %w", name, err)
-	}
-	if resp == nil || resp.Stat == nil {
-		return 0, nil
-	}
-	v := resp.Stat.Value
-	if v < 0 {
-		return 0, nil
-	}
-	return uint64(v), nil
 }
 
 // Close releases the gRPC connection. Idempotent.

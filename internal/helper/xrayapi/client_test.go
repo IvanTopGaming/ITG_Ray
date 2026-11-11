@@ -3,6 +3,7 @@ package xrayapi
 import (
 	"context"
 	"net"
+	"strings"
 	"testing"
 
 	statsservice "github.com/xtls/xray-core/app/stats/command"
@@ -24,6 +25,16 @@ func (f *fakeStatsServer) GetStats(_ context.Context, req *statsservice.GetStats
 	return &statsservice.GetStatsResponse{
 		Stat: &statsservice.Stat{Name: req.Name, Value: v},
 	}, nil
+}
+
+func (f *fakeStatsServer) QueryStats(_ context.Context, req *statsservice.QueryStatsRequest) (*statsservice.QueryStatsResponse, error) {
+	out := &statsservice.QueryStatsResponse{}
+	for name, v := range f.values {
+		if strings.Contains(name, req.Pattern) {
+			out.Stat = append(out.Stat, &statsservice.Stat{Name: name, Value: v})
+		}
+	}
+	return out, nil
 }
 
 func newTestClient(t *testing.T, srv *fakeStatsServer) (*Client, func()) {
@@ -104,5 +115,25 @@ func TestNew_LazyDial(t *testing.T) {
 	// New itself returns successfully — that's the lazy contract.
 	if c.addr != "127.0.0.1:1" {
 		t.Fatalf("addr=%q", c.addr)
+	}
+}
+
+func TestCounters_SumsAllProxyOutbounds(t *testing.T) {
+	srv := &fakeStatsServer{values: map[string]int64{
+		"outbound>>>proxy>>>traffic>>>uplink":     10,
+		"outbound>>>proxy>>>traffic>>>downlink":   100,
+		"outbound>>>proxy-a>>>traffic>>>uplink":   5,
+		"outbound>>>proxy-a>>>traffic>>>downlink": 50,
+		"inbound>>>socks-in>>>traffic>>>uplink":   999,
+		"outbound>>>direct>>>traffic>>>downlink":  777,
+	}}
+	c, done := newTestClient(t, srv)
+	defer done()
+	up, down, err := c.Counters(context.Background())
+	if err != nil {
+		t.Fatalf("Counters: %v", err)
+	}
+	if up != 15 || down != 150 {
+		t.Fatalf("got up=%d down=%d, want 15/150", up, down)
 	}
 }
