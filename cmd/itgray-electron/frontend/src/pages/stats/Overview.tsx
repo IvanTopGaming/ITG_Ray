@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
+import { useSettings } from "@/lib/settings";
 import { MirrorChart } from "./MirrorChart";
 import { formatBytes, formatCount, formatDuration, type Period, type StatsApp, type StatsOverview, type StatsRule } from "./format";
 
@@ -137,13 +138,15 @@ function TopRules({ rules }: { rules: StatsRule[] }) {
 
 export function Overview({ data, period }: { data: StatsOverview; period: Period }) {
   const { t, i18n } = useTranslation();
+  const [settings] = useSettings();
+  const blockEventsHidden = settings.logLevel === "error";
   const empty = data.down + data.up === 0 && data.blocked === 0 && data.onlineSeconds === 0;
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap gap-3">
         <DirectionTile label={t("stats.tiles.down")} total={data.down} proxy={data.downProxy} direct={data.downDirect} />
         <DirectionTile label={t("stats.tiles.up")} total={data.up} proxy={data.upProxy} direct={data.upDirect} />
-        <Tile label={t("stats.tiles.blocked")} value={formatCount(data.blocked, i18n.language)} hint={t("stats.tiles.blockedHint")} />
+        <Tile label={t("stats.tiles.blocked")} value={formatCount(data.blocked, i18n.language)} hint={blockEventsHidden ? t("stats.tiles.blockedNeedsInfo") : t("stats.tiles.blockedHint")} />
         <Tile
           label={t("stats.tiles.online")}
           value={formatDuration(data.onlineSeconds, t)}

@@ -648,7 +648,8 @@
       "sessions_one": "{{count}} сессия",
       "sessions_few": "{{count}} сессии",
       "sessions_many": "{{count}} сессий",
-      "sessions_other": "{{count}} сессий"
+      "sessions_other": "{{count}} сессий",
+      "blockedNeedsInfo": "Не считается при уровне логов «Error» — переключи логи на Info"
     },
     "proxy": "прокси",
     "direct": "напрямую",

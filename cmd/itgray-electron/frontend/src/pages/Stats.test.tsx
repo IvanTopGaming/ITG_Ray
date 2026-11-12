@@ -11,6 +11,12 @@ vi.mock("@/lib/itg/StatsService", () => ({
   Clear: vi.fn(),
 }));
 
+const settingsState = vi.hoisted(() => ({ logLevel: "info" }));
+vi.mock("@/lib/settings", async () => {
+  const actual = await vi.importActual<Record<string, unknown>>("@/lib/settings");
+  return { ...actual, useSettings: () => [settingsState, vi.fn()] };
+});
+
 import { Stats } from "./Stats";
 
 class NoopResizeObserver {
@@ -52,6 +58,7 @@ function renderStats() {
 }
 
 beforeEach(() => {
+  settingsState.logLevel = "info";
   overviewMock.mockReset();
   connectionsMock.mockReset();
   connectionsMock.mockResolvedValue({ conns: [] });
@@ -97,5 +104,19 @@ describe("Stats overview", () => {
     overviewMock.mockResolvedValue(overview({ down: 0, up: 0, downProxy: 0, downDirect: 0, upProxy: 0, upDirect: 0, blocked: 0, onlineSeconds: 0, sessions: 0, apps: [], rules: [] }));
     renderStats();
     expect(await screen.findByText(/no traffic recorded/i)).toBeInTheDocument();
+  });
+
+  it("explains a zero Blocked tile when the log level hides block events", async () => {
+    settingsState.logLevel = "error";
+    overviewMock.mockResolvedValue(overview({ blocked: 0 }));
+    renderStats();
+    expect(await screen.findByText(/log level/i)).toBeInTheDocument();
+  });
+
+  it("does not show the log-level hint at info", async () => {
+    overviewMock.mockResolvedValue(overview({ blocked: 0 }));
+    renderStats();
+    await screen.findByText("1.50 GB");
+    expect(screen.queryByText(/log level/i)).toBeNull();
   });
 });

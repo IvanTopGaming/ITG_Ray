@@ -637,7 +637,8 @@
       "blockedHint": "connections",
       "online": "Online",
       "sessions_one": "{{count}} session",
-      "sessions_other": "{{count}} sessions"
+      "sessions_other": "{{count}} sessions",
+      "blockedNeedsInfo": "Not counted at the “Error” log level — switch logs to Info"
     },
     "proxy": "proxy",
     "direct": "direct",
