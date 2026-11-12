@@ -426,6 +426,21 @@ func hasEquivalentLanBypass(routeRules any) bool {
 		if _, conditional := m["clash_mode"]; conditional {
 			return false
 		}
+		if m["type"] == "logical" {
+			nested, ok := m["rules"].([]any)
+			if !ok || m["mode"] != "or" || len(nested) != 2 {
+				return false
+			}
+			marker, ok := nested[1].(map[string]any)
+			if !ok || len(marker) != 1 || marker["inbound"] == nil {
+				return false
+			}
+			inner, ok := nested[0].(map[string]any)
+			if !ok {
+				return false
+			}
+			m = inner
+		}
 		present := map[string]bool{}
 		switch xs := m["ip_cidr"].(type) {
 		case []any:

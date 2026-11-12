@@ -65,3 +65,44 @@ func TestBuildSingbox_UnmarkedHasNoFindProcess(t *testing.T) {
 	_, ok := doc["route"].(map[string]any)["find_process"]
 	require.False(t, ok)
 }
+
+func TestBuildSingbox_MarkedSafetyLanRuleIsNotDuplicated(t *testing.T) {
+	in := &SingboxInput{
+		Mode: ModeTun, TunName: "ITGRay-TUN", TunIPv4: "198.18.0.1/15",
+		XraySOCKSHost: "127.0.0.1", XraySOCKSPort: 1081,
+		Rules: rules.DefaultModel(), MarkRules: true,
+	}
+	raw, err := BuildSingbox(in)
+	require.NoError(t, err)
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(raw, &doc))
+	var safetyID string
+	for _, g := range rules.DefaultModel().Groups {
+		if g.Locked {
+			safetyID = g.Rules[0].ID
+		}
+	}
+	firstLan := -1
+	var firstLanRule map[string]any
+	for i, r := range doc["route"].(map[string]any)["rules"].([]any) {
+		m := r.(map[string]any)
+		cidrs, _ := m["ip_cidr"].([]any)
+		if nested, ok := m["rules"].([]any); ok {
+			cidrs, _ = nested[0].(map[string]any)["ip_cidr"].([]any)
+		}
+		for _, c := range cidrs {
+			if c == "192.168.0.0/16" {
+				firstLan = i
+				firstLanRule = m
+				break
+			}
+		}
+		if firstLan >= 0 {
+			break
+		}
+	}
+	require.True(t, firstLan >= 0)
+	require.Equal(t, "logical", firstLanRule["type"], "the user's Safety rule must be the one that matches LAN, got %v", firstLanRule)
+	nested := firstLanRule["rules"].([]any)
+	require.Equal(t, []any{rules.MarkerInbound(safetyID)}, nested[1].(map[string]any)["inbound"])
+}
