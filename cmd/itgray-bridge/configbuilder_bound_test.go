@@ -69,10 +69,21 @@ func outboundTags(doc map[string]any) []string {
 }
 
 func ruleOutbound(sb map[string]any, process string) string {
+	matches := func(m map[string]any) bool {
+		ps, ok := m["process_name"].([]any)
+		return ok && len(ps) > 0 && ps[0] == process
+	}
 	for _, r := range sb["route"].(map[string]any)["rules"].([]any) {
 		m := r.(map[string]any)
-		if ps, ok := m["process_name"].([]any); ok && len(ps) > 0 && ps[0] == process {
+		if matches(m) {
 			return m["outbound"].(string)
+		}
+		if nested, ok := m["rules"].([]any); ok {
+			for _, n := range nested {
+				if matches(n.(map[string]any)) {
+					return m["outbound"].(string)
+				}
+			}
 		}
 	}
 	return ""

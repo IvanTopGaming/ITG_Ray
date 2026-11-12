@@ -201,3 +201,43 @@ func TestCompile_IgnoresBindingOnDirect(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"direct"}, compiledOutbounds(t, raw))
 }
+
+func TestCompileOpts_MarkWrapsRule(t *testing.T) {
+	m := bindingModel(
+		Rule{ID: "r1", Enabled: true, Action: ActionProxy, Conditions: Conditions{Processes: []string{"firefox"}}},
+		Rule{ID: "r2", Enabled: true, Action: ActionBlock, Conditions: Conditions{Domains: []DomainMatcher{{Kind: "suffix", Value: "ads.example"}}}},
+	)
+	raw, err := CompileOpts(m, CompileOptions{Mark: true})
+	require.NoError(t, err)
+	var doc struct {
+		Rules []map[string]any `json:"rules"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &doc))
+	require.Len(t, doc.Rules, 2)
+
+	r1 := doc.Rules[0]
+	require.Equal(t, "logical", r1["type"])
+	require.Equal(t, "or", r1["mode"])
+	require.Equal(t, "proxy", r1["outbound"])
+	inner := r1["rules"].([]any)
+	require.Len(t, inner, 2)
+	first := inner[0].(map[string]any)
+	require.Equal(t, []any{"firefox"}, first["process_name"])
+	_, hasOut := first["outbound"]
+	require.False(t, hasOut)
+	require.Equal(t, map[string]any{"inbound": []any{"itg-rule-r1"}}, inner[1])
+
+	require.Equal(t, "block-r2", doc.Rules[1]["outbound"])
+	require.Equal(t, "itg-rule-r1", MarkerInbound("r1"))
+	require.Equal(t, "block-r2", BlockOutbound("r2"))
+}
+
+func TestCompileOpts_UnmarkedMatchesCompileWith(t *testing.T) {
+	m := bindingModel(Rule{ID: "r1", Enabled: true, Action: ActionProxy, ServerID: "s", Conditions: Conditions{Processes: []string{"a"}}})
+	hook := func(*Rule) string { return "proxy-s" }
+	a, err := CompileWith(m, hook)
+	require.NoError(t, err)
+	b, err := CompileOpts(m, CompileOptions{OutboundFor: hook})
+	require.NoError(t, err)
+	require.JSONEq(t, string(a), string(b))
+}

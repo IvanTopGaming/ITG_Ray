@@ -211,6 +211,7 @@ func buildConfigs(dataDir, configPath string, store *rules.Store, geoMgr *geo.Ma
 				ExtraProxies:        plan.proxies,
 				RuleOutbound:        outboundFor,
 				ClashAPI:            clash,
+				MarkRules:           true,
 			}
 		case chainctl.ModeSysProxy:
 			sbInput = configgen.SingboxInput{
@@ -228,6 +229,7 @@ func buildConfigs(dataDir, configPath string, store *rules.Store, geoMgr *geo.Ma
 				ExtraProxies:     plan.proxies,
 				RuleOutbound:     outboundFor,
 				ClashAPI:         clash,
+				MarkRules:        true,
 			}
 		default:
 			return nil, nil, fmt.Errorf("buildConfigs: unknown mode %q", mode)

@@ -17,6 +17,20 @@ func Compile(m Model) ([]byte, error) {
 }
 
 func CompileWith(m Model, outboundFor func(r *Rule) string) ([]byte, error) {
+	return CompileOpts(m, CompileOptions{OutboundFor: outboundFor})
+}
+
+type CompileOptions struct {
+	OutboundFor func(*Rule) string
+	Mark        bool
+}
+
+func MarkerInbound(ruleID string) string { return "itg-rule-" + ruleID }
+
+func BlockOutbound(ruleID string) string { return "block-" + ruleID }
+
+func CompileOpts(m Model, o CompileOptions) ([]byte, error) {
+	outboundFor := o.OutboundFor
 	if err := m.Validate(); err != nil {
 		return nil, err
 	}
@@ -38,6 +52,9 @@ func CompileWith(m Model, outboundFor func(r *Rule) string) ([]byte, error) {
 				if tag := outboundFor(r); tag != "" {
 					compiled["outbound"] = tag
 				}
+			}
+			if o.Mark {
+				compiled = markRule(r, compiled)
 			}
 			out = append(out, compiled)
 		}
@@ -120,4 +137,23 @@ func toAny[T any](in []T) []any {
 		out[i] = in[i]
 	}
 	return out
+}
+
+func markRule(r *Rule, compiled map[string]any) map[string]any {
+	outbound := compiled["outbound"]
+	if r.Action == ActionBlock {
+		outbound = BlockOutbound(r.ID)
+	}
+	inner := make(map[string]any, len(compiled))
+	for k, v := range compiled {
+		if k != "outbound" {
+			inner[k] = v
+		}
+	}
+	return map[string]any{
+		"type":     "logical",
+		"mode":     "or",
+		"rules":    []any{inner, map[string]any{"inbound": []any{MarkerInbound(r.ID)}}},
+		"outbound": outbound,
+	}
 }
