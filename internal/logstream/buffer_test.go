@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/itg-team/itg-ray/internal/hub"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBufferEvictsPerSourceAndSnapshotsOrdered(t *testing.T) {
@@ -165,4 +166,12 @@ func TestBufferDropsPendingWhenLastSubscriberLeaves(t *testing.T) {
 		t.Fatalf("published after the last subscriber left: %+v", e)
 	case <-time.After(60 * time.Millisecond):
 	}
+}
+
+func TestBuffer_OnLineReceivesRawLines(t *testing.T) {
+	b := New(nil, 10)
+	var got []string
+	b.OnLine(func(source, message string) { got = append(got, source+"|"+message) })
+	b.Add("sing-box", "info", "outbound/block[block-r1]: blocked connection to https://ads.example/x?y=1", time.Now())
+	require.Equal(t, []string{"sing-box|outbound/block[block-r1]: blocked connection to https://ads.example/x?y=1"}, got)
 }
