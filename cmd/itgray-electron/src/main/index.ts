@@ -13,7 +13,10 @@ import { defaultAutostart } from "./autostart";
 import { makeNotifier } from "./notifications";
 import { resolveStartMinimized, type StartupSnapshot } from "./startup";
 import { extractDeeplink } from "./deeplink";
-import { registerUpdateIPC } from "./updates";
+import { checkForUpdate, registerUpdateIPC } from "./updates";
+import { createAutoUpdate, loadUpdatePrefs, saveUpdatePrefs } from "./auto-update";
+
+const AUTO_UPDATE_DELAY_MS = 10_000;
 
 let mainWindow: BrowserWindow | null = null;
 let supervisor: BridgeSupervisor | null = null;
@@ -37,6 +40,7 @@ app.setName("ITG Ray");
 // toasts show the default "electron.app.Electron" identifier instead of
 // "ITG Ray". No-op on other platforms.
 app.setAppUserModelId("com.itgray.app");
+
 app.setPath("userData", path.join(app.getPath("appData"), "ITG Ray"));
 app.setAsDefaultProtocolClient("itgray");
 pendingDeeplink = extractDeeplink(process.argv);
@@ -156,6 +160,28 @@ app.whenReady().then(async () => {
   });
   wireIPC(supervisor, () => mainWindow);
   registerUpdateIPC();
+
+  const updatePrefsFile = path.join(app.getPath("userData"), "update-prefs.json");
+  const autoUpdate = createAutoUpdate({
+    getVersion: async () => {
+      const ping = (await supervisor!.rpc().call("app.ping", undefined)) as { version?: string };
+      return ping?.version ?? "";
+    },
+    check: (v) => checkForUpdate(v),
+    loadPrefs: () => loadUpdatePrefs(updatePrefsFile),
+    savePrefs: (p) => saveUpdatePrefs(updatePrefsFile, p),
+    publish: (u) => mainWindow?.webContents.send("event:update.available", u),
+  });
+  ipcMain.handle("update.pending", () => autoUpdate.pending());
+  ipcMain.handle("update.skip", (_e, version: unknown) => {
+    if (typeof version === "string" && version) autoUpdate.skip(version);
+  });
+  ipcMain.handle("update.getAutoCheck", () => autoUpdate.autoCheck());
+  ipcMain.handle("update.setAutoCheck", (_e, enabled: unknown) => {
+    autoUpdate.setAutoCheck(enabled === true);
+    return autoUpdate.autoCheck();
+  });
+  setTimeout(() => void autoUpdate.run(), AUTO_UPDATE_DELAY_MS);
 
   ipcMain.handle("deeplink.getPending", () => {
     const url = pendingDeeplink;
