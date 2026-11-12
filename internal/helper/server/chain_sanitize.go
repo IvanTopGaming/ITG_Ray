@@ -123,7 +123,11 @@ func sanitizeCoreConfig(kind string, raw []byte, runtimeDir string) []byte {
 func withinDir(path, dir string) bool {
 	d := filepath.Clean(dir)
 	clean := filepath.Clean(path)
+	rooted := strings.HasPrefix(path, "/") || strings.HasPrefix(path, `\`) || filepath.VolumeName(path) != ""
 	if !filepath.IsAbs(path) {
+		if rooted {
+			return false
+		}
 		clean = filepath.Clean(filepath.Join(d, path))
 	}
 	return clean == d || strings.HasPrefix(clean, d+string(filepath.Separator))

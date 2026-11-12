@@ -3,6 +3,7 @@ package clashapi
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -18,7 +19,9 @@ func TestLoadOrCreateSecret_Stable(t *testing.T) {
 	require.Equal(t, a, b)
 	st, err := os.Stat(filepath.Join(dir, "clash-secret"))
 	require.NoError(t, err)
-	require.Equal(t, os.FileMode(0o600), st.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		require.Equal(t, os.FileMode(0o600), st.Mode().Perm())
+	}
 }
 
 func TestLoadOrCreateSecret_RegeneratesGarbage(t *testing.T) {

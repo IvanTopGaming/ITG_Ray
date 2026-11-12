@@ -223,3 +223,15 @@ func TestSanitize_KeepsProvidedClashSecret(t *testing.T) {
 		t.Fatalf("provided secret changed: %s", out)
 	}
 }
+
+func TestWithinDir_RootRelativePathsAreOutside(t *testing.T) {
+	dir := t.TempDir()
+	for _, p := range []string{`\Windows\System32\evil.log`, `/etc/evil`, `\\server\share\x`} {
+		if withinDir(p, dir) {
+			t.Fatalf("%q treated as inside %q", p, dir)
+		}
+	}
+	if !withinDir("sing-box-log.txt", dir) || !withinDir(filepath.Join(dir, "a.log"), dir) {
+		t.Fatal("paths inside the runtime dir must stay inside")
+	}
+}
