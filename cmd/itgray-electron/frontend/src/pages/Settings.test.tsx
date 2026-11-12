@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
-import { act, render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
@@ -258,6 +258,13 @@ vi.mock('@/lib/itg/HelperService', () => ({
   IsWindows: vi.fn().mockResolvedValue(false),
 }));
 
+const statsClearMock = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/itg/StatsService', () => ({
+  Clear: () => statsClearMock(),
+  Overview: vi.fn(),
+  Connections: vi.fn(),
+}));
+
 vi.mock('@/lib/itg/AppService', () => ({
   GetSnapshot: vi.fn().mockResolvedValue(null),
   GetPublicIP: vi.fn().mockResolvedValue(null),
@@ -418,6 +425,16 @@ describe('Settings — Subscription Identity', () => {
       (c) => c[0] === 'subscriptions',
     )?.[1];
     expect(subsPatch).toMatchObject({ userAgent: '' });
+  });
+
+  it('clears traffic statistics after a confirming second click', async () => {
+    statsClearMock.mockResolvedValue(null);
+    await renderSettings();
+    const btn = screen.getByRole('button', { name: 'Clear statistics' });
+    await userEvent.click(btn);
+    expect(statsClearMock).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: /confirm|sure/i }));
+    await waitFor(() => expect(statsClearMock).toHaveBeenCalledTimes(1));
   });
 });
 

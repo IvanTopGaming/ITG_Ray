@@ -103,3 +103,10 @@ test("routing submenu reflects the mode and is locked unless connected", () => {
   assert.equal(items.indexOf("Routing"), items.indexOf("Mode") + 1);
   assert.ok(find(buildTrayMenu(view(), TRAY_STRINGS.ru), "Маршрутизация"));
 });
+
+test("statistics entry navigates to the stats tab", () => {
+  assert.deepEqual(find(buildTrayMenu(view(), t), "Statistics").command, { kind: "navigate", path: "/stats" });
+  const labels = buildTrayMenu(view(), t).map((i) => i.label);
+  assert.equal(labels.indexOf("Statistics"), labels.indexOf("Logs") + 1);
+  assert.ok(find(buildTrayMenu(view(), TRAY_STRINGS.ru), "Статистика"));
+});

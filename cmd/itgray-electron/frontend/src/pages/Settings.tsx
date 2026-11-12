@@ -11,6 +11,7 @@ import { Reveal } from '@/components/controls/Reveal';
 import { SettingRow, SectionHeader } from '@/components/controls/SettingRow';
 import { ConfirmButton } from '@/components/controls/ConfirmButton';
 import { ConfirmDialog } from '@/components/controls/ConfirmDialog';
+import { Clear as ClearStats } from '@/lib/itg/StatsService';
 import { StatusPill } from '@/components/controls/StatusPill';
 import { useHelperState } from '@/lib/helperAdapter';
 import type { HelperState } from '@/lib/helperAdapter';
@@ -69,6 +70,11 @@ export function Settings() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [s, update] = useSettings();
+  const [statsCleared, setStatsCleared] = useState(false);
+  const clearStats = async () => {
+    await ClearStats();
+    setStatsCleared(true);
+  };
   const active = useScrollSpy(SECTION_IDS);
   const SECTIONS = [
     { id: 'general', label: t('settings.sections.general') },
@@ -833,6 +839,11 @@ export function Settings() {
           >
             {t('settings.logs.openFolderButton')}
           </button>
+        </SettingRow>
+        <SettingRow label={t('settings.logs.stats')} hint={statsCleared ? t('settings.logs.statsCleared') : t('settings.logs.statsHint')}>
+          <ConfirmButton onConfirm={() => void clearStats()} variant="danger">
+            {t('settings.logs.statsClear')}
+          </ConfirmButton>
         </SettingRow>
       </motion.div>
 

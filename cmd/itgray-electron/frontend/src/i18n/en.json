@@ -451,7 +451,11 @@
       "folderHint": "sing-box, xray and bridge logs ({{mb}} MB)",
       "openFolderButton": "Open folder",
       "clearOldLogs": "Clear old logs",
-      "clearOldLogsHint": "Delete log files older than 7 days."
+      "clearOldLogsHint": "Delete log files older than 7 days.",
+      "stats": "Traffic statistics",
+      "statsHint": "Hourly totals for the last 30 days. Hosts are never stored.",
+      "statsClear": "Clear statistics",
+      "statsCleared": "Statistics cleared"
     },
     "about": {
       "title": "About",

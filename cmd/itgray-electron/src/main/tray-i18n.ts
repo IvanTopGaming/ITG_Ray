@@ -24,6 +24,7 @@ export interface TrayStrings {
   cancelSync: string;
   open: string;
   logs: string;
+  stats: string;
   quit: string;
 }
 
@@ -52,6 +53,7 @@ export const TRAY_STRINGS: Record<TrayLang, TrayStrings> = {
     cancelSync: "Cancel subscription update",
     open: "Open ITG Ray",
     logs: "Logs",
+    stats: "Statistics",
     quit: "Quit ITG Ray",
   },
   ru: {
@@ -78,6 +80,7 @@ export const TRAY_STRINGS: Record<TrayLang, TrayStrings> = {
     cancelSync: "Отменить обновление подписок",
     open: "Открыть ITG Ray",
     logs: "Логи",
+    stats: "Статистика",
     quit: "Выйти",
   },
 };
