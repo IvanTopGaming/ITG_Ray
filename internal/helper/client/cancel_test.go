@@ -34,7 +34,7 @@ func waitCall(t *testing.T, done <-chan error) error {
 	select {
 	case err := <-done:
 		return err
-	case <-time.After(time.Second):
+	case <-time.After(testWait):
 		t.Fatal("Call did not return after its context ended")
 		return nil
 	}

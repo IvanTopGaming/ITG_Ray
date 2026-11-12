@@ -29,7 +29,7 @@ func waitEntered(t *testing.T, entered <-chan string, n int) {
 	for i := range n {
 		select {
 		case <-entered:
-		case <-time.After(5 * time.Second):
+		case <-time.After(testWait):
 			t.Fatalf("only %d of %d fetches started", i, n)
 		}
 	}
@@ -68,7 +68,7 @@ func TestSubsService_CancelSync_AbortsFetchAndKeepsPreviousState(t *testing.T) {
 	select {
 	case err := <-done:
 		require.ErrorIs(t, err, ErrSyncCanceled)
-	case <-time.After(3 * time.Second):
+	case <-time.After(testWait):
 		t.Fatal("SyncOne did not return after CancelSync")
 	}
 
@@ -132,7 +132,7 @@ func TestSubsService_CancelAll_StopsSyncAll(t *testing.T) {
 	select {
 	case err := <-done:
 		require.NoError(t, err)
-	case <-time.After(3 * time.Second):
+	case <-time.After(testWait):
 		t.Fatal("SyncAll did not return after CancelAll")
 	}
 	subs, err := store.Load()
@@ -158,7 +158,7 @@ func TestSubsService_CancelAll_SkipsQueuedSyncs(t *testing.T) {
 	svc.CancelAll()
 	select {
 	case <-done:
-	case <-time.After(3 * time.Second):
+	case <-time.After(testWait):
 		t.Fatal("SyncAll did not return after CancelAll")
 	}
 	require.Empty(t, entered, "queued subscriptions were fetched after CancelAll")

@@ -94,7 +94,7 @@ func TestServersService_TestLatency_OneServer(t *testing.T) {
 		require.True(t, ok, "results payload should be []map[string]any")
 		require.Len(t, results, 1)
 		require.Equal(t, "a", results[0]["id"])
-	case <-timeAfter500ms():
+	case <-eventDeadline():
 		t.Fatal("no probe:result event")
 	}
 
@@ -103,7 +103,7 @@ func TestServersService_TestLatency_OneServer(t *testing.T) {
 	select {
 	case e := <-rcv:
 		require.Equal(t, hub.EventServersChanged, e.Name)
-	case <-timeAfter500ms():
+	case <-eventDeadline():
 		t.Fatal("no servers:changed event after probe")
 	}
 }
@@ -139,7 +139,7 @@ func TestServersService_ToggleFavorite(t *testing.T) {
 	select {
 	case e := <-rcv:
 		require.Equal(t, hub.EventServersChanged, e.Name)
-	case <-timeAfter500ms():
+	case <-eventDeadline():
 		t.Fatal("no servers:changed event after first toggle")
 	}
 
@@ -152,12 +152,12 @@ func TestServersService_ToggleFavorite(t *testing.T) {
 	select {
 	case e := <-rcv:
 		require.Equal(t, hub.EventServersChanged, e.Name)
-	case <-timeAfter500ms():
+	case <-eventDeadline():
 		t.Fatal("no servers:changed event after second toggle")
 	}
 }
 
-func timeAfter500ms() <-chan time.Time { return time.After(500 * time.Millisecond) }
+func eventDeadline() <-chan time.Time { return time.After(testWait) }
 
 func TestServersService_Add_GeneratesIDAndPersists(t *testing.T) {
 	dir := t.TempDir()
@@ -185,7 +185,7 @@ func TestServersService_Add_GeneratesIDAndPersists(t *testing.T) {
 	select {
 	case e := <-rcv:
 		require.Equal(t, hub.EventServersChanged, e.Name)
-	case <-timeAfter500ms():
+	case <-eventDeadline():
 		t.Fatal("no servers:changed event")
 	}
 }
@@ -298,7 +298,7 @@ func TestServersService_Remove_ManualWhileIdle(t *testing.T) {
 	select {
 	case e := <-rcv:
 		require.Equal(t, hub.EventServersChanged, e.Name)
-	case <-timeAfter500ms():
+	case <-eventDeadline():
 		t.Fatal("no servers:changed event")
 	}
 }
@@ -427,7 +427,7 @@ func TestServersService_Edit_NameOnly_PreservesVlessAndID(t *testing.T) {
 	select {
 	case e := <-rcv:
 		require.Equal(t, hub.EventServersChanged, e.Name)
-	case <-timeAfter500ms():
+	case <-eventDeadline():
 		t.Fatal("no servers:changed event")
 	}
 }

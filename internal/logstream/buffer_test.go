@@ -112,7 +112,7 @@ func TestBufferPublishesOnlyWithSubscribers(t *testing.T) {
 		if e.Name != "log:batch" {
 			t.Fatalf("event name = %q", e.Name)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(testWait):
 		t.Fatal("expected publish with an active subscriber")
 	}
 
@@ -135,7 +135,7 @@ func TestBufferCoalescesBurstIntoOneBatch(t *testing.T) {
 	var e hub.Event
 	select {
 	case e = <-ch:
-	case <-time.After(2 * time.Second):
+	case <-time.After(testWait):
 		t.Fatal("no batch published")
 	}
 	entries, _ := e.Payload["entries"].([]map[string]any)

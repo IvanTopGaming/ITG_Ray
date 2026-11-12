@@ -108,7 +108,7 @@ func TestRun_ConnectStart(t *testing.T) {
 	require.NoError(t, rs.Connect("a", "sysproxy"))
 
 	// Wait for the connected status — emitted after bringUp completes.
-	deadline := time.After(time.Second)
+	deadline := time.After(testWait)
 	for {
 		select {
 		case <-deadline:

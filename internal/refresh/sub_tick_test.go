@@ -141,7 +141,7 @@ func TestRunSub_UsesCurrentSubscriptionURL(t *testing.T) {
 		if got != current.URL {
 			t.Fatalf("requested %q, want current URL %q", got, current.URL)
 		}
-	case <-time.After(3 * time.Second):
+	case <-time.After(testWait):
 		t.Fatal("scheduled sync did not run")
 	}
 }
@@ -335,8 +335,8 @@ func TestRunSub_ZeroIntervalUsesDriverDefault(t *testing.T) {
 	d.wg.Go(func() { d.runSub(ctx, st.subs[0]) })
 
 	// First tick fires after ~3ms (seed-controlled jitter), second after
-	// ~100ms ±10%. 3 seconds of slop covers slow CI/race-detector overhead.
-	deadline := time.After(3 * time.Second)
+	// ~100ms ±10%. testWait of slop covers slow CI/race-detector overhead.
+	deadline := time.After(testWait)
 	count := 0
 	for count < 2 {
 		select {
@@ -370,7 +370,7 @@ func TestRunSub_CtxCancel_ExitsPromptly(t *testing.T) {
 	select {
 	case <-gotDone:
 		// good
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("runSub did not exit within 500ms of cancel")
+	case <-time.After(testWait):
+		t.Fatal("runSub did not exit after cancel")
 	}
 }

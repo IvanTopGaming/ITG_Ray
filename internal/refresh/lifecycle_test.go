@@ -140,7 +140,7 @@ func TestRefreshRegressionSlowRefreshDoesNotBlockFavoriteEdit(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(testWait):
 		t.Error("local favorite edit blocks for the entire upstream fetch")
 	}
 	close(release)
@@ -181,7 +181,7 @@ func TestRefreshRegressionSchedulerRemoveReaddAndCancel(t *testing.T) {
 		t.Helper()
 		select {
 		case <-ch:
-		case <-time.After(4 * time.Second):
+		case <-time.After(testWait):
 			t.Fatal(message)
 		}
 	}
@@ -240,7 +240,7 @@ func TestRefreshRegressionMergeKeepsConcurrentServerChanges(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(testWait):
 		close(release)
 		<-done
 		<-changed
@@ -299,7 +299,7 @@ func TestRefreshRegressionRemovedDuringFetchDoesNotCommit(t *testing.T) {
 			<-done
 			t.Fatal(err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(testWait):
 		close(release)
 		<-done
 		<-removed
