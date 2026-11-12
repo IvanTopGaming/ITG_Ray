@@ -192,3 +192,56 @@ func TestHelperHandlersNilSvc(t *testing.T) {
 		}
 	}
 }
+
+func TestHelperStatusReportsVersionsWhenRunning(t *testing.T) {
+	pinPackageManaged(t, false)
+	prev := Version
+	Version = "v0.1.3"
+	t.Cleanup(func() { Version = prev })
+	h := HelperHandlers{
+		Svc:           &fakeHelper{state: "running"},
+		HelperVersion: func(context.Context) (string, error) { return "v0.1.2", nil },
+	}
+	result, err := h.Status(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	raw, _ := json.Marshal(result)
+	want := `{"state":"running","packageManaged":false,"version":"v0.1.2","expectedVersion":"v0.1.3"}`
+	if string(raw) != want {
+		t.Fatalf("got=%s want=%s", raw, want)
+	}
+}
+
+func TestHelperStatusSkipsVersionProbeWhenNotRunning(t *testing.T) {
+	pinPackageManaged(t, false)
+	probed := false
+	h := HelperHandlers{
+		Svc:           &fakeHelper{state: "missing"},
+		HelperVersion: func(context.Context) (string, error) { probed = true; return "v0.1.2", nil },
+	}
+	result, err := h.Status(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	raw, _ := json.Marshal(result)
+	if string(raw) != `{"state":"missing","packageManaged":false}` || probed {
+		t.Fatalf("got=%s probed=%v", raw, probed)
+	}
+}
+
+func TestHelperStatusIgnoresVersionProbeError(t *testing.T) {
+	pinPackageManaged(t, false)
+	h := HelperHandlers{
+		Svc:           &fakeHelper{state: "running"},
+		HelperVersion: func(context.Context) (string, error) { return "", errors.New("dial") },
+	}
+	result, err := h.Status(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	raw, _ := json.Marshal(result)
+	if string(raw) != `{"state":"running","packageManaged":false}` {
+		t.Fatalf("got=%s", raw)
+	}
+}
