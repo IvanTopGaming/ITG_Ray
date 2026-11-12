@@ -93,7 +93,7 @@ function StatusFooter() {
       .catch(() => {});
   }, []);
   return (
-    <div className="mt-1 flex justify-between border-t border-white/5 px-3 pt-2.5 font-mono text-[10px] text-white/40">
+    <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 border-t border-white/5 px-3 pt-2.5 font-mono text-[10px] text-white/40">
       <span className="flex items-center gap-1.5">
         <span className={clsx("h-1.5 w-1.5 rounded-full", meta.dot)} />
         {t(meta.labelKey)}

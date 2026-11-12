@@ -10,7 +10,7 @@ Built on [sing-box](https://github.com/SagerNet/sing-box) and [Xray-core](https:
 
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-8a63d2)](https://github.com/IvanTopGaming/ITG_Ray/releases)
-[![Release](https://img.shields.io/badge/release-v0.1.0--beta.1-f59e0b)](https://github.com/IvanTopGaming/ITG_Ray/releases)
+[![Release](https://img.shields.io/badge/release-v0.2.0--beta.1-f59e0b)](https://github.com/IvanTopGaming/ITG_Ray/releases)
 [![CI](https://github.com/IvanTopGaming/ITG_Ray/actions/workflows/ci.yml/badge.svg)](https://github.com/IvanTopGaming/ITG_Ray/actions/workflows/ci.yml)
 
 **English** · [Русский](README.ru.md)
@@ -26,9 +26,13 @@ Built on [sing-box](https://github.com/SagerNet/sing-box) and [Xray-core](https:
 | 🌐 **VLESS + subscriptions** | Add servers via `vless://` links or subscription URLs, with auto-refresh. |
 | 🛡️ **TUN mode** | System-wide tunneling through a virtual interface with FakeIP DNS. |
 | 🧩 **System proxy mode** | Lighter alternative that just sets the OS proxy. |
-| 🧭 **Routing rules** | Drag-and-drop editor — domains, IPs, GeoIP/Geosite → proxy / direct / block. |
+| 🧭 **Routing rules** | Drag-and-drop editor — domains, IPs, GeoIP/Geosite, apps → proxy / direct / block, or through a specific server. |
+| 🔀 **Routing modes** | Switch "By rules" / "All via proxy" / "All direct" instantly, from the app or the tray, without reconnecting. |
+| 📦 **Provider rules** | A subscription can ship its own routing rules; they stay below yours and only use that subscription's servers. |
 | 🔌 **Local inbounds** | SOCKS `127.0.0.1:1080` and HTTP `127.0.0.1:8888` stay reachable even in TUN. |
-| 📊 **Observability** | Live core logs, traffic stats and latency probing. |
+| 📊 **Statistics** | Traffic by app, rule and route for today / 7 / 30 days, plus live connections with one-click rules. Only aggregates are stored. |
+| 🔎 **Observability** | Live core logs, latency probing, and notifications when the helper or the app needs an update. |
+| 🗂️ **Tray control** | Connect, pick a server, switch mode and update subscriptions straight from the tray. |
 | 🔒 **Privilege-separated** | A root helper owns the tunnel; the GUI talks to it over a local API. |
 | 🌍 **Bilingual UI** | English and Russian. |
 
@@ -39,6 +43,10 @@ Built on [sing-box](https://github.com/SagerNet/sing-box) and [Xray-core](https:
 | Servers | Routing rules |
 | :---: | :---: |
 | <img src="docs/screenshots/servers.png" width="420" alt="Servers" /> | <img src="docs/screenshots/routing.png" width="420" alt="Routing rules" /> |
+
+| Statistics |
+| :---: |
+| <img src="docs/screenshots/stats.png" width="840" alt="Statistics" /> |
 
 </div>
 
@@ -62,7 +70,9 @@ Built on [sing-box](https://github.com/SagerNet/sing-box) and [Xray-core](https:
 
 Download and run `ITGRay-Setup-<version>.exe` from the
 [Releases](https://github.com/IvanTopGaming/ITG_Ray/releases) page. The installer
-registers the helper service and ships the Wintun driver.
+ships the helper and the Wintun driver. On first launch ITG Ray offers to install
+the helper service (one UAC prompt), and after an app update it offers to update
+the helper the same way.
 
 ## 🔨 Build from source
 
