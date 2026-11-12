@@ -343,6 +343,78 @@ export interface SpeedSample {
   at: string;
 }
 
+export interface StatsApp {
+  app: string;
+  down: number;
+  up: number;
+  downProxy: number;
+  upProxy: number;
+}
+
+export interface StatsConn {
+  id: string;
+  app: string;
+  host: string;
+  suffix?: string;
+  destIp?: string;
+  network?: string;
+  ruleId?: string;
+  ruleName?: string;
+  ruleGroupId?: string;
+  ruleGroupLocked?: boolean;
+  route: string;
+  serverId?: string;
+  serverName?: string;
+  downBps: number;
+  upBps: number;
+  start?: string;
+}
+
+export interface StatsConnections {
+  conns: StatsConn[];
+}
+
+export interface StatsOverview {
+  period: string;
+  down: number;
+  up: number;
+  downProxy: number;
+  downDirect: number;
+  upProxy: number;
+  upDirect: number;
+  blocked: number;
+  onlineSeconds: number;
+  sessions: number;
+  series: StatsPoint[];
+  apps: StatsApp[];
+  rules: StatsRule[];
+}
+
+export interface StatsOverviewParams {
+  period: string;
+}
+
+export interface StatsPoint {
+  start: string;
+  down: number;
+  up: number;
+  downProxy: number;
+  downDirect: number;
+  upProxy: number;
+  upDirect: number;
+}
+
+export interface StatsRule {
+  ruleId: string;
+  ruleName: string;
+  action: string;
+  route: string;
+  serverId?: string;
+  serverName?: string;
+  deleted?: boolean;
+  conns: number;
+}
+
 export interface SubView {
   id: string;
   name: string;
@@ -442,6 +514,9 @@ export interface RpcMethods {
   "servers.toggleFavorite": { params: ServersToggleFavoriteParams; result: Empty };
   "settings.get": { params: Empty; result: SettingsView };
   "settings.update": { params: SettingsUpdateParams; result: SettingsView };
+  "stats.clear": { params: Empty; result: Empty };
+  "stats.connections": { params: Empty; result: StatsConnections };
+  "stats.overview": { params: StatsOverviewParams; result: StatsOverview };
   "subs.add": { params: SubsAddParams; result: SubView };
   "subs.cancelAll": { params: Empty; result: Empty };
   "subs.cancelSync": { params: SubsCancelSyncParams; result: Empty };

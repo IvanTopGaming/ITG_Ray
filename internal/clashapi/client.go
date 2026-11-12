@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/itg-team/itg-ray/internal/stats"
 )
 
 type Client struct {
@@ -88,4 +90,42 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 		}
 	}
 	return nil
+}
+
+func (c *Client) Connections(ctx context.Context) (stats.Snapshot, error) {
+	var raw struct {
+		Connections []struct {
+			ID       string    `json:"id"`
+			Upload   uint64    `json:"upload"`
+			Download uint64    `json:"download"`
+			Start    time.Time `json:"start"`
+			Chains   []string  `json:"chains"`
+			Rule     string    `json:"rule"`
+			Metadata struct {
+				Network       string `json:"network"`
+				Host          string `json:"host"`
+				DestinationIP string `json:"destinationIP"`
+				ProcessPath   string `json:"processPath"`
+			} `json:"metadata"`
+		} `json:"connections"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/connections", nil, &raw); err != nil {
+		return stats.Snapshot{}, err
+	}
+	snap := stats.Snapshot{Conns: make([]stats.Conn, 0, len(raw.Connections))}
+	for _, rc := range raw.Connections {
+		snap.Conns = append(snap.Conns, stats.Conn{
+			ID:      rc.ID,
+			Host:    rc.Metadata.Host,
+			DestIP:  rc.Metadata.DestinationIP,
+			Process: rc.Metadata.ProcessPath,
+			Rule:    rc.Rule,
+			Chains:  rc.Chains,
+			Up:      rc.Upload,
+			Down:    rc.Download,
+			Start:   rc.Start,
+			Network: rc.Metadata.Network,
+		})
+	}
+	return snap, nil
 }

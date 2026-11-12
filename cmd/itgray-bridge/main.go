@@ -31,6 +31,7 @@ import (
 	"github.com/itg-team/itg-ray/internal/routebind"
 	"github.com/itg-team/itg-ray/internal/rules"
 	"github.com/itg-team/itg-ray/internal/server"
+	"github.com/itg-team/itg-ray/internal/stats"
 	"github.com/itg-team/itg-ray/internal/subscription"
 	"github.com/itg-team/itg-ray/internal/sysproxy"
 )
@@ -249,6 +250,37 @@ func main() {
 	}
 	runSvc := bindings.NewRunService(runDeps)
 
+	chainConnected := func() bool {
+		st, _, _ := chainCtrl.Status()
+		return st == hub.StatusConnected
+	}
+	var statsSvc *bindings.StatsService
+	var statsCollector *stats.Collector
+	var statsStore *stats.Store
+	if routingClient != nil {
+		statsStore, err = stats.OpenStore(filepath.Join(dataDir, "stats.db"))
+		if err != nil {
+			slog.Error("bridge: stats store unavailable", slog.String("scope", "stats"), slog.String("err", err.Error()))
+			statsStore = nil
+		}
+	}
+	if statsStore != nil {
+		statsCollector = stats.NewCollector(routingClient, statsStore, func() string {
+			_, srv, _ := chainCtrl.Status()
+			if srv == nil {
+				return ""
+			}
+			return srv.ID
+		}, time.Now)
+		logBuf.OnLine(statsCollector.OnLogLine)
+		statsSvc = bindings.NewStatsService(bindings.StatsDeps{
+			Store:       statsStore,
+			Collector:   statsCollector,
+			Rules:       ruleStore,
+			ServersPath: filepath.Join(dataDir, "servers.json"),
+		})
+	}
+
 	serversSvc := bindings.NewServersService(bindings.ServersDeps{
 		ServerStore:  serverStore,
 		Hub:          h,
@@ -363,6 +395,14 @@ func main() {
 	d.Register("run.connect", run.Connect)
 	d.Register("run.disconnect", run.Disconnect)
 	d.Register("run.setRoutingMode", run.SetRoutingMode)
+
+	statsH := handlers.StatsHandlers{}
+	if statsSvc != nil {
+		statsH.Svc = statsSvc
+	}
+	d.Register("stats.overview", statsH.Overview)
+	d.Register("stats.connections", statsH.Connections)
+	d.Register("stats.clear", statsH.Clear)
 	d.Register("run.getRoutingMode", run.GetRoutingMode)
 
 	geoH := handlers.GeoHandlers{Svc: &geoService{
@@ -426,6 +466,11 @@ func main() {
 	// lines and only has to pick up what arrives afterwards.
 	logPoller.Start(ctx)
 
+	stopStats := func() {}
+	if statsCollector != nil {
+		stopStats = runStats(ctx, h, statsCollector, statsStore, chainConnected)
+	}
+
 	// Announce bridge readiness. Renderer gates mutation buttons on
 	// this state; "restarting"/"failed" are emitted by Electron main
 	// (it owns the spawn lifecycle), not by the bridge itself.
@@ -446,5 +491,6 @@ func main() {
 	// then wait for it to flush any buffered hub events before main
 	// returns (avoids silent drop of notifications queued mid-request).
 	cancel()
+	stopStats()
 	waitFwd()
 }
