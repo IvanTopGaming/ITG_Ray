@@ -179,3 +179,17 @@ func TestCollector_ActiveSession(t *testing.T) {
 	ov := f.overview(t)
 	require.Equal(t, int64(600), ov.OnlineSeconds)
 }
+
+func TestCollector_TransientErrorDoesNotDoubleCount(t *testing.T) {
+	f := newCollectorFixture(t)
+	c := Conn{ID: "1", Process: "/usr/bin/a", Rule: "final", Chains: []string{"direct"}, Down: 1000}
+	f.tick(t, c)
+	f.src.err = errors.New("context deadline exceeded")
+	f.c.Tick(context.Background())
+	f.src.err = nil
+	c.Down = 1500
+	f.tick(t, c)
+	ov := f.overview(t)
+	require.Equal(t, uint64(1500), ov.Down)
+	require.Equal(t, 1, ov.Rules[0].Conns)
+}

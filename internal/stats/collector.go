@@ -159,7 +159,6 @@ func (c *Collector) Tick(ctx context.Context) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if err != nil {
-		c.prev = map[string]connState{}
 		c.live = nil
 		c.lastTick = time.Time{}
 		return
