@@ -25,6 +25,9 @@ const Routing = lazy(() =>
 const RuleEditor = lazy(() =>
   import("./pages/RuleEditor").then((m) => ({ default: m.RuleEditor })),
 );
+const Stats = lazy(() =>
+  import("./pages/Stats").then((m) => ({ default: m.Stats })),
+);
 const Logs = lazy(() =>
   import("./pages/Logs").then((m) => ({ default: m.Logs })),
 );
@@ -39,6 +42,7 @@ export default function App() {
           <Route path="subscriptions" element={<Subscriptions />} />
           <Route path="routing" element={<Routing />} />
           <Route path="routing/:ruleId" element={<RuleEditor />} />
+          <Route path="stats" element={<Stats />} />
           <Route path="logs" element={<Logs />} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />

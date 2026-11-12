@@ -6,6 +6,7 @@ import {
   Settings as SettingsIcon,
   Route,
   ScrollText,
+  BarChart3,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
@@ -26,6 +27,7 @@ const main: NavItem[] = [
   { to: "/servers", labelKey: "nav.servers", icon: Server },
   { to: "/subscriptions", labelKey: "nav.subscriptions", icon: Globe },
   { to: "/routing", labelKey: "nav.routing", icon: Route },
+  { to: "/stats", labelKey: "nav.stats", icon: BarChart3 },
   { to: "/logs", labelKey: "nav.logs", icon: ScrollText },
 ];
 
