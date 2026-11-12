@@ -117,6 +117,11 @@ contextBridge.exposeInMainWorld("itg", {
       rpc("run.connect", params),
     disconnect: () => rpc("run.disconnect"),
   },
+  tray: {
+    report: (state: Record<string, unknown>) => ipcRenderer.send("tray.report", state),
+    takePendingNavigate: () =>
+      ipcRenderer.invoke("tray.takePendingNavigate") as Promise<string | null>,
+  },
   update: {
     check: (currentVersion: string) =>
       ipcRenderer.invoke("update.check", { currentVersion }) as Promise<{

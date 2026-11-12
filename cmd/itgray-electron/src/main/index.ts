@@ -5,16 +5,21 @@ import { BridgeSupervisor } from "./bridge";
 import { wireIPC } from "./ipc";
 import { isDevMode } from "./paths";
 import { createTray } from "./tray";
+import { createTrayController, type RendererReport, type TrayController } from "./tray-controller";
+import { loadLastServer, saveLastServer } from "./last-server";
+import type { RpcMethod } from "../shared/protocol";
 import { loadState, attachStatePersister } from "./window-state";
 import { defaultAutostart } from "./autostart";
 import { makeNotifier } from "./notifications";
-import { resolveStartMinimized, resolveTrayStatus, type StartupSnapshot } from "./startup";
+import { resolveStartMinimized, type StartupSnapshot } from "./startup";
 import { extractDeeplink } from "./deeplink";
 import { registerUpdateIPC } from "./updates";
 
 let mainWindow: BrowserWindow | null = null;
 let supervisor: BridgeSupervisor | null = null;
 let tray: ReturnType<typeof createTray> | null = null;
+let trayController: TrayController | null = null;
+let pendingNavigate: string | null = null;
 let quitting = false;
 let pendingDeeplink: string | null = null;
 
@@ -95,6 +100,7 @@ async function createWindow(): Promise<void> {
 
   mainWindow.on("closed", () => {
     mainWindow = null;
+    trayController?.onRendererGone();
   });
 }
 
@@ -102,19 +108,52 @@ app.whenReady().then(async () => {
   supervisor = new BridgeSupervisor();
   supervisor.start();
   await createWindow();
-  tray = createTray(
-    () => mainWindow,
-    () => {
-      // Tray "summon" is an explicit request to see the window. createWindow
-      // now builds it hidden (show:false) so the launch path can honor
-      // start-minimized; this path must show it after (re)creating.
-      void createWindow().then(() => {
-        mainWindow?.show();
-        mainWindow?.focus();
-      });
+  // Tray "summon" is an explicit request to see the window. createWindow
+  // builds it hidden (show:false) so the launch path can honor
+  // start-minimized; this path must show it after (re)creating.
+  const openWindow = async (): Promise<void> => {
+    if (!mainWindow) await createWindow();
+    if (mainWindow?.isMinimized()) mainWindow.restore();
+    mainWindow?.show();
+    mainWindow?.focus();
+  };
+  tray = createTray(() => mainWindow, () => void openWindow());
+  const trayStateFile = path.join(app.getPath("userData"), "tray-state.json");
+  const trayIcon = tray;
+  const controller = createTrayController({
+    rpc: (method, params) => supervisor!.rpc().call(method as RpcMethod, params as never),
+    hasRenderer: () =>
+      !!mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isLoading(),
+    sendToRenderer: (cmd) => mainWindow?.webContents.send("event:tray.command", cmd),
+    showWindow: openWindow,
+    queueNavigate: (p) => {
+      pendingNavigate = p;
     },
-  );
-  wireIPC(supervisor, () => mainWindow, (s) => tray?.setStatus(s));
+    quit: () => app.quit(),
+    setMenu: (items) => trayIcon.setMenu(items, (cmd) => void controller.dispatch(cmd)),
+    setTooltip: (text) => trayIcon.setTooltip(text),
+    setIcon: (s) => trayIcon.setIcon(s),
+    locale: () => app.getLocale(),
+    loadLastServer: () => loadLastServer(trayStateFile),
+    saveLastServer: (id) => saveLastServer(trayStateFile, id),
+  });
+  trayController = controller;
+  supervisor.on("vpn.status", (p) => controller.onVpnStatus(p));
+  supervisor.on("vpn.speed", (p) => controller.onVpnSpeed(p));
+  supervisor.on("servers.changed", () => void controller.refresh());
+  supervisor.on("sub.synced", () => void controller.refresh());
+  supervisor.on("state", (p: { state?: string }) => {
+    if (p?.state === "running") void controller.refresh();
+  });
+  ipcMain.on("tray.report", (_e, report: RendererReport) => {
+    if (report && typeof report === "object") controller.onRendererReport(report);
+  });
+  ipcMain.handle("tray.takePendingNavigate", () => {
+    const p = pendingNavigate;
+    pendingNavigate = null;
+    return p;
+  });
+  wireIPC(supervisor, () => mainWindow);
   registerUpdateIPC();
 
   ipcMain.handle("deeplink.getPending", () => {
@@ -162,10 +201,9 @@ app.whenReady().then(async () => {
       console.warn("startup snapshot read failed:", err);
     }
     // Tray adopt: the bridge's Reconcile() announces a helper-held tunnel
-    // before wireIPC subscribes, so seed the icon from this pull instead of
-    // waiting for a vpn.status event that already came and went.
-    const adopted = resolveTrayStatus(snap);
-    if (adopted) tray?.setStatus(adopted);
+    // before the tray subscribes, so seed it from a pull instead of waiting
+    // for a vpn.status event that already came and went.
+    void trayController?.refresh();
     // Window visibility: show unless the user opted into tray-only launch.
     if (mainWindow && !resolveStartMinimized(snap)) {
       mainWindow.show();

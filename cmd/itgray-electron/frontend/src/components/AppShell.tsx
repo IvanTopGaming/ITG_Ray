@@ -17,12 +17,14 @@ import { dashReconnect, getDashState } from "@/lib/dashStore";
 import { rulesRevertToBaseline } from "@/lib/rulesStore";
 import { setPendingImportLink } from "@/lib/deeplinkStore";
 import { ReconnectToast } from "./ReconnectToast";
+import { useTrayBridge } from "@/lib/trayBridge";
 
 export function AppShell() {
   const reconnectNeeded = useReconnectNeeded();
   const { t, i18n } = useTranslation();
   const [settings] = useSettings();
   const navigate = useNavigate();
+  useTrayBridge(navigate, settings.language);
   useEffect(() => {
     if (i18n.language !== settings.language)
       void i18n.changeLanguage(settings.language);

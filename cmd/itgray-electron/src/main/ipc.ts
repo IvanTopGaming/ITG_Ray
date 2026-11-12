@@ -20,7 +20,6 @@ const claimAutoConnect = createAutoConnectClaim();
 export function wireIPC(
   supervisor: BridgeSupervisor,
   getWindow: () => BrowserWindow | null,
-  trayStatus?: (s: "idle" | "connecting" | "connected" | "error") => void,
 ): void {
   ipcMain.handle("rpc", async (_event, method: RpcMethod, params: unknown) => {
     return supervisor.rpc().call(method, params as never);
@@ -92,12 +91,6 @@ export function wireIPC(
     supervisor.on(topic, (payload) => {
       const win = getWindow();
       if (win) win.webContents.send(`event:${topic}`, payload);
-      if (topic === "vpn.status" && trayStatus) {
-        const status = (payload as { status?: string } | null)?.status;
-        if (status === "idle" || status === "connecting" || status === "connected" || status === "error") {
-          trayStatus(status);
-        }
-      }
     });
   }
 }
