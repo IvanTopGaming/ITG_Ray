@@ -667,6 +667,32 @@
       "deleted": "Deleted rule"
     },
     "noData": "Nothing yet",
-    "empty": "No traffic recorded for this period yet. Statistics are collected while ITG Ray is open and connected."
+    "empty": "No traffic recorded for this period yet. Statistics are collected while ITG Ray is open and connected.",
+    "addRule": {
+      "button": "Rule",
+      "title": "What to take from this connection?",
+      "app": "App: {{app}}",
+      "exact": "Exactly {{host}}",
+      "suffix": "{{domain}} and subdomains",
+      "ip": "IP {{ip}}",
+      "andHint": "All ticked conditions must match together",
+      "create": "Create rule",
+      "untitled": "New rule"
+    },
+    "live": {
+      "memoryOnly": "Only what is open right now — kept in memory, never saved",
+      "filter": "Filter by app or host",
+      "empty": "No active connections right now",
+      "noMatch": "Nothing matches the filter",
+      "app": "App",
+      "host": "Host",
+      "rule": "Rule",
+      "route": "Route",
+      "routes": {
+        "proxy": "Proxy",
+        "direct": "Direct",
+        "block": "Block"
+      }
+    }
   }
 }
