@@ -16,6 +16,8 @@ import { ConditionCard } from "./ConditionCard";
 import { AndConnector, ThenConnector } from "./connectors";
 import { AddConditionPicker } from "./AddConditionPicker";
 import { ActionSelector } from "./ActionSelector";
+import { ServerPicker } from "./ServerPicker";
+import { useDash } from "@/lib/dashStore";
 
 const SNAP_EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -50,6 +52,7 @@ function initialVisibleTypes(rule: RuleView | null): Set<ConditionType> {
 }
 
 export function RuleEditor() {
+  const allServers = useDash().allServers ?? [];
   const { t } = useTranslation();
   const { ruleId = "" } = useParams<{ ruleId: string }>();
   const navigate = useNavigate();
@@ -255,7 +258,39 @@ export function RuleEditor() {
 
       <motion.section variants={sectionVariants} className="flex flex-col">
         <ThenConnector />
-        <ActionSelector value={draft.action} onChange={(action) => setDraft({ ...draft, action })} />
+        <ActionSelector
+          value={draft.action}
+          onChange={(action) => {
+            if (action === "proxy") {
+              setDraft({ ...draft, action });
+              return;
+            }
+            const { server_id: _a, server_source_id: _b, server_name: _c, ...rest } = draft;
+            void _a;
+            void _b;
+            void _c;
+            setDraft({ ...rest, action });
+          }}
+        >
+          {draft.action === "proxy" && (
+            <ServerPicker
+              value={draft.server_id ?? null}
+              fallbackName={draft.server_name}
+              servers={allServers}
+              onChange={(s) => {
+                const { server_id: _a, server_source_id: _b, server_name: _c, ...rest } = draft;
+                void _a;
+                void _b;
+                void _c;
+                setDraft(
+                  s
+                    ? { ...rest, server_id: s.id, server_source_id: s.sourceId || undefined, server_name: s.name }
+                    : rest,
+                );
+              }}
+            />
+          )}
+        </ActionSelector>
       </motion.section>
 
       <ConfirmDialog

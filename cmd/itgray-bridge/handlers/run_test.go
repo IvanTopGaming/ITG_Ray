@@ -13,7 +13,15 @@ type fakeRun struct {
 
 	gotServerID, gotMode string
 	disconnectCalled     bool
+	gotRoutingMode       string
+	routingMode          string
 }
+
+func (f *fakeRun) SetRoutingMode(mode string) error {
+	f.gotRoutingMode = mode
+	return nil
+}
+func (f *fakeRun) GetRoutingMode() (string, error) { return f.routingMode, nil }
 
 func (f *fakeRun) Connect(serverID, mode string) error {
 	f.gotServerID, f.gotMode = serverID, mode
@@ -87,5 +95,36 @@ func TestRunHandlersNilSvc(t *testing.T) {
 		if _, err := tc.fn(); err != nil {
 			t.Errorf("%s with nil Svc should be no-op, got: %v", tc.name, err)
 		}
+	}
+}
+
+func TestRunSetRoutingModePassesMode(t *testing.T) {
+	fake := &fakeRun{}
+	h := RunHandlers{Svc: fake}
+	if _, err := h.SetRoutingMode(context.Background(), json.RawMessage(`{"mode":"direct"}`)); err != nil {
+		t.Fatalf("SetRoutingMode: %v", err)
+	}
+	if fake.gotRoutingMode != "direct" {
+		t.Fatalf("mode: got %q", fake.gotRoutingMode)
+	}
+	if _, err := h.SetRoutingMode(context.Background(), json.RawMessage(`{`)); err == nil {
+		t.Fatal("expected error on malformed params")
+	}
+}
+
+func TestRunGetRoutingModeWrapsResult(t *testing.T) {
+	h := RunHandlers{Svc: &fakeRun{routingMode: "global"}}
+	got, err := h.GetRoutingMode(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("GetRoutingMode: %v", err)
+	}
+	b, _ := json.Marshal(got)
+	if string(b) != `{"mode":"global"}` {
+		t.Fatalf("result: %s", b)
+	}
+	got, _ = RunHandlers{}.GetRoutingMode(context.Background(), nil)
+	b, _ = json.Marshal(got)
+	if string(b) != `{"mode":"rule"}` {
+		t.Fatalf("nil svc result: %s", b)
 	}
 }

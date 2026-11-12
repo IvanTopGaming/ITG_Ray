@@ -5,3 +5,5 @@ export function Connect(serverId: string, mode: string): Promise<unknown> { retu
 export function Disconnect(): Promise<unknown> { return svc().disconnect?.() ?? Promise.resolve(null); }
 export function Reconnect(serverId: string, mode: string): Promise<unknown> { return svc().reconnect?.({ serverId, mode }) ?? Promise.resolve(null); }
 export function SwitchMode(mode: string): Promise<unknown> { return svc().switchMode?.({ mode }) ?? Promise.resolve(null); }
+export function SetRoutingMode(mode: string): Promise<unknown> { return svc().setRoutingMode?.({ mode }) ?? Promise.resolve(null); }
+export function GetRoutingMode(): Promise<unknown> { return svc().getRoutingMode?.() ?? Promise.resolve(null); }

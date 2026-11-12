@@ -28,6 +28,7 @@ import (
 	"github.com/itg-team/itg-ray/internal/logging"
 	"github.com/itg-team/itg-ray/internal/logstream"
 	"github.com/itg-team/itg-ray/internal/refresh"
+	"github.com/itg-team/itg-ray/internal/routebind"
 	"github.com/itg-team/itg-ray/internal/rules"
 	"github.com/itg-team/itg-ray/internal/server"
 	"github.com/itg-team/itg-ray/internal/subscription"
@@ -98,6 +99,7 @@ func main() {
 	dataDir := defaultDataDir()
 	configPath := filepath.Join(dataDir, "config.json")
 	serverStore := serversFileStore{path: filepath.Join(dataDir, "servers.json")}
+	bindingIssues := &routebind.Issues{}
 	subStore := subscription.FileStore{Path: filepath.Join(dataDir, "subscriptions.json")}
 
 	configStore := bindings.NewConfigStore(configPath, handlers.Version, BuildDate)
@@ -196,9 +198,12 @@ func main() {
 
 	ruleStore := rules.NewStore(dataDir)
 	rulesSvc := bindings.NewRulesService(bindings.RulesDeps{
-		Store: ruleStore,
-		Hub:   h,
+		Store:       ruleStore,
+		Hub:         h,
+		Issues:      bindingIssues,
+		ServersPath: filepath.Join(dataDir, "servers.json"),
 	})
+	watchBindings(h, ruleStore, filepath.Join(dataDir, "servers.json"), bindingIssues)
 
 	geoMgr := geo.NewManager(dataDir, func(done, total int64) {
 		h.Publish(hub.Event{
@@ -213,7 +218,7 @@ func main() {
 		Helper:       helperClient,
 		Sysproxy:     sysproxy.New(),
 		Hub:          h,
-		BuildConfigs: buildConfigs(dataDir, configPath, ruleStore, geoMgr),
+		BuildConfigs: buildConfigs(dataDir, configPath, ruleStore, geoMgr, bindingIssues),
 		Network:      networkLoader,
 		KillSwitch:   killSwitchLoader,
 	})
@@ -233,10 +238,16 @@ func main() {
 		XraySOCKSPort: defaultXrayPort,
 	})
 
-	runSvc := bindings.NewRunService(bindings.RunDeps{
-		Chain: chainCtrl,
-		Hub:   h,
-	})
+	routingClient, err := newRoutingClient(dataDir)
+	if err != nil {
+		slog.Error("bridge: clash secret unavailable", slog.String("scope", "bridge"), slog.String("err", err.Error()))
+	}
+	runDeps := bindings.RunDeps{Chain: chainCtrl, Hub: h}
+	if routingClient != nil {
+		runDeps.Routing = routingClient
+		watchRouting(h, routingClient)
+	}
+	runSvc := bindings.NewRunService(runDeps)
 
 	serversSvc := bindings.NewServersService(bindings.ServersDeps{
 		ServerStore:  serverStore,
@@ -351,6 +362,8 @@ func main() {
 	run := handlers.RunHandlers{Svc: runSvc}
 	d.Register("run.connect", run.Connect)
 	d.Register("run.disconnect", run.Disconnect)
+	d.Register("run.setRoutingMode", run.SetRoutingMode)
+	d.Register("run.getRoutingMode", run.GetRoutingMode)
 
 	geoH := handlers.GeoHandlers{Svc: &geoService{
 		mgr:        geoMgr,

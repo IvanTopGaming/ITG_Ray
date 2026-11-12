@@ -159,3 +159,45 @@ func TestCompile_GroupWithOnlyDisabledRulesEmitsNothing(t *testing.T) {
 	require.NoError(t, json.Unmarshal(out, &doc))
 	require.Empty(t, doc.Rules)
 }
+
+func compiledOutbounds(t *testing.T, raw []byte) []string {
+	t.Helper()
+	var doc struct {
+		Rules []map[string]any `json:"rules"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &doc))
+	out := make([]string, 0, len(doc.Rules))
+	for _, r := range doc.Rules {
+		out = append(out, r["outbound"].(string))
+	}
+	return out
+}
+
+func bindingModel(rs ...Rule) Model {
+	return Model{DefaultAction: ActionProxy, Groups: []Group{{ID: "g", Name: "g", Enabled: true, Rules: rs}}}
+}
+
+func TestCompileWith_UsesOutboundHook(t *testing.T) {
+	m := bindingModel(
+		Rule{ID: "r1", Enabled: true, Action: ActionProxy, ServerID: "s2", Conditions: Conditions{Processes: []string{"a"}}},
+		Rule{ID: "r2", Enabled: true, Action: ActionProxy, ServerID: "s3", Conditions: Conditions{Processes: []string{"b"}}},
+	)
+	raw, err := CompileWith(m, func(r *Rule) string {
+		if r.ServerID == "s2" {
+			return "proxy-s2"
+		}
+		return ""
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"proxy-s2", "proxy"}, compiledOutbounds(t, raw))
+}
+
+func TestCompile_IgnoresBindingOnDirect(t *testing.T) {
+	m := bindingModel(Rule{ID: "r1", Enabled: true, Action: ActionDirect, ServerID: "s2", Conditions: Conditions{Processes: []string{"a"}}})
+	raw, err := Compile(m)
+	require.NoError(t, err)
+	require.Equal(t, []string{"direct"}, compiledOutbounds(t, raw))
+	raw, err = CompileWith(m, func(*Rule) string { return "proxy-s2" })
+	require.NoError(t, err)
+	require.Equal(t, []string{"direct"}, compiledOutbounds(t, raw))
+}

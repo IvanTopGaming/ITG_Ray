@@ -58,50 +58,22 @@ func NewHelperAdapter(c *client.Client, tunName string) *HelperAdapter {
 	return &HelperAdapter{c: c, tunName: tunName}
 }
 
-// xrayServerEndpoint pulls the (address, port) tuple out of the VLESS
-// vnext outbound emitted by configgen.BuildXray. The shape is
-// outbounds[0].settings.vnext[0].{address, port}; we only need the
-// minimum for json.Unmarshal so a missing optional field doesn't
-// fail the decode.
-func xrayServerEndpoint(xrayJSON []byte) (string, int, error) {
-	var doc struct {
-		Outbounds []struct {
-			Settings struct {
-				Vnext []struct {
-					Address string `json:"address"`
-					Port    int    `json:"port"`
-				} `json:"vnext"`
-			} `json:"settings"`
-		} `json:"outbounds"`
-	}
-	if err := json.Unmarshal(xrayJSON, &doc); err != nil {
-		return "", 0, fmt.Errorf("decode xray config: %w", err)
-	}
-	if len(doc.Outbounds) == 0 || len(doc.Outbounds[0].Settings.Vnext) == 0 {
-		return "", 0, fmt.Errorf("xray config: vnext outbound missing")
-	}
-	v := doc.Outbounds[0].Settings.Vnext[0]
-	if v.Address == "" || v.Port == 0 {
-		return "", 0, fmt.Errorf("xray config: vnext address/port empty")
-	}
-	return v.Address, v.Port, nil
-}
-
 // StartChain bundles the configs into OpStartChain. The session id
 // returned by the helper is captured so StopChain can address the same
 // session.
 func (a *HelperAdapter) StartChain(ctx context.Context, singboxJSON, xrayJSON []byte, mode Mode) error {
-	host, port, err := xrayServerEndpoint(xrayJSON)
+	host, port, extraHosts, err := xrayServerEndpoints(xrayJSON)
 	if err != nil {
 		return err
 	}
 	args, err := json.Marshal(helperserver.StartChainArgs{
-		SingboxConfig: singboxJSON,
-		XrayConfig:    xrayJSON,
-		ServerHost:    host,
-		ServerPort:    port,
-		TunName:       a.tunName,
-		Mode:          string(mode),
+		SingboxConfig:    singboxJSON,
+		XrayConfig:       xrayJSON,
+		ServerHost:       host,
+		ServerPort:       port,
+		TunName:          a.tunName,
+		Mode:             string(mode),
+		ExtraServerHosts: extraHosts,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal StartChain: %w", err)

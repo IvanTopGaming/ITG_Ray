@@ -12,6 +12,7 @@ export const BRIDGE_TOPICS: Exclude<EventTopic, "bridge.state">[] = [
   "log.batch",
   "probe.result",
   "rules.changed",
+  "routing.mode",
   "servers.changed",
   "sub.synced",
   "vpn.speed",

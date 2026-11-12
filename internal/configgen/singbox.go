@@ -26,6 +26,16 @@ const (
 
 // SingboxInput collects everything BuildSingbox needs to emit a sing-box config.
 // TunName and TunIPv4 are only consumed when Mode == ModeTun.
+type SingboxProxy struct {
+	Tag  string
+	Port int
+}
+
+type ClashAPI struct {
+	Port   int
+	Secret string
+}
+
 type SingboxInput struct {
 	Mode Mode
 	// SocksInboundPort / HTTPInboundPort are the loopback proxy listeners.
@@ -73,6 +83,10 @@ type SingboxInput struct {
 	// this in before BuildSingbox so sing-box loads rule-sets locally with
 	// no network at startup. Empty → no geo rules referenced.
 	GeoRuleSets map[string]string
+
+	ExtraProxies []SingboxProxy
+	RuleOutbound func(r *rules.Rule) string
+	ClashAPI     *ClashAPI
 }
 
 // logLevelOrDefault returns a valid sing-box log level, defaulting to
@@ -92,7 +106,14 @@ func logLevelOrDefault(level string) string {
 // fakeip server type returns synthetic IPs in 198.18.0.0/15 for A/AAAA
 // queries; every other query type (e.g. the HTTPS/SVCB queries virtually
 // every modern browser sends) doesn't match dns.rules and is caught by
-// dns.final:"remote" instead. In any other configuration, it emits a single
+// dns.final:"remote" instead. When user rules route by IP to anything other
+// than the main proxy (direct, block, another server), A/AAAA queries are
+// first evaluated against "remote"; answers matching a direct rule's IP
+// conditions are re-resolved by "local", answers matching block / other-server
+// rules get the tunnelled answer itself (no lookup leaves the real IP for
+// traffic that won't go direct), and the rest stay FakeIP — otherwise the
+// connection arrives as a domain and the IP rule can never match (see
+// fakeIPDNSRules). In any other configuration, it emits a single
 // "default" server and sets dns.final to that same tag, since this branch
 // declares no dns.rules at all and every query would otherwise hit final.
 // Without dns.final, sing-box's DNS engine silently falls back to an
@@ -153,9 +174,7 @@ func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
 				fakeipServer,
 				{"tag": "local", "type": "tls", "server": localGeoResolver, "detour": "direct"},
 			},
-			"rules": []map[string]any{
-				{"query_type": []string{"A", "AAAA"}, "server": "fakeip"},
-			},
+			"rules": fakeIPDNSRules(in),
 			// No independent_cache: sing-box 1.14 deprecated it (removal in
 			// 1.16) because the DNS cache is now always keyed per transport,
 			// which is the isolation FakeIP needs.
@@ -171,6 +190,100 @@ func buildDNSBlock(in *SingboxInput, upstreams []string) map[string]any {
 		"final":    "default",
 		"strategy": strategy,
 	}
+}
+
+func fakeIPDNSRules(in *SingboxInput) []map[string]any {
+	addrQuery := []string{"A", "AAAA"}
+	fakeip := map[string]any{"query_type": addrQuery, "server": "fakeip"}
+	direct, other := realIPMatchers(in)
+	if direct.empty() && other.empty() {
+		return []map[string]any{fakeip}
+	}
+	out := []map[string]any{{"query_type": addrQuery, "action": "evaluate", "server": "remote"}}
+	out = append(out, direct.rules(map[string]any{"server": "local"})...)
+	out = append(out, other.rules(map[string]any{"action": "respond"})...)
+	return append(out, fakeip)
+}
+
+type ipMatchers struct {
+	ruleSets []string
+	cidrs    []string
+	seen     map[string]bool
+}
+
+func (m *ipMatchers) empty() bool { return len(m.ruleSets) == 0 && len(m.cidrs) == 0 }
+
+func (m *ipMatchers) addSet(tag string) {
+	if !m.seen["set:"+tag] {
+		m.seen["set:"+tag] = true
+		m.ruleSets = append(m.ruleSets, tag)
+	}
+}
+
+func (m *ipMatchers) addCIDR(c string) {
+	if !strings.Contains(c, "/") {
+		if strings.Contains(c, ":") {
+			c += "/128"
+		} else {
+			c += "/32"
+		}
+	}
+	if !m.seen["cidr:"+c] {
+		m.seen["cidr:"+c] = true
+		m.cidrs = append(m.cidrs, c)
+	}
+}
+
+func (m *ipMatchers) rules(tail map[string]any) []map[string]any {
+	var out []map[string]any
+	if len(m.ruleSets) > 0 {
+		r := map[string]any{"match_response": true, "rule_set": m.ruleSets}
+		for k, v := range tail {
+			r[k] = v
+		}
+		out = append(out, r)
+	}
+	if len(m.cidrs) > 0 {
+		r := map[string]any{"match_response": true, "ip_cidr": m.cidrs}
+		for k, v := range tail {
+			r[k] = v
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+func realIPMatchers(in *SingboxInput) (direct, other *ipMatchers) {
+	direct = &ipMatchers{seen: map[string]bool{}}
+	other = &ipMatchers{seen: map[string]bool{}}
+	for gi := range in.Rules.Groups {
+		g := &in.Rules.Groups[gi]
+		if !g.Enabled || g.Locked {
+			continue
+		}
+		for ri := range g.Rules {
+			r := &g.Rules[ri]
+			if !r.Enabled {
+				continue
+			}
+			target := other
+			switch {
+			case r.Action == rules.ActionDirect:
+				target = direct
+			case r.Action == rules.ActionProxy && (in.RuleOutbound == nil || in.RuleOutbound(r) == ""):
+				continue
+			}
+			for _, geo := range r.Conditions.Geo {
+				if tag, ok := strings.CutPrefix(geo, "geoip:"); ok {
+					target.addSet("geoip-" + tag)
+				}
+			}
+			for _, c := range r.Conditions.IPCIDRs {
+				target.addCIDR(c)
+			}
+		}
+	}
+	return direct, other
 }
 
 // defaultDomainResolverFor picks the server tag that route.default_domain_resolver
@@ -298,6 +411,9 @@ func prependLanBypass(rules []map[string]any) []map[string]any {
 func hasEquivalentLanBypass(routeRules any) bool {
 	check := func(m map[string]any) bool {
 		if m["outbound"] != "direct" {
+			return false
+		}
+		if _, conditional := m["clash_mode"]; conditional {
 			return false
 		}
 		present := map[string]bool{}
@@ -436,7 +552,7 @@ func applyTunModeKillswitch(route map[string]any, lanBypassPrepended bool, block
 // engine driving routing decisions. The "proxy" outbound is a SOCKS5 client
 // pointed at the embedded xray-core's local listener.
 func BuildSingbox(in *SingboxInput) ([]byte, error) {
-	ruleBytes, err := rules.Compile(in.Rules)
+	ruleBytes, err := rules.CompileWith(in.Rules, in.RuleOutbound)
 	if err != nil {
 		slog.Error("singbox build failed", slog.String("scope", "configgen"),
 			slog.String("stage", "compile rules"), slog.String("err", err.Error()))
@@ -447,6 +563,27 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 		slog.Error("singbox build failed", slog.String("scope", "configgen"),
 			slog.String("stage", "unmarshal route"), slog.String("err", err.Error()))
 		return nil, err
+	}
+
+	if in.ClashAPI != nil {
+		globalLan := map[string]any{"clash_mode": "Global"}
+		for k, v := range lanBypassRule() {
+			globalLan[k] = v
+		}
+		clashRules := []any{
+			map[string]any{"clash_mode": "Direct", "outbound": "direct"},
+			globalLan,
+		}
+		if in.Mode == ModeTun && in.TunIPv6 != "" && in.FakeIPv6Range == "" {
+			clashRules = append(clashRules, map[string]any{"clash_mode": "Global", "ip_cidr": []any{"::/0"}, "outbound": "block"})
+		}
+		clashRules = append(clashRules, map[string]any{"clash_mode": "Global", "outbound": "proxy"})
+		switch existing := route["rules"].(type) {
+		case []any:
+			route["rules"] = append(clashRules, existing...)
+		default:
+			route["rules"] = clashRules
+		}
 	}
 
 	// Prepend sniff action rule (sing-box 1.13+: legacy inbound sniff fields replaced by route rule actions).
@@ -549,6 +686,28 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 			{"type": "block", "tag": "block"},
 		},
 		"route": route,
+	}
+	if len(in.ExtraProxies) > 0 {
+		outbounds := doc["outbounds"].([]map[string]any)
+		for _, p := range in.ExtraProxies {
+			outbounds = append(outbounds, map[string]any{
+				"type":        "socks",
+				"tag":         p.Tag,
+				"server":      in.XraySOCKSHost,
+				"server_port": p.Port,
+				"version":     "5",
+			})
+		}
+		doc["outbounds"] = outbounds
+	}
+	if in.ClashAPI != nil {
+		doc["experimental"] = map[string]any{
+			"clash_api": map[string]any{
+				"external_controller": fmt.Sprintf("127.0.0.1:%d", in.ClashAPI.Port),
+				"secret":              in.ClashAPI.Secret,
+				"default_mode":        "Rule",
+			},
+		}
 	}
 	if tags := collectRuleSetTags(route); len(tags) > 0 {
 		decls := make([]map[string]any, 0, len(tags))

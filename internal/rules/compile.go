@@ -13,6 +13,10 @@ import (
 // Compile turns the UI rules model into the JSON used by sing-box's route block.
 // The result is suitable for embedding directly under the "route" key of a sing-box config.
 func Compile(m Model) ([]byte, error) {
+	return CompileWith(m, nil)
+}
+
+func CompileWith(m Model, outboundFor func(r *Rule) string) ([]byte, error) {
 	if err := m.Validate(); err != nil {
 		return nil, err
 	}
@@ -28,7 +32,14 @@ func Compile(m Model) ([]byte, error) {
 			if !m.Groups[gi].Rules[ri].Enabled {
 				continue
 			}
-			out = append(out, compileRule(&m.Groups[gi].Rules[ri]))
+			r := &m.Groups[gi].Rules[ri]
+			compiled := compileRule(r)
+			if r.Action == ActionProxy && outboundFor != nil {
+				if tag := outboundFor(r); tag != "" {
+					compiled["outbound"] = tag
+				}
+			}
+			out = append(out, compiled)
 		}
 	}
 	if len(out) > 0 {

@@ -6,8 +6,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // rulesStore.ts pulls in dashStore + settings at top level; both
 // modules touch window.itg via EventsOn during init, which is undefined
 // in jsdom. Stub them so vi.importActual('@/lib/rulesStore') doesn't crash.
+const editorServers = [
+  { id: "a", name: "Netherlands 2", country: "NL", sourceId: "sub", origin: "P" },
+  { id: "b", name: "Finland", country: "FI", sourceId: "sub", origin: "P" },
+];
 vi.mock("@/lib/dashStore", () => ({
   getDashState: () => ({ status: "idle" }),
+  useDash: () => ({ allServers: editorServers }),
 }));
 vi.mock("@/lib/settings", () => ({
   setCurrentRulesSignature: () => {},
@@ -183,5 +188,36 @@ describe("RuleEditor", () => {
     await userEvent.type(screen.getByLabelText("Name"), " edit");
     await userEvent.click(screen.getByRole("button", { name: /routing/i }));
     expect(screen.getByText(/discard.*changes/i)).toBeInTheDocument();
+  });
+
+  it("proxy rule: picking a server saves server_id, server_source_id and server_name", async () => {
+    useRulesMock.mockReturnValue({ ...okRules, groups: groupsWith(
+      { id: "r1", name: "Video", enabled: true, action: "proxy", conditions: { processes: ["firefox"] } },
+    ) });
+    rulesEditRuleMock.mockResolvedValue(undefined);
+    renderEditor("r1");
+    await userEvent.click(screen.getByRole("button", { name: /current server/i }));
+    await userEvent.click(screen.getByRole("option", { name: /finland/i }));
+    await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
+    await waitFor(() => expect(rulesEditRuleMock).toHaveBeenCalled());
+    expect(rulesEditRuleMock.mock.calls[0][0]).toMatchObject({ server_id: "b", server_source_id: "sub", server_name: "Finland" });
+  });
+
+  it("switching away from proxy clears the server binding and hides the picker", async () => {
+    useRulesMock.mockReturnValue({ ...okRules, groups: groupsWith(
+      { id: "r1", name: "Video", enabled: true, action: "proxy", server_id: "b", server_source_id: "sub", server_name: "Finland", conditions: { processes: ["firefox"] } },
+    ) });
+    rulesEditRuleMock.mockResolvedValue(undefined);
+    renderEditor("r1");
+    expect(screen.getByRole("button", { name: /finland/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^direct$/i }));
+    expect(screen.queryByRole("button", { name: /finland/i })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
+    await waitFor(() => expect(rulesEditRuleMock).toHaveBeenCalled());
+    const saved = rulesEditRuleMock.mock.calls[0][0];
+    expect(saved.action).toBe("direct");
+    expect(saved.server_id).toBeUndefined();
+    expect(saved.server_source_id).toBeUndefined();
+    expect(saved.server_name).toBeUndefined();
   });
 });

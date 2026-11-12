@@ -9,6 +9,8 @@ import { MemoryRouter } from "react-router-dom";
 // crash.
 vi.mock("@/lib/dashStore", () => ({
   getDashState: () => ({ status: "idle" }),
+  useDash: () => ({ allServers: [], status: "idle", routingMode: "rule" }),
+  dashSetRoutingMode: () => Promise.resolve(),
 }));
 vi.mock("@/lib/settings", () => ({
   setCurrentRulesSignature: () => {},
@@ -361,5 +363,33 @@ describe("moveRuleAcrossGroups", () => {
     const input = [a, b];
     const out = moveRuleAcrossGroups(input, "missing", "b", 0);
     expect(out).toBe(input);
+  });
+
+  it("flags a rule whose bound server is gone, using the stored name", () => {
+    const bound = { ...user, rules: [{ id: "r9", name: "Video", enabled: true, action: "proxy", server_id: "x", server_name: "Old NL", binding: { state: "missing" }, conditions: { processes: ["firefox"] } }] };
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, bound], loading: false, lastError: null, bootstrapped: true });
+    renderRouting();
+    expect(screen.getByText(/server is gone/i)).toBeInTheDocument();
+    expect(screen.getByText(/old nl/i)).toBeInTheDocument();
+  });
+
+  it("shows the bound server chip for a healthy binding", () => {
+    const bound = { ...user, rules: [{ id: "r9", name: "Video", enabled: true, action: "proxy", server_id: "x", server_name: "Finland", binding: { state: "ok" }, conditions: { processes: ["firefox"] } }] };
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, bound], loading: false, lastError: null, bootstrapped: true });
+    renderRouting();
+    expect(screen.getByText("Finland")).toBeInTheDocument();
+    expect(screen.queryByText(/server is gone/i)).toBeNull();
+  });
+
+  it.each([
+    ["dns", /address doesn't resolve/i],
+    ["config", /config isn't supported/i],
+    ["disabled", /server is disabled/i],
+  ])("explains an unusable binding with reason %s", (reason, text) => {
+    const bound = { ...user, rules: [{ id: "r9", name: "Video", enabled: true, action: "proxy", server_id: "x", server_name: "NL", binding: { state: "unusable", reason }, conditions: { processes: ["firefox"] } }] };
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, bound], loading: false, lastError: null, bootstrapped: true });
+    renderRouting();
+    expect(screen.getByText(text)).toBeInTheDocument();
+    expect(screen.getByText(/using main/i)).toBeInTheDocument();
   });
 });

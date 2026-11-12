@@ -17,6 +17,7 @@ function view(over: Partial<TrayView> = {}): TrayView {
     ],
     hasSubs: true,
     syncing: false,
+    routingMode: "rule",
     ...over,
   };
 }
@@ -88,4 +89,17 @@ test("language resolves from the setting, falling back to the OS locale", () => 
   assert.equal(resolveTrayLang("auto", "ru-RU"), "ru");
   assert.equal(resolveTrayLang(undefined, "de-DE"), "en");
   assert.equal(find(buildTrayMenu(view(), TRAY_STRINGS.ru), "Подключить").command!.kind, "connect");
+});
+
+test("routing submenu reflects the mode and is locked unless connected", () => {
+  const idle = find(buildTrayMenu(view(), t), "Routing").submenu!;
+  assert.ok(idle.every((i) => i.enabled === false));
+  const sub = find(buildTrayMenu(view({ status: "connected", routingMode: "direct" }), t), "Routing").submenu!;
+  assert.deepEqual(sub.map((i) => i.label), ["By rules", "All via proxy", "All direct"]);
+  assert.equal(sub.find((i) => i.label === "All direct")!.checked, true);
+  assert.ok(sub.every((i) => i.enabled !== false));
+  assert.deepEqual(sub[1].command, { kind: "setRoutingMode", mode: "global" });
+  const items = buildTrayMenu(view({ status: "connected" }), t).map((i) => i.label);
+  assert.equal(items.indexOf("Routing"), items.indexOf("Mode") + 1);
+  assert.ok(find(buildTrayMenu(view(), TRAY_STRINGS.ru), "Маршрутизация"));
 });

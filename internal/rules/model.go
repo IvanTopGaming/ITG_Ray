@@ -74,6 +74,16 @@ type Rule struct {
 	Enabled    bool       `json:"enabled"`
 	Action     Action     `json:"action"`
 	Conditions Conditions `json:"conditions"`
+
+	ServerID       string `json:"server_id,omitempty"`
+	ServerSourceID string `json:"server_source_id,omitempty"`
+	ServerName     string `json:"server_name,omitempty"`
+}
+
+func (r *Rule) ClearServerBinding() {
+	r.ServerID = ""
+	r.ServerSourceID = ""
+	r.ServerName = ""
 }
 
 // Validate checks structural invariants required for the rule to compile.

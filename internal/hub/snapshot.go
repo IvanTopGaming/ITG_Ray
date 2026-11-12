@@ -38,6 +38,7 @@ type ServerView struct {
 	Favorite  bool     `json:"favorite"`
 	Tags      []string `json:"tags,omitempty"`
 	URI       string   `json:"uri"` // canonical vless:// URI form, derived via vless.Config.URL()
+	SourceID  string   `json:"sourceId,omitempty"`
 }
 
 // SubView is the read-only DTO for one subscription.
@@ -195,6 +196,16 @@ type RuleView struct {
 	Enabled    bool             `json:"enabled"`
 	Action     string           `json:"action"`
 	Conditions rules.Conditions `json:"conditions"`
+
+	ServerID       string           `json:"server_id,omitempty"`
+	ServerSourceID string           `json:"server_source_id,omitempty"`
+	ServerName     string           `json:"server_name,omitempty"`
+	Binding        *RuleBindingView `json:"binding,omitempty"`
+}
+
+type RuleBindingView struct {
+	State  string `json:"state"`
+	Reason string `json:"reason,omitempty"`
 }
 
 type ImportPreview struct {

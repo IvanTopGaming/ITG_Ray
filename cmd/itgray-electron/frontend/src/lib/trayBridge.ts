@@ -3,11 +3,13 @@ import type { NavigateFunction } from "react-router-dom";
 import {
   dashConnect,
   dashDisconnect,
+  dashSetRoutingMode,
   dashSwitchMode,
   getDashState,
   loadLastServerId,
   useDash,
   type Mode,
+  type RoutingMode,
 } from "@/lib/dashStore";
 import { useSubs, type SubsActions } from "@/lib/subsStore";
 
@@ -16,6 +18,7 @@ export type TrayCommand =
   | { kind: "disconnect" }
   | { kind: "selectServer"; id: string }
   | { kind: "setMode"; mode: Mode }
+  | { kind: "setRoutingMode"; mode: RoutingMode }
   | { kind: "syncAll" }
   | { kind: "cancelSync" }
   | { kind: "navigate"; path: string };
@@ -51,6 +54,9 @@ export async function runTrayCommand(cmd: TrayCommand, deps: TrayCommandDeps): P
     }
     case "setMode":
       await dashSwitchMode(cmd.mode);
+      return;
+    case "setRoutingMode":
+      await dashSetRoutingMode(cmd.mode);
       return;
     case "syncAll":
       await deps.subs.syncAll();

@@ -202,6 +202,7 @@ func toServerViews(in []server.Server, originByID map[string]string) []hub.Serve
 			Favorite:  s.Favorite,
 			Tags:      append([]string(nil), s.Tags...),
 			URI:       s.Vless.URL(),
+			SourceID:  s.SourceID,
 		})
 	}
 	return out

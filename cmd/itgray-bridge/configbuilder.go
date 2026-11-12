@@ -4,15 +4,96 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"path/filepath"
 	"time"
 
 	"github.com/itg-team/itg-ray/internal/chainctl"
+	"github.com/itg-team/itg-ray/internal/clashapi"
 	"github.com/itg-team/itg-ray/internal/config"
 	"github.com/itg-team/itg-ray/internal/configgen"
 	"github.com/itg-team/itg-ray/internal/geo"
+	"github.com/itg-team/itg-ray/internal/routebind"
 	"github.com/itg-team/itg-ray/internal/rules"
 	"github.com/itg-team/itg-ray/internal/server"
+	"github.com/itg-team/itg-ray/internal/vless"
 )
+
+var lookupServerIPv4 = resolveServerIPv4
+
+type boundPlan struct {
+	xray        []configgen.XrayServer
+	proxies     []configgen.SingboxProxy
+	tagByServer map[string]string
+	ips         []string
+}
+
+func planBoundServers(model rules.Model, servers []server.Server, mainID string, bindings map[string]routebind.Binding) boundPlan {
+	plan := boundPlan{tagByServer: map[string]string{}}
+	byID := make(map[string]*server.Server, len(servers))
+	for i := range servers {
+		byID[servers[i].ID] = &servers[i]
+	}
+	failed := map[string]string{}
+	for _, g := range model.Groups {
+		if !g.Enabled {
+			continue
+		}
+		for _, r := range g.Rules {
+			if !r.Enabled || r.Action != rules.ActionProxy || r.ServerID == "" || r.ServerID == mainID {
+				continue
+			}
+			b, ok := bindings[r.ID]
+			if !ok || (b.State != routebind.StateOK && b.State != routebind.StateRebound) {
+				continue
+			}
+			if _, done := plan.tagByServer[r.ServerID]; done {
+				continue
+			}
+			if reason, bad := failed[r.ServerID]; bad {
+				b.State, b.Reason = routebind.StateUnusable, reason
+				bindings[r.ID] = b
+				continue
+			}
+			reason := ""
+			srv := byID[r.ServerID]
+			var vc vless.Config
+			var ip string
+			if srv == nil {
+				reason = "missing"
+			} else {
+				vc = srv.Vless
+				if _, err := vc.Normalize(); err != nil {
+					reason = "config"
+				} else if resolved, err := lookupServerIPv4(vc.Address); err != nil {
+					reason = "dns"
+				} else {
+					ip = resolved
+				}
+			}
+			if reason != "" {
+				failed[r.ServerID] = reason
+				b.State, b.Reason = routebind.StateUnusable, reason
+				bindings[r.ID] = b
+				continue
+			}
+			tag := configgen.ExtraTag(r.ServerID)
+			port := defaultXrayPort + 1 + len(plan.xray)
+			plan.tagByServer[r.ServerID] = tag
+			plan.xray = append(plan.xray, configgen.XrayServer{Tag: tag, Server: vc, ServerIP: ip, SocksPort: port})
+			plan.proxies = append(plan.proxies, configgen.SingboxProxy{Tag: tag, Port: port})
+			plan.ips = append(plan.ips, ip)
+		}
+	}
+	for id, b := range bindings {
+		if b.State == routebind.StateOK || b.State == routebind.StateRebound {
+			if reason, bad := failed[b.ServerID]; bad {
+				b.State, b.Reason = routebind.StateUnusable, reason
+				bindings[id] = b
+			}
+		}
+	}
+	return plan
+}
 
 // Default port assignments for non-user-configurable internal endpoints.
 // SOCKS/HTTP inbound ports are now sourced from config.Network.SysProxy
@@ -66,18 +147,32 @@ func loadRulesFromDataDir(dataDir string, store *rules.Store) rules.Model {
 // Network values come from chainctl's per-Connect read of config.Network
 // (Tier 2b runtime wiring). chainctl.{ClampMTU,ResolveDNS,MapIPv6Strategy}
 // translate user-facing knobs into sing-box-compatible shapes.
-func buildConfigs(dataDir, configPath string, store *rules.Store, geoMgr *geo.Manager) chainctl.ConfigBuilder {
+func buildConfigs(dataDir, configPath string, store *rules.Store, geoMgr *geo.Manager, issues *routebind.Issues) chainctl.ConfigBuilder {
 	return func(srv *server.Server, mode chainctl.Mode, net config.Network) (singboxJSON, xrayJSON []byte, err error) {
 		logLevel := ""
 		if c, lerr := config.Load(configPath); lerr == nil {
 			logLevel = c.Debug.LogLevel
 		}
-		serverIP, err := resolveServerIPv4(srv.Vless.Address)
+		serverIP, err := lookupServerIPv4(srv.Vless.Address)
 		if err != nil {
 			return nil, nil, fmt.Errorf("resolve server host %q: %w", srv.Vless.Address, err)
 		}
 
-		model := loadRulesFromDataDir(dataDir, store)
+		servers, _ := server.Load(filepath.Join(dataDir, "servers.json"))
+		model, bindings := routebind.Resolve(loadRulesFromDataDir(dataDir, store), servers)
+		plan := planBoundServers(model, servers, srv.ID, bindings)
+		secret, err := clashapi.LoadOrCreateSecret(dataDir)
+		if err != nil {
+			return nil, nil, err
+		}
+		clash := &configgen.ClashAPI{Port: configgen.ClashAPIPort, Secret: secret}
+		outboundFor := func(r *rules.Rule) string { return plan.tagByServer[r.ServerID] }
+		exclude := serverExcludeForTUN(serverIP)
+		if len(exclude) > 0 {
+			for _, ip := range plan.ips {
+				exclude = append(exclude, ip+"/32")
+			}
+		}
 		geoSets := map[string]string{}
 		if tags := configgen.GeoTags(model); len(tags) > 0 && geoMgr != nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -112,7 +207,10 @@ func buildConfigs(dataDir, configPath string, store *rules.Store, geoMgr *geo.Ma
 				GeoRuleSets:         geoSets,
 				Rules:               model,
 				LogLevel:            logLevel,
-				RouteExcludeAddress: serverExcludeForTUN(serverIP),
+				RouteExcludeAddress: exclude,
+				ExtraProxies:        plan.proxies,
+				RuleOutbound:        outboundFor,
+				ClashAPI:            clash,
 			}
 		case chainctl.ModeSysProxy:
 			sbInput = configgen.SingboxInput{
@@ -127,6 +225,9 @@ func buildConfigs(dataDir, configPath string, store *rules.Store, geoMgr *geo.Ma
 				GeoRuleSets:      geoSets,
 				Rules:            model,
 				LogLevel:         logLevel,
+				ExtraProxies:     plan.proxies,
+				RuleOutbound:     outboundFor,
+				ClashAPI:         clash,
 			}
 		default:
 			return nil, nil, fmt.Errorf("buildConfigs: unknown mode %q", mode)
@@ -144,10 +245,12 @@ func buildConfigs(dataDir, configPath string, store *rules.Store, geoMgr *geo.Ma
 			Server:    vc,
 			ServerIP:  serverIP,
 			SocksPort: defaultXrayPort,
+			Extra:     plan.xray,
 		})
 		if err != nil {
 			return nil, nil, fmt.Errorf("BuildXray: %w", err)
 		}
+		issues.Set(bindings)
 		return sb, xr, nil
 	}
 }

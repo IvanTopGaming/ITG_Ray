@@ -221,4 +221,16 @@ describe("Dashboard", () => {
     const cells = screen.getAllByText("—");
     expect(cells.length).toBeGreaterThan(0);
   });
+
+  it("shows a routing-mode pill while connected outside rule mode", () => {
+    useDashMock.mockReturnValue({ ...baseDash, status: "connected", currentServer: makeServer(), allServers: [makeServer()], routingMode: "direct" });
+    renderDash();
+    expect(screen.getByText(/everything direct/i)).toBeInTheDocument();
+  });
+
+  it("hides the routing-mode pill in rule mode", () => {
+    useDashMock.mockReturnValue({ ...baseDash, status: "connected", currentServer: makeServer(), allServers: [makeServer()], routingMode: "rule" });
+    renderDash();
+    expect(screen.queryByText(/everything direct|everything via proxy/i)).toBeNull();
+  });
 });

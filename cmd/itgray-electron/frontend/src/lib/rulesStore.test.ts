@@ -113,6 +113,16 @@ describe("rulesStore", () => {
     expect(a).not.toBe(c);
   });
 
+  it("rulesSignature changes when a binding goes missing or is rebound, not when it is unusable", () => {
+    const rule = (extra: Record<string, unknown>) => ({ defaultAction: "proxy" as const, loading: false, lastError: null, bootstrapped: true,
+      groups: [{ id: "user", name: "u", locked: false, enabled: true, rules: [{ id: "r", name: "r", enabled: true, action: "proxy" as const, conditions: {}, server_id: "a", ...extra }] }] });
+    const ok = rulesSignature(rule({ binding: { state: "ok" } }) as any);
+    expect(rulesSignature(rule({ binding: { state: "missing" } }) as any)).not.toBe(ok);
+    expect(rulesSignature(rule({ binding: { state: "ok" }, server_id: "b" }) as any)).not.toBe(ok);
+    expect(rulesSignature(rule({ binding: { state: "unusable", reason: "dns" } }) as any)).toBe(ok);
+    expect(rulesSignature(rule({ binding: { state: "ok" }, server_name: "renamed", server_source_id: "s2" }) as any)).toBe(ok);
+  });
+
   it("bootstraps from RulesService.List on first read", async () => {
     listMock.mockResolvedValue(baseView);
     await __bootRulesForTest();

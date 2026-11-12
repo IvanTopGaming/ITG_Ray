@@ -23,6 +23,8 @@ import { ImportRulesModal } from "./ImportRulesModal";
 import { consumePendingImportLink, subscribePendingImport } from "@/lib/deeplinkStore";
 import { cn } from "@/lib/cn";
 import { summarise } from "@/lib/ruleSummary";
+import { useDash } from "@/lib/dashStore";
+import { RoutingModeSwitch } from "@/components/RoutingModeSwitch";
 import { useTranslation } from "react-i18next";
 
 const SNAP_EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
@@ -269,18 +271,19 @@ export function Routing() {
       animate="show"
       variants={pageVariants}
     >
-      <motion.header variants={sectionVariants} className="flex items-baseline justify-between pb-2">
-        <div>
+      <motion.header variants={sectionVariants} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-3 pb-2">
+        <div className="min-w-[240px] flex-1">
           <h1 className="text-[20px] font-semibold tracking-tight">{t("routing.title")}</h1>
           <p className="mt-1 text-[12px] text-white/55">{t("routing.description")}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <RoutingModeSwitch />
           <motion.button
             type="button"
             onClick={() => { setImportInitial(""); setImportOpen(true); }}
             whileTap={{ scale: 0.96 }}
             transition={{ duration: 0.18, ease: SNAP_EASE }}
-            className="flex items-center gap-1.5 rounded-md bg-white/[0.06] px-3 py-1.5 text-[12px] font-medium text-white/75 hover:bg-white/[0.10]"
+            className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-white/[0.10] bg-white/[0.06] px-3 text-[12px] font-medium text-white/75 hover:bg-white/[0.10]"
           >
             <Import className="h-3.5 w-3.5" aria-hidden="true" /> {t("routing.import")}
           </motion.button>
@@ -289,7 +292,7 @@ export function Routing() {
             onClick={() => setAdding(true)}
             whileTap={{ scale: 0.96 }}
             transition={{ duration: 0.18, ease: SNAP_EASE }}
-            className="flex items-center gap-1.5 rounded-md bg-white/[0.08] px-3 py-1.5 text-[12px] font-medium text-white/85 hover:bg-white/[0.12]"
+            className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-white/[0.10] bg-white/[0.08] px-3 text-[12px] font-medium text-white/85 hover:bg-white/[0.12]"
           >
             <Plus className="h-3.5 w-3.5" /> {t("routing.addGroup")}
           </motion.button>
@@ -802,6 +805,7 @@ function RuleRow({
           {rule.action}
         </span>
         <span className="text-white/85">{rule.name}</span>
+        <BindingChip rule={rule} />
         <span className="text-[11px] text-white/45">{summarise(rule.conditions, t)}</span>
       </motion.div>
       {!groupLocked && (
@@ -861,4 +865,24 @@ function RuleRow({
       )}
     </motion.div>
   );
+}
+
+function BindingChip({ rule }: { rule: RuleView }) {
+  const { t } = useTranslation();
+  const servers = useDash().allServers ?? [];
+  if (rule.action !== "proxy" || !rule.server_id) return null;
+  const state = rule.binding?.state;
+  const name = servers.find((s) => s.id === rule.server_id)?.name ?? rule.server_name ?? rule.server_id;
+  if (state === "missing" || state === "unusable") {
+    const reason = rule.binding?.reason;
+    const reasonKey = reason === "dns" || reason === "config" || reason === "disabled" ? reason : "other";
+    return (
+      <span className="flex items-center gap-1 rounded bg-amber-500/15 px-2 py-0.5 text-[10.5px] text-amber-200">
+        <span>{state === "missing" ? t("routing.binding.missing") : t(`routing.binding.reason.${reasonKey}`)}</span>
+        <span className="text-amber-100/70">{name}</span>
+        {state === "unusable" && <span className="text-amber-100/60">· {t("routing.binding.unusable")}</span>}
+      </span>
+    );
+  }
+  return <span className="rounded bg-sky-500/10 px-2 py-0.5 text-[10.5px] text-sky-100/80">{name}</span>;
 }

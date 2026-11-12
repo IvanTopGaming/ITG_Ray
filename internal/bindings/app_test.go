@@ -294,3 +294,12 @@ func TestToServerViews_ExtractsCountryFromFlagEmoji(t *testing.T) {
 			got[1].Name, got[1].Country, "Plain", "")
 	}
 }
+
+func TestToServerViews_CarriesSourceID(t *testing.T) {
+	got := toServerViews([]server.Server{
+		{ID: "a", SourceID: "sub-1", Name: "NL", Origin: server.OriginSubscription},
+		{ID: "b", Name: "Home", Origin: server.OriginManual},
+	}, nil)
+	require.Equal(t, "sub-1", got[0].SourceID)
+	require.Empty(t, got[1].SourceID)
+}

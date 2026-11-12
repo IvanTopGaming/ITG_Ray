@@ -297,6 +297,14 @@
     },
     "protocols": {
       "label": "Protocol {{p}}"
+    },
+    "server": {
+      "label": "Server",
+      "current": "Current server",
+      "search": "Search servers…",
+      "none": "Nothing found",
+      "currentHint": "Follows the server picked on the dashboard",
+      "manual": "Added manually"
     }
   },
   "settings": {
@@ -564,6 +572,16 @@
       "protocols": "{{count}} protocol",
       "protocols_other": "{{count}} protocols",
       "none": "no conditions"
+    },
+    "binding": {
+      "missing": "Server is gone — pick another",
+      "unusable": "Using main server",
+      "reason": {
+        "dns": "Server address doesn't resolve",
+        "config": "Server config isn't supported",
+        "disabled": "Server is disabled",
+        "other": "Server unavailable at connect"
+      }
     }
   },
   "logs": {
@@ -583,5 +601,16 @@
     "jump": "Jump to latest",
     "status": "{{sources}} sources · {{lines}} lines · last 2000 kept",
     "empty": "No log lines yet — connect to start the engine"
+  },
+  "routingMode": {
+    "label": "Routing mode",
+    "rule": "By rules",
+    "global": "All via proxy",
+    "direct": "All direct",
+    "pill": {
+      "global": "Everything via proxy — rules paused",
+      "direct": "Everything direct — VPN bypassed"
+    },
+    "needsConnection": "Connect to switch the routing mode"
   }
 }

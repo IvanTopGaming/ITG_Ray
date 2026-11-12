@@ -37,6 +37,7 @@ var hubToProtocol = map[string]string{
 	hub.EventProbeResult:    "probe.result",
 	hub.EventServersChanged: "servers.changed",
 	hub.EventRulesChanged:   "rules.changed",
+	hub.EventRoutingMode:    "routing.mode",
 	hub.EventGeoProgress:    "geo.progress",
 	hub.EventLogBatch:       "log.batch",
 }

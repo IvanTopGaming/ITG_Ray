@@ -2,8 +2,12 @@ package bindings
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"time"
 
 	"github.com/itg-team/itg-ray/internal/chainctl"
+	"github.com/itg-team/itg-ray/internal/clashapi"
 	"github.com/itg-team/itg-ray/internal/hub"
 )
 
@@ -13,6 +17,15 @@ import (
 type RunDeps struct {
 	Chain *chainctl.Controller
 	Hub   *hub.Hub
+
+	Routing   RoutingAPI
+	Connected func() bool
+}
+
+type RoutingAPI interface {
+	Mode(ctx context.Context) (string, error)
+	SetMode(ctx context.Context, mode string) error
+	CloseConnections(ctx context.Context) error
 }
 
 // RunService implements the Run.* bindings (Connect / Disconnect /
@@ -56,4 +69,47 @@ func (r *RunService) GetStatus() map[string]any {
 		out["serverName"] = srv.Name
 	}
 	return out
+}
+
+var errNotConnected = errors.New("routing mode: not connected")
+
+func (r *RunService) connected() bool {
+	if r.d.Connected != nil {
+		return r.d.Connected()
+	}
+	if r.d.Chain == nil {
+		return false
+	}
+	st, _, _ := r.d.Chain.Status()
+	return st == hub.StatusConnected
+}
+
+func (r *RunService) SetRoutingMode(mode string) error {
+	if !clashapi.ValidMode(mode) {
+		return fmt.Errorf("routing mode: unknown mode %q", mode)
+	}
+	if !r.connected() || r.d.Routing == nil {
+		return errNotConnected
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := r.d.Routing.SetMode(ctx, mode); err != nil {
+		return err
+	}
+	_ = r.d.Routing.CloseConnections(ctx)
+	r.d.Hub.Publish(hub.Event{Name: hub.EventRoutingMode, Payload: map[string]any{"mode": mode}})
+	return nil
+}
+
+func (r *RunService) GetRoutingMode() (string, error) {
+	if !r.connected() || r.d.Routing == nil {
+		return "rule", nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	m, err := r.d.Routing.Mode(ctx)
+	if err != nil || !clashapi.ValidMode(m) {
+		return "rule", nil
+	}
+	return m, nil
 }

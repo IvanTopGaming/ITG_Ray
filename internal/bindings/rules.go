@@ -14,8 +14,10 @@ import (
 	"time"
 
 	"github.com/itg-team/itg-ray/internal/hub"
+	"github.com/itg-team/itg-ray/internal/routebind"
 	"github.com/itg-team/itg-ray/internal/rules"
 	"github.com/itg-team/itg-ray/internal/ruleshare"
+	"github.com/itg-team/itg-ray/internal/server"
 )
 
 // RulesService implements the rules.* bindings. List is shipped in
@@ -23,17 +25,21 @@ import (
 // land in T6 / T7 and will use the s.mu mutex and s.hub publisher
 // declared below.
 type RulesService struct {
-	mu    sync.Mutex
-	store *rules.Store
-	hub   *hub.Hub
+	mu          sync.Mutex
+	store       *rules.Store
+	hub         *hub.Hub
+	issues      *routebind.Issues
+	serversPath string
 }
 
 // RulesDeps groups dependencies passed in from main.go. Store owns
 // rules.json; Hub is the in-process pub-sub used to publish
 // EventRulesChanged on every mutation.
 type RulesDeps struct {
-	Store *rules.Store
-	Hub   *hub.Hub
+	Store       *rules.Store
+	Hub         *hub.Hub
+	Issues      *routebind.Issues
+	ServersPath string
 }
 
 // NewRulesService constructs a new RulesService. Panics when required
@@ -44,7 +50,7 @@ func NewRulesService(d RulesDeps) *RulesService {
 	if d.Store == nil || d.Hub == nil {
 		panic("bindings.NewRulesService: Store and Hub are required")
 	}
-	return &RulesService{store: d.Store, hub: d.Hub}
+	return &RulesService{store: d.Store, hub: d.Hub, issues: d.Issues, serversPath: d.ServersPath}
 }
 
 // List returns the persisted rules model projected onto the wire shape.
@@ -62,7 +68,30 @@ func (s *RulesService) List() (hub.RulesView, error) {
 	if err != nil {
 		return hub.RulesView{}, err
 	}
-	return toRulesView(m), nil
+	view := toRulesView(m)
+	s.annotateBindings(m, &view)
+	return view, nil
+}
+
+func (s *RulesService) annotateBindings(m rules.Model, view *hub.RulesView) {
+	var servers []server.Server
+	if s.serversPath != "" {
+		servers, _ = server.Load(s.serversPath)
+	}
+	_, bindings := routebind.Resolve(m, servers)
+	for id, issue := range s.issues.Get() {
+		if b, ok := bindings[id]; ok && issue.State == routebind.StateUnusable && issue.ServerID == b.ServerID && b.State != routebind.StateMissing {
+			bindings[id] = issue
+		}
+	}
+	for gi := range view.Groups {
+		for ri := range view.Groups[gi].Rules {
+			r := &view.Groups[gi].Rules[ri]
+			if b, ok := bindings[r.ID]; ok {
+				r.Binding = &hub.RuleBindingView{State: string(b.State), Reason: b.Reason}
+			}
+		}
+	}
 }
 
 func toRulesView(m rules.Model) hub.RulesView {
@@ -80,6 +109,10 @@ func groupsToViews(groups []rules.Group) []hub.GroupView {
 				Enabled:    r.Enabled,
 				Action:     string(r.Action),
 				Conditions: r.Conditions,
+
+				ServerID:       r.ServerID,
+				ServerSourceID: r.ServerSourceID,
+				ServerName:     r.ServerName,
 			})
 		}
 		out = append(out, hub.GroupView{
@@ -215,6 +248,7 @@ func (s *RulesService) RuleAdd(groupID string, r rules.Rule) (string, error) {
 	if err := r.Validate(); err != nil {
 		return "", err
 	}
+	s.fillServerIdentity(&r)
 	m, err := s.store.Load()
 	if err != nil {
 		return "", err
@@ -243,6 +277,7 @@ func (s *RulesService) RuleEdit(r rules.Rule) error {
 	if err := r.Validate(); err != nil {
 		return err
 	}
+	s.fillServerIdentity(&r)
 	m, err := s.store.Load()
 	if err != nil {
 		return err
@@ -493,4 +528,25 @@ func (s *RulesService) ExportGroup(groupID string) (string, error) {
 		return "", errLockedGroup
 	}
 	return ruleshare.Encode(m.Groups[idx].Name, []rules.Group{m.Groups[idx]})
+}
+
+func (s *RulesService) fillServerIdentity(r *rules.Rule) {
+	if r.Action != rules.ActionProxy || r.ServerID == "" {
+		r.ClearServerBinding()
+		return
+	}
+	if s.serversPath == "" {
+		return
+	}
+	servers, err := server.Load(s.serversPath)
+	if err != nil {
+		return
+	}
+	for i := range servers {
+		if servers[i].ID == r.ServerID {
+			r.ServerName = servers[i].Name
+			r.ServerSourceID = servers[i].SourceID
+			return
+		}
+	}
 }

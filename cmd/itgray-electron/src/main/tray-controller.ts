@@ -5,6 +5,7 @@ import {
   type TrayCommand,
   type TrayItem,
   type TrayMode,
+  type TrayRoutingMode,
   type TrayServer,
   type TrayStatus,
   type TrayView,
@@ -38,6 +39,7 @@ export interface TrayController {
   refresh: () => Promise<void>;
   onVpnStatus: (payload: unknown) => void;
   onVpnSpeed: (payload: unknown) => void;
+  onRoutingMode: (payload: unknown) => void;
   onRendererReport: (report: RendererReport) => void;
   onRendererGone: () => void;
   dispatch: (cmd: TrayCommand) => Promise<void>;
@@ -48,6 +50,10 @@ const STATUSES: TrayStatus[] = ["idle", "connecting", "connected", "disconnectin
 
 function asStatus(v: unknown): TrayStatus | null {
   return typeof v === "string" && (STATUSES as string[]).includes(v) ? (v as TrayStatus) : null;
+}
+
+function asRoutingMode(v: unknown): TrayRoutingMode | null {
+  return v === "rule" || v === "global" || v === "direct" ? v : null;
 }
 
 function asMode(v: unknown): TrayMode | null {
@@ -78,6 +84,7 @@ export function createTrayController(deps: TrayControllerDeps): TrayController {
   let status: TrayStatus = "idle";
   let activeServerId: string | null = null;
   let mode: TrayMode = "tun";
+  let routingMode: TrayRoutingMode = "rule";
   let servers: TrayServer[] = [];
   let hasSubs = false;
   let ownSyncs = 0;
@@ -100,6 +107,7 @@ export function createTrayController(deps: TrayControllerDeps): TrayController {
       servers,
       hasSubs,
       syncing: ownSyncs > 0 || rendererSyncing,
+      routingMode,
     };
   }
 
@@ -120,6 +128,7 @@ export function createTrayController(deps: TrayControllerDeps): TrayController {
     status = next;
     deps.setIcon(status);
     if (status === "idle" || status === "error") {
+      routingMode = "rule";
       const waiters = idleWaiters;
       idleWaiters = [];
       for (const w of waiters) w();
@@ -163,6 +172,15 @@ export function createTrayController(deps: TrayControllerDeps): TrayController {
     hasSubs = Array.isArray(snap.subs) && snap.subs.length > 0;
     const l = snap.settings?.general?.language;
     if (typeof l === "string") languageSetting = l;
+    if (status === "connected") {
+      try {
+        const res = (await deps.rpc("run.getRoutingMode")) as { mode?: unknown } | null;
+        const rm = asRoutingMode(res?.mode);
+        if (rm) routingMode = rm;
+      } catch (err) {
+        warn("tray: routing mode read failed", err);
+      }
+    }
   }
 
   async function refresh(): Promise<void> {
@@ -209,6 +227,13 @@ export function createTrayController(deps: TrayControllerDeps): TrayController {
     if (typeof p?.downBps !== "number" || typeof p?.upBps !== "number") return;
     speed = { downBps: p.downBps, upBps: p.upBps };
     deps.setTooltip(tooltip(view(), TRAY_STRINGS[lang()], speed));
+  }
+
+  function onRoutingMode(payload: unknown): void {
+    const m = asRoutingMode((payload as { mode?: unknown } | null)?.mode);
+    if (!m) return;
+    routingMode = m;
+    render();
   }
 
   function onRendererReport(report: RendererReport): void {
@@ -278,6 +303,10 @@ export function createTrayController(deps: TrayControllerDeps): TrayController {
       case "cancelSync":
         await deps.rpc("subs.cancelAll");
         return;
+      case "setRoutingMode":
+        if (status !== "connected") return;
+        await deps.rpc("run.setRoutingMode", { mode: cmd.mode });
+        return;
     }
   }
 
@@ -311,5 +340,5 @@ export function createTrayController(deps: TrayControllerDeps): TrayController {
   }
 
   render();
-  return { refresh, onVpnStatus, onVpnSpeed, onRendererReport, onRendererGone, dispatch, view };
+  return { refresh, onVpnStatus, onVpnSpeed, onRoutingMode, onRendererReport, onRendererGone, dispatch, view };
 }

@@ -16,6 +16,10 @@ export interface TrayStrings {
   mode: string;
   modeTun: string;
   modeSysproxy: string;
+  routing: string;
+  routingRule: string;
+  routingGlobal: string;
+  routingDirect: string;
   syncSubs: string;
   cancelSync: string;
   open: string;
@@ -40,6 +44,10 @@ export const TRAY_STRINGS: Record<TrayLang, TrayStrings> = {
     mode: "Mode",
     modeTun: "TUN",
     modeSysproxy: "System proxy",
+    routing: "Routing",
+    routingRule: "By rules",
+    routingGlobal: "All via proxy",
+    routingDirect: "All direct",
     syncSubs: "Update subscriptions",
     cancelSync: "Cancel subscription update",
     open: "Open ITG Ray",
@@ -62,6 +70,10 @@ export const TRAY_STRINGS: Record<TrayLang, TrayStrings> = {
     mode: "Режим",
     modeTun: "TUN",
     modeSysproxy: "Системный прокси",
+    routing: "Маршрутизация",
+    routingRule: "По правилам",
+    routingGlobal: "Всё через прокси",
+    routingDirect: "Всё напрямую",
     syncSubs: "Обновить подписки",
     cancelSync: "Отменить обновление подписок",
     open: "Открыть ITG Ray",

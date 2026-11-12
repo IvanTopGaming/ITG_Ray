@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -72,4 +73,23 @@ func TestValidate_GeoMustHavePrefix(t *testing.T) {
 	err := r.Validate()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "geosite:")
+}
+
+func TestRule_LegacyJSONLoads(t *testing.T) {
+	var r Rule
+	require.NoError(t, json.Unmarshal([]byte(`{"id":"r1","name":"n","enabled":true,"action":"proxy","conditions":{"processes":["a"]}}`), &r))
+	require.Empty(t, r.ServerID)
+	require.Empty(t, r.ServerSourceID)
+	require.Empty(t, r.ServerName)
+	require.NoError(t, r.Validate())
+}
+
+func TestRule_BindingRoundTrips(t *testing.T) {
+	in := Rule{ID: "r1", Enabled: true, Action: ActionProxy, ServerID: "s", ServerSourceID: "sub", ServerName: "NL", Conditions: Conditions{Processes: []string{"a"}}}
+	b, err := json.Marshal(in)
+	require.NoError(t, err)
+	require.Contains(t, string(b), `"server_id":"s"`)
+	var out Rule
+	require.NoError(t, json.Unmarshal(b, &out))
+	require.Equal(t, in, out)
 }
