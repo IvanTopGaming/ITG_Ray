@@ -400,3 +400,43 @@ func TestExportGroupRejectsSafety(t *testing.T) {
 		t.Errorf("expected error exporting safety group")
 	}
 }
+
+func ruleIDs(v hub.RulesView, groupID string) []string {
+	for _, g := range v.Groups {
+		if g.ID == groupID {
+			ids := []string{}
+			for _, r := range g.Rules {
+				ids = append(ids, r.ID)
+			}
+			return ids
+		}
+	}
+	return nil
+}
+
+func TestRulesService_RuleInsert_BeforeTarget(t *testing.T) {
+	svc, _, _ := newRulesService(t)
+	gid, _ := svc.GroupAdd("Custom")
+	a, _ := svc.RuleAdd(gid, makeRule(rules.ActionBlock, "1.1.1.1/32"))
+	b, _ := svc.RuleAdd(gid, makeRule(rules.ActionBlock, "2.2.2.2/32"))
+	n, err := svc.RuleInsert(gid, makeRule(rules.ActionDirect, "3.3.3.3/32"), b)
+	require.NoError(t, err)
+	v, _ := svc.List()
+	require.Equal(t, []string{a, n, b}, ruleIDs(v, gid))
+}
+
+func TestRulesService_RuleInsert_UnknownBeforeAppends(t *testing.T) {
+	svc, _, _ := newRulesService(t)
+	gid, _ := svc.GroupAdd("Custom")
+	a, _ := svc.RuleAdd(gid, makeRule(rules.ActionBlock, "1.1.1.1/32"))
+	n, err := svc.RuleInsert(gid, makeRule(rules.ActionDirect, "3.3.3.3/32"), "nope")
+	require.NoError(t, err)
+	v, _ := svc.List()
+	require.Equal(t, []string{a, n}, ruleIDs(v, gid))
+}
+
+func TestRulesService_RuleInsert_LockedGroupRejected(t *testing.T) {
+	svc, _, _ := newRulesService(t)
+	_, err := svc.RuleInsert("safety", makeRule(rules.ActionDirect, "3.3.3.3/32"), "")
+	require.Error(t, err)
+}

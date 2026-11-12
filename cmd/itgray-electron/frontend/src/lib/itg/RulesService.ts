@@ -28,7 +28,7 @@ export function GroupRemove(params: { id: string }): Promise<unknown> {
   return svc().groupRemove?.(params) ?? Promise.resolve(null);
 }
 
-export function RuleAdd(params: { groupId: string; rule: unknown }): Promise<{ id: string }> {
+export function RuleAdd(params: { groupId: string; rule: unknown; beforeId?: string }): Promise<{ id: string }> {
   return (svc().ruleAdd?.(params) as Promise<{ id: string }>) ?? Promise.resolve({ id: "" });
 }
 

@@ -33,13 +33,14 @@ vi.mock("@/lib/itg/runtime", () => ({
   },
 }));
 
+const ruleAddMock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/itg/RulesService", () => ({
   List: () => listMock(),
   GroupAdd: (params: { name: string }) => addGroupMock(params),
   ReplaceAll: (params: any) => replaceAllMock(params),
   GroupEdit: vi.fn(),
   GroupRemove: vi.fn(),
-  RuleAdd: vi.fn(),
+  RuleAdd: (params: any) => ruleAddMock(params),
   RuleEdit: vi.fn(),
   RuleRemove: vi.fn(),
   RuleToggle: vi.fn(),
@@ -68,6 +69,7 @@ import {
   __resetRulesForTest,
   getRulesState,
   rulesAddGroup,
+  rulesAddRule,
   rulesExportGroup,
   rulesImportApply,
   rulesImportPreview,
@@ -380,5 +382,18 @@ describe("rules import/export", () => {
       expect(await rulesRevertToBaseline()).toBe(false);
       expect(replaceAllMock).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("rulesAddRule", () => {
+  it("passes beforeId through to the backend when given", async () => {
+    listMock.mockResolvedValue(baseView);
+    ruleAddMock.mockResolvedValue({ id: "r-new" });
+    await __bootRulesForTest();
+    const rule = { name: "x", enabled: true, action: "direct" as const, conditions: { ip_cidrs: ["1.1.1.1/32"] } };
+    await rulesAddRule("user", rule, "r-target");
+    expect(ruleAddMock).toHaveBeenLastCalledWith({ groupId: "user", rule: { id: "", ...rule }, beforeId: "r-target" });
+    await rulesAddRule("user", rule);
+    expect(ruleAddMock.mock.calls.at(-1)![0].beforeId).toBeUndefined();
   });
 });

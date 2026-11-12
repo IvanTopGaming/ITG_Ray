@@ -239,6 +239,10 @@ func (s *RulesService) publishChanged() {
 // RuleAdd appends a new rule to a non-locked group. Returns the
 // generated rule id. Validates rule shape before touching the store.
 func (s *RulesService) RuleAdd(groupID string, r rules.Rule) (string, error) {
+	return s.RuleInsert(groupID, r, "")
+}
+
+func (s *RulesService) RuleInsert(groupID string, r rules.Rule, beforeID string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if groupID == "safety" {
@@ -260,7 +264,16 @@ func (s *RulesService) RuleAdd(groupID string, r rules.Rule) (string, error) {
 	if m.Groups[idx].Locked {
 		return "", errLockedGroup
 	}
-	m.Groups[idx].Rules = append(m.Groups[idx].Rules, r)
+	pos := len(m.Groups[idx].Rules)
+	for i, existing := range m.Groups[idx].Rules {
+		if beforeID != "" && existing.ID == beforeID {
+			pos = i
+			break
+		}
+	}
+	list := append([]rules.Rule(nil), m.Groups[idx].Rules[:pos]...)
+	list = append(list, r)
+	m.Groups[idx].Rules = append(list, m.Groups[idx].Rules[pos:]...)
 	if err := s.store.Save(m); err != nil {
 		return "", err
 	}

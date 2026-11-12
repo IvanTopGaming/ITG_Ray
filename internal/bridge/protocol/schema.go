@@ -231,8 +231,9 @@ type RulesGroupRemoveParams struct {
 }
 
 type RulesRuleAddParams struct {
-	GroupID string     `json:"groupId"`
-	Rule    rules.Rule `json:"rule"`
+	GroupID  string     `json:"groupId"`
+	Rule     rules.Rule `json:"rule"`
+	BeforeID string     `json:"beforeId,omitempty"`
 }
 
 type RulesRuleAddResult struct {

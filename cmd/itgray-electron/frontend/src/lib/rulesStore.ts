@@ -291,9 +291,12 @@ export function rulesRemoveGroup(id: string): Promise<void> {
 export function rulesAddRule(
   groupId: string,
   rule: Omit<RuleView, "id">,
+  beforeId?: string,
 ): Promise<string> {
   return applyMutation(async () => {
-    const { id } = await RulesService.RuleAdd({ groupId, rule: { id: "", ...rule } });
+    const params: { groupId: string; rule: unknown; beforeId?: string } = { groupId, rule: { id: "", ...rule } };
+    if (beforeId) params.beforeId = beforeId;
+    const { id } = await RulesService.RuleAdd(params);
     return id;
   });
 }

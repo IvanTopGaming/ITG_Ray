@@ -209,6 +209,7 @@ export interface RulesReplaceAllParams {
 export interface RulesRuleAddParams {
   groupId: string;
   rule: Rule;
+  beforeId?: string;
 }
 
 export interface RulesRuleAddResult {

@@ -20,6 +20,7 @@ type Rules interface {
 	GroupEdit(id, name string, enabled bool) error
 	GroupRemove(id string) error
 	RuleAdd(groupID string, rule rules.Rule) (string, error)
+	RuleInsert(groupID string, rule rules.Rule, beforeID string) (string, error)
 	RuleEdit(rule rules.Rule) error
 	RuleRemove(id string) error
 	RuleToggle(id string) error
@@ -60,8 +61,9 @@ type rulesGroupRemoveParams struct {
 }
 
 type rulesRuleAddParams struct {
-	GroupID string     `json:"groupId"`
-	Rule    rules.Rule `json:"rule"`
+	GroupID  string     `json:"groupId"`
+	Rule     rules.Rule `json:"rule"`
+	BeforeID string     `json:"beforeId"`
 }
 
 type rulesRuleEditParams struct {
@@ -161,7 +163,7 @@ func (h RulesHandlers) RuleAdd(_ context.Context, params json.RawMessage) (any, 
 	if err := json.Unmarshal(params, &p); err != nil {
 		return nil, err
 	}
-	id, err := h.Svc.RuleAdd(p.GroupID, p.Rule)
+	id, err := h.Svc.RuleInsert(p.GroupID, p.Rule, p.BeforeID)
 	if err != nil {
 		return nil, err
 	}
