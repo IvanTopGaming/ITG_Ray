@@ -7,3 +7,5 @@ export function Edit(id: string, url: string, userAgent = ""): Promise<unknown> 
 export function Remove(id: string): Promise<unknown> { return svc().remove?.({ id }) ?? Promise.resolve(null); }
 export function SyncOne(id: string): Promise<unknown> { return svc().syncOne?.({ id }) ?? Promise.resolve(null); }
 export function SyncAll(): Promise<unknown> { return svc().syncAll?.() ?? Promise.resolve(null); }
+export function CancelSync(id: string): Promise<unknown> { return svc().cancelSync?.({ id }) ?? Promise.resolve(null); }
+export function CancelAll(): Promise<unknown> { return svc().cancelAll?.() ?? Promise.resolve(null); }

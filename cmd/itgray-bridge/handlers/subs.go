@@ -20,6 +20,8 @@ type Subs interface {
 	Remove(id string) error
 	SyncOne(id string) error
 	SyncAll() error
+	CancelSync(id string)
+	CancelAll()
 }
 
 // SubsHandlers groups methods under the "subs." namespace.
@@ -43,6 +45,10 @@ type subsRemoveParams struct {
 }
 
 type subsSyncOneParams struct {
+	ID string `json:"id"`
+}
+
+type subsCancelSyncParams struct {
 	ID string `json:"id"`
 }
 
@@ -127,4 +133,22 @@ func (s SubsHandlers) SyncAll(_ context.Context, _ json.RawMessage) (any, error)
 		return struct{}{}, nil
 	}
 	return struct{}{}, s.Svc.SyncAll()
+}
+
+func (s SubsHandlers) CancelSync(_ context.Context, params json.RawMessage) (any, error) {
+	var p subsCancelSyncParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, err
+	}
+	if s.Svc != nil {
+		s.Svc.CancelSync(p.ID)
+	}
+	return struct{}{}, nil
+}
+
+func (s SubsHandlers) CancelAll(_ context.Context, _ json.RawMessage) (any, error) {
+	if s.Svc != nil {
+		s.Svc.CancelAll()
+	}
+	return struct{}{}, nil
 }

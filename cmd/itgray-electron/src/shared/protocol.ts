@@ -343,6 +343,10 @@ export interface SubsAddParams {
   userAgent?: string;
 }
 
+export interface SubsCancelSyncParams {
+  id: string;
+}
+
 export interface SubsEditParams {
   id: string;
   url: string;
@@ -416,6 +420,8 @@ export interface RpcMethods {
   "settings.get": { params: Empty; result: SettingsView };
   "settings.update": { params: SettingsUpdateParams; result: SettingsView };
   "subs.add": { params: SubsAddParams; result: SubView };
+  "subs.cancelAll": { params: Empty; result: Empty };
+  "subs.cancelSync": { params: SubsCancelSyncParams; result: Empty };
   "subs.edit": { params: SubsEditParams; result: SubView };
   "subs.list": { params: Empty; result: SubView[] };
   "subs.remove": { params: SubsRemoveParams; result: Empty };

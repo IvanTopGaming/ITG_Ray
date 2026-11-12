@@ -45,6 +45,7 @@ export function Subscriptions() {
   const { state, actions } = useSubs();
   const [modal, setModal] = useState<ModalState>({ kind: "closed" });
   const subs = state.load.kind === "ready" ? state.load.subs : [];
+  const anySyncing = state.inFlight.syncing.size > 0;
 
   return (
     <>
@@ -68,8 +69,9 @@ export function Subscriptions() {
           </div>
           <div className="flex items-center gap-2">
             <SyncAllButton
-              onClick={() => void actions.syncAll()}
-              disabled={subs.length === 0 || state.inFlight.syncing.size > 0}
+              onClick={() => void (anySyncing ? actions.cancelAll() : actions.syncAll())}
+              disabled={subs.length === 0}
+              syncing={anySyncing}
             />
             <AddButton onClick={() => setModal({ kind: "add" })} />
           </div>
@@ -129,7 +131,10 @@ export function Subscriptions() {
               >
                 <SubCard
                   sub={sub}
+                  syncing={state.inFlight.syncing.has(sub.id) || sub.status === "syncing"}
+                  canceled={state.canceled.has(sub.id)}
                   onSync={() => void actions.syncOne(sub.id)}
+                  onCancel={() => void actions.cancelSync(sub.id)}
                   onEdit={() => setModal({ kind: "edit", sub })}
                 />
               </motion.div>
@@ -155,16 +160,21 @@ export function Subscriptions() {
 
 function SubCard({
   sub,
+  syncing: isSyncing,
+  canceled,
   onSync,
+  onCancel,
   onEdit,
 }: {
   sub: Sub;
+  syncing: boolean;
+  canceled: boolean;
   onSync: () => void;
+  onCancel: () => void;
   onEdit: () => void;
 }) {
   const { t } = useTranslation();
-  const isError = sub.status === "error";
-  const isSyncing = sub.status === "syncing";
+  const isError = !isSyncing && sub.status === "error";
   const syncMessage = subscriptionSyncMessage(sub, t);
 
   return (
@@ -177,7 +187,7 @@ function SubCard({
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[15px] font-semibold">{sub.name}</span>
-          <StatusBadge status={sub.status} />
+          <StatusBadge status={isSyncing ? "syncing" : sub.status} />
           {sub.serverCount > 0 && (
             <span className="font-mono text-[10px] tabular-nums text-white/45">
               {t("subscriptions.serverCount", { count: sub.serverCount })}
@@ -207,6 +217,10 @@ function SubCard({
 
         <SubStats sub={sub} />
 
+        {canceled && !isSyncing && (
+          <div className="text-[11px] text-white/55">{t("subscriptions.syncCanceled")}</div>
+        )}
+
         <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.14em] text-white/40">
           {sub.lastSyncAt
             ? t("subscriptions.syncedRelative", { time: formatRelative(sub.lastSyncAt, t) })
@@ -215,14 +229,12 @@ function SubCard({
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        {isError ? (
-          <RetryButton onClick={onSync} disabled={isSyncing} />
+        {isSyncing ? (
+          <SyncButton onClick={onCancel} syncing />
+        ) : isError ? (
+          <RetryButton onClick={onSync} />
         ) : (
-          <SyncButton
-            onClick={onSync}
-            disabled={isSyncing}
-            syncing={isSyncing}
-          />
+          <SyncButton onClick={onSync} />
         )}
         <button
           onClick={onEdit}
@@ -376,18 +388,30 @@ function SyncButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      aria-label={t("subscriptions.sync")}
+      aria-label={syncing ? t("subscriptions.cancelSync") : t("subscriptions.sync")}
+      title={syncing ? t("subscriptions.cancelSync") : undefined}
       className={cn(
-        "flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.04] px-3 py-2 text-[12px] font-medium text-white transition-colors duration-instant ease-snap",
+        "group flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.04] px-3 py-2 text-[12px] font-medium text-white transition-colors duration-instant ease-snap",
         disabled
           ? "cursor-not-allowed opacity-60"
-          : "hover:border-white/25 hover:bg-white/[0.08]",
+          : syncing
+            ? "hover:border-danger/40 hover:bg-danger/[0.10] hover:text-[#ff9a9a]"
+            : "hover:border-white/25 hover:bg-white/[0.08]",
       )}
     >
-      <RefreshCw
-        className={cn("h-3.5 w-3.5", syncing && "animate-spin")}
-      />
-      {syncing ? t("subscriptions.syncing") : t("subscriptions.sync")}
+      {syncing ? (
+        <>
+          <RefreshCw className="h-3.5 w-3.5 animate-spin group-hover:hidden" />
+          <X className="hidden h-3.5 w-3.5 group-hover:block" />
+          <span className="group-hover:hidden">{t("subscriptions.syncing")}</span>
+          <span className="hidden group-hover:inline">{t("subscriptions.cancelSync")}</span>
+        </>
+      ) : (
+        <>
+          <RefreshCw className="h-3.5 w-3.5" />
+          {t("subscriptions.sync")}
+        </>
+      )}
     </button>
   );
 }
@@ -421,16 +445,19 @@ function RetryButton({
 function SyncAllButton({
   onClick,
   disabled,
+  syncing,
 }: {
   onClick: () => void;
   disabled?: boolean;
+  syncing?: boolean;
 }) {
   const { t } = useTranslation();
+  const label = syncing ? t("subscriptions.cancelAll") : t("subscriptions.syncAll");
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      aria-label={t("subscriptions.syncAll")}
+      aria-label={label}
       className={cn(
         "flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.04] px-3 py-1.5 text-[11px] font-medium text-white transition-colors duration-instant ease-snap",
         disabled
@@ -438,8 +465,8 @@ function SyncAllButton({
           : "hover:border-white/25 hover:bg-white/[0.08]",
       )}
     >
-      <RefreshCw className="h-3.5 w-3.5" />
-      {t("subscriptions.syncAll")}
+      {syncing ? <X className="h-3.5 w-3.5" /> : <RefreshCw className="h-3.5 w-3.5" />}
+      {label}
     </button>
   );
 }

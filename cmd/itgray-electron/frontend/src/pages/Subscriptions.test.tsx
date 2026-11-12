@@ -29,6 +29,10 @@ function makeStore(opts: {
   edit?: (...args: unknown[]) => Promise<void>;
   syncOne?: (...args: unknown[]) => Promise<void>;
   syncAll?: (...args: unknown[]) => Promise<void>;
+  cancelSync?: (...args: unknown[]) => Promise<void>;
+  cancelAll?: (...args: unknown[]) => Promise<void>;
+  syncing?: string[];
+  canceled?: string[];
 } = {}) {
   const subs = opts.subs ?? [baseSub()];
   return {
@@ -38,7 +42,8 @@ function makeStore(opts: {
         : opts.load === "error"
           ? { kind: "error" as const, message: opts.message ?? "boom" }
           : { kind: "ready" as const, subs },
-      inFlight: { syncing: new Set<string>(), removing: new Set<string>(), adding: false, editing: new Set<string>() },
+      inFlight: { syncing: new Set<string>(opts.syncing ?? []), removing: new Set<string>(), adding: false, editing: new Set<string>() },
+      canceled: new Set<string>(opts.canceled ?? []),
     },
     actions: {
       add: opts.add ?? vi.fn().mockResolvedValue(undefined),
@@ -46,6 +51,8 @@ function makeStore(opts: {
       remove: opts.remove ?? vi.fn().mockResolvedValue(undefined),
       syncOne: opts.syncOne ?? vi.fn().mockResolvedValue(undefined),
       syncAll: opts.syncAll ?? vi.fn().mockResolvedValue(undefined),
+      cancelSync: opts.cancelSync ?? vi.fn().mockResolvedValue(undefined),
+      cancelAll: opts.cancelAll ?? vi.fn().mockResolvedValue(undefined),
       refresh: vi.fn().mockResolvedValue(undefined),
     },
   };
@@ -170,12 +177,40 @@ describe("Subscriptions page", () => {
     expect(syncOne).toHaveBeenCalledWith("s1");
   });
 
-  it("SyncAll button is disabled while any sync is in flight", () => {
-    const store = makeStore();
-    store.state.inFlight.syncing = new Set(["s1"]);
+  it("SyncAll turns into Cancel all while any sync is in flight", () => {
+    const store = makeStore({ syncing: ["s1"] });
     mockUseSubs.mockReturnValue(store);
     render(<Subscriptions />);
-    const syncAll = screen.getByRole("button", { name: /Sync all/ });
-    expect(syncAll).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /Sync all/ })).toBeNull();
+    const cancelAll = screen.getByRole("button", { name: "Cancel all" });
+    expect(cancelAll).toBeEnabled();
+    fireEvent.click(cancelAll);
+    expect(store.actions.cancelAll).toHaveBeenCalledTimes(1);
+    expect(store.actions.syncAll).not.toHaveBeenCalled();
+  });
+
+  it("clicking a syncing row's button cancels that sync instead of starting another", () => {
+    const store = makeStore({ syncing: ["s1"] });
+    mockUseSubs.mockReturnValue(store);
+    render(<Subscriptions />);
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    expect(cancel).toBeEnabled();
+    fireEvent.click(cancel);
+    expect(store.actions.cancelSync).toHaveBeenCalledWith("s1");
+    expect(store.actions.syncOne).not.toHaveBeenCalled();
+  });
+
+  it("a row in error state that is re-syncing offers cancel, not retry", () => {
+    const store = makeStore({ subs: [baseSub({ status: "error" })], syncing: ["s1"] });
+    mockUseSubs.mockReturnValue(store);
+    render(<Subscriptions />);
+    expect(screen.queryByRole("button", { name: "Retry sync" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+  });
+
+  it("shows the canceled notice for a recently canceled sync", () => {
+    mockUseSubs.mockReturnValue(makeStore({ canceled: ["s1"] }));
+    render(<Subscriptions />);
+    expect(screen.getByText("Sync canceled")).toBeInTheDocument();
   });
 });

@@ -85,6 +85,8 @@ contextBridge.exposeInMainWorld("itg", {
     remove: (params: { id: string }) => rpc("subs.remove", params),
     syncOne: (params: { id: string }) => rpc("subs.syncOne", params),
     syncAll: () => rpc("subs.syncAll"),
+    cancelSync: (params: { id: string }) => rpc("subs.cancelSync", params),
+    cancelAll: () => rpc("subs.cancelAll"),
   },
   rules: {
     list: () => rpc("rules.list"),

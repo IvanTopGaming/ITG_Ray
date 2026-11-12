@@ -330,6 +330,8 @@ func main() {
 	d.Register("subs.remove", subs.Remove)
 	d.Register("subs.syncOne", subs.SyncOne)
 	d.Register("subs.syncAll", subs.SyncAll)
+	d.Register("subs.cancelSync", subs.CancelSync)
+	d.Register("subs.cancelAll", subs.CancelAll)
 
 	rulesH := handlers.RulesHandlers{Svc: rulesSvc}
 	d.Register("rules.list", rulesH.List)
