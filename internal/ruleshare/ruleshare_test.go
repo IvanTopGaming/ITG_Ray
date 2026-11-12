@@ -157,7 +157,7 @@ func boundGroups() []rules.Group {
 	return g
 }
 
-func TestExport_DropsServerBinding(t *testing.T) {
+func TestExport_KeepsServerNameOnly(t *testing.T) {
 	link, err := Encode("n", boundGroups())
 	if err != nil {
 		t.Fatalf("Encode: %v", err)
@@ -167,21 +167,41 @@ func TestExport_DropsServerBinding(t *testing.T) {
 		t.Fatalf("Decode: %v", err)
 	}
 	r := p.Groups[0].Rules[0]
-	if r.ServerID != "" || r.ServerSourceID != "" || r.ServerName != "" {
-		t.Fatalf("binding leaked into export: %+v", r)
+	if r.ServerID != "" || r.ServerSourceID != "" {
+		t.Fatalf("local ids leaked into export: %+v", r)
+	}
+	if r.ServerName != "NL 2" {
+		t.Fatalf("server name lost: %+v", r)
 	}
 	if len(r.Conditions.Domains) != 1 || r.Conditions.Domains[0].Value != "netflix.com" {
 		t.Fatalf("conditions lost: %+v", r.Conditions)
 	}
 }
 
-func TestImport_DropsForeignServerBinding(t *testing.T) {
+func TestImport_DropsForeignServerIDsKeepsName(t *testing.T) {
 	link := encodeEnvelope(t, wireEnvelope{V: CurrentSchema, Kind: "rules", Name: "n", Groups: boundGroups()})
 	p, err := Decode(link)
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
-	if r := p.Groups[0].Rules[0]; r.ServerID != "" || r.ServerSourceID != "" || r.ServerName != "" {
-		t.Fatalf("foreign binding kept on import: %+v", r)
+	r := p.Groups[0].Rules[0]
+	if r.ServerID != "" || r.ServerSourceID != "" {
+		t.Fatalf("foreign ids kept on import: %+v", r)
+	}
+	if r.ServerName != "NL 2" {
+		t.Fatalf("server name dropped on import: %+v", r)
+	}
+}
+
+func TestImport_DropsServerNameOnNonProxyRule(t *testing.T) {
+	g := boundGroups()
+	g[0].Rules[0].Action = rules.ActionDirect
+	link := encodeEnvelope(t, wireEnvelope{V: CurrentSchema, Kind: "rules", Name: "n", Groups: g})
+	p, err := Decode(link)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if r := p.Groups[0].Rules[0]; r.ServerName != "" {
+		t.Fatalf("server name kept on a direct rule: %+v", r)
 	}
 }
