@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 export type ReconnectToastProps = {
   visible: boolean;
   message: string;
+  dismissLabel: string;
   onReconnect?: () => void | Promise<void>;
   onDismiss: () => void;
 };
@@ -11,6 +12,7 @@ export type ReconnectToastProps = {
 export function ReconnectToast({
   visible,
   message,
+  dismissLabel,
   onReconnect,
   onDismiss,
 }: ReconnectToastProps) {
@@ -38,10 +40,9 @@ export function ReconnectToast({
           )}
           <button
             onClick={onDismiss}
-            aria-label={t("common.dismiss")}
-            className="rounded-full px-2 py-0.5 text-[16px] leading-none text-amber-50/80 transition-colors hover:bg-amber-100/20 hover:text-amber-50"
+            className="rounded-full bg-amber-100/25 px-2.5 py-1 text-[11.5px] font-semibold text-amber-50 transition-colors hover:bg-amber-100/40"
           >
-            ×
+            {dismissLabel}
           </button>
         </motion.div>
       )}

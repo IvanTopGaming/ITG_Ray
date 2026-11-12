@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ReconnectToast } from "./ReconnectToast";
@@ -10,6 +10,7 @@ describe("ReconnectToast", () => {
       <ReconnectToast
         visible={false}
         message="Reconnect to apply."
+        dismissLabel="Dismiss"
         onDismiss={() => {}}
       />,
     );
@@ -21,6 +22,7 @@ describe("ReconnectToast", () => {
       <ReconnectToast
         visible={true}
         message="Reconnect to apply."
+        dismissLabel="Dismiss"
         onReconnect={() => {}}
         onDismiss={() => {}}
       />,
@@ -37,6 +39,7 @@ describe("ReconnectToast", () => {
       <ReconnectToast
         visible={true}
         message="X"
+        dismissLabel="Dismiss"
         onDismiss={() => {}}
       />,
     );
@@ -49,6 +52,7 @@ describe("ReconnectToast", () => {
       <ReconnectToast
         visible={true}
         message="X"
+        dismissLabel="Dismiss"
         onReconnect={onReconnect}
         onDismiss={() => {}}
       />,
@@ -57,17 +61,34 @@ describe("ReconnectToast", () => {
     expect(onReconnect).toHaveBeenCalledTimes(1);
   });
 
-  it("invokes onDismiss on dismiss-X click", async () => {
+  it("invokes onDismiss on dismiss click", async () => {
     const onDismiss = vi.fn();
     render(
       <ReconnectToast
         visible={true}
         message="X"
+        dismissLabel="Dismiss"
         onReconnect={() => {}}
         onDismiss={onDismiss}
       />,
     );
-    await userEvent.click(screen.getByRole("button", { name: /dismiss/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the supplied dismiss label as visible text", () => {
+    const onDismiss = vi.fn();
+    render(
+      <ReconnectToast
+        visible
+        message="msg"
+        dismissLabel="Discard changes"
+        onDismiss={onDismiss}
+      />,
+    );
+    const btn = screen.getByRole("button", { name: "Discard changes" });
+    expect(btn).toHaveTextContent("Discard changes");
+    fireEvent.click(btn);
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });

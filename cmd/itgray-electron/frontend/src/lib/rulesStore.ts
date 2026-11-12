@@ -123,6 +123,10 @@ export function clearRulesRevertBaseline(): void {
   revertBaseline = null;
 }
 
+export function rulesHasRevertBaseline(): boolean {
+  return revertBaseline !== null;
+}
+
 /**
  * rulesRevertToBaseline restores the model captured before the current run of
  * edits and returns whether anything was rolled back. A false return means

@@ -1,4 +1,4 @@
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Outlet, useNavigate } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
@@ -14,10 +14,11 @@ import {
   clearDesiredServer,
 } from "@/lib/settings";
 import { dashReconnect, getDashState } from "@/lib/dashStore";
-import { rulesRevertToBaseline } from "@/lib/rulesStore";
+import { rulesRevertToBaseline, rulesHasRevertBaseline } from "@/lib/rulesStore";
 import { setPendingImportLink } from "@/lib/deeplinkStore";
 import { ReconnectToast } from "./ReconnectToast";
 import { useTrayBridge } from "@/lib/trayBridge";
+import { ConfirmDialog } from "./controls/ConfirmDialog";
 
 export function AppShell() {
   const reconnectNeeded = useReconnectNeeded();
@@ -25,6 +26,7 @@ export function AppShell() {
   const [settings] = useSettings();
   const navigate = useNavigate();
   useTrayBridge(navigate, settings.language);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   useEffect(() => {
     if (i18n.language !== settings.language)
       void i18n.changeLanguage(settings.language);
@@ -73,22 +75,33 @@ export function AppShell() {
     }
   };
 
-  const handleDismiss = () => {
-    // Dismiss must clear EVERY reconnect signal reconnectNeeded() ORs
-    // together — deferred server switch, active-server edit, dirty rules,
-    // and network-diff — else a toast armed by a signal we forget to clear
-    // can never be dismissed. We do NOT drop lastConnectSnapshot: keeping
-    // it means networkDiffersFromSnapshot() can still flip back to true on
-    // a future edit, which clears networkDiffDismissed in useSettings
-    // .update() and re-arms the toast.
+  // clearAllReconnectSignals clears EVERY signal reconnectNeeded() ORs
+  // together — deferred server switch, active-server edit, dirty rules and
+  // network-diff — else a toast armed by a signal we forget to clear can
+  // never be dismissed. We do NOT drop lastConnectSnapshot: keeping it means
+  // networkDiffersFromSnapshot() can still flip back to true on a future
+  // edit, which clears networkDiffDismissed in useSettings.update() and
+  // re-arms the toast.
+  const clearAllReconnectSignals = () => {
     clearActiveServerEdited();
     setRulesDismissed();
     dismissNetworkDiff();
     clearDesiredServer();
+  };
+
+  const handleDismiss = () => {
+    if (rulesHasRevertBaseline()) {
+      setConfirmDiscard(true);
+      return;
+    }
+    clearAllReconnectSignals();
+  };
+
+  const handleConfirmDiscard = () => {
+    clearAllReconnectSignals();
     // Rule edits commit to the backend as they are made, so unlike the other
     // signals "dismiss" would otherwise silently keep them. Roll back to the
-    // model the running tunnel was built from. No-op when the toast was armed
-    // by something other than a rules edit.
+    // model the running tunnel was built from.
     void rulesRevertToBaseline();
   };
 
@@ -121,8 +134,22 @@ export function AppShell() {
       <ReconnectToast
         visible={reconnectNeeded}
         message={t("appShell.reconnectMessage")}
+        dismissLabel={
+          rulesHasRevertBaseline()
+            ? t("appShell.discardChanges")
+            : t("common.dismiss")
+        }
         onReconnect={handleReconnect}
         onDismiss={handleDismiss}
+      />
+      <ConfirmDialog
+        open={confirmDiscard}
+        title={t("appShell.discardRulesTitle")}
+        description={t("appShell.discardRulesDescription")}
+        confirmLabel={t("appShell.discardRulesConfirm")}
+        confirmVariant="danger"
+        onClose={() => setConfirmDiscard(false)}
+        onConfirm={handleConfirmDiscard}
       />
     </div>
   );
