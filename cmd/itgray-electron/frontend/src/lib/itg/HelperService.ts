@@ -37,3 +37,25 @@ export function UninstallLinux(): Promise<unknown> { return svc().uninstallLinux
 export function StartLinux(): Promise<unknown> { return svc().startLinux?.() ?? Promise.resolve(null); }
 export function StopLinux(): Promise<unknown> { return svc().stopLinux?.() ?? Promise.resolve(null); }
 export function RestartLinux(): Promise<unknown> { return svc().restartLinux?.() ?? Promise.resolve(null); }
+
+export type HelperStatusDetails = {
+  state: string;
+  packageManaged: boolean;
+  version?: string;
+  expectedVersion?: string;
+};
+
+export function StatusDetails(): Promise<HelperStatusDetails> {
+  const fn = svc().status;
+  if (!fn) return Promise.resolve({ state: "unknown", packageManaged: false });
+  return fn().then((r) => {
+    const o = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
+    const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
+    return {
+      state: str(o.state) ?? (typeof r === "string" ? r : "unknown"),
+      packageManaged: o.packageManaged === true,
+      version: str(o.version),
+      expectedVersion: str(o.expectedVersion),
+    };
+  });
+}
