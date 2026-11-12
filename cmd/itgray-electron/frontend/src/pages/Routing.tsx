@@ -24,6 +24,7 @@ import { consumePendingImportLink, subscribePendingImport } from "@/lib/deeplink
 import { cn } from "@/lib/cn";
 import { summarise } from "@/lib/ruleSummary";
 import { useDash } from "@/lib/dashStore";
+import { useSubs } from "@/lib/subsStore";
 import { RoutingModeSwitch } from "@/components/RoutingModeSwitch";
 import { useTranslation } from "react-i18next";
 
@@ -141,7 +142,8 @@ export function Routing() {
   );
 
   const safetyGroup = localGroups.find((g) => g.id === "safety");
-  const userGroups = localGroups.filter((g) => g.id !== "safety");
+  const userGroups = localGroups.filter((g) => g.id !== "safety" && !g.sourceId);
+  const sourceGroups = localGroups.filter((g) => g.sourceId);
 
   // Resolve the active drag target so DragOverlay can render its ghost
   // outside of any clipping/stacking-context container (glass-regular
@@ -228,7 +230,7 @@ export function Routing() {
     if (localGroups.some((g) => g.id === activeId)) {
       if (activeId === overId) return;
       const nextUser = reorderGroups(userGroups, activeId, overId);
-      const finalGroups = safetyGroup ? [safetyGroup, ...nextUser] : nextUser;
+      const finalGroups = [...(safetyGroup ? [safetyGroup] : []), ...nextUser, ...sourceGroups];
       setLocalGroups(finalGroups);
       void rulesReplaceAll({ defaultAction, groups: finalGroups });
       return;
@@ -333,6 +335,9 @@ export function Routing() {
             ))}
           </AnimatePresence>
         </SortableContext>
+        {sourceGroups.map((g) => (
+          <GroupCard key={g.id} group={g} allGroups={localGroups} />
+        ))}
         {/* DragOverlay portals its child to document.body, so the ghost
             escapes every group card's stacking context (glass-regular's
             backdrop-filter creates one, which would otherwise clip the
@@ -520,6 +525,7 @@ function GroupCard({ group, dragHandle, allGroups }: { group: GroupView; dragHan
               </button>
             )}
             {group.locked && <Lock aria-label={t("routing.locked")} className="h-3.5 w-3.5 text-white/55" />}
+            {group.sourceId && <SourceBadge sourceId={group.sourceId} />}
             {renaming
               ? <InlineRename
                   initial={group.name}
@@ -537,7 +543,7 @@ function GroupCard({ group, dragHandle, allGroups }: { group: GroupView; dragHan
             {shareMsg && <span className="text-[11px] text-white/45">{shareMsg}</span>}
           </div>
           <div className="flex items-center gap-2">
-            {!group.locked && (
+            {(!group.locked || group.sourceId) && (
               <Toggle
                 value={group.enabled}
                 aria-label={t("routing.toggleGroup", { name: group.name })}
@@ -610,7 +616,7 @@ function GroupCard({ group, dragHandle, allGroups }: { group: GroupView; dragHan
           <ul className="flex flex-col gap-1">
             {group.rules.map((r) => (
               <li key={r.id}>
-                <RuleRow rule={r} groupLocked />
+                <RuleRow rule={r} groupLocked fromSource={!!group.sourceId} />
               </li>
             ))}
           </ul>
@@ -741,11 +747,13 @@ function RuleRow({
   groupLocked,
   group,
   allGroups,
+  fromSource = false,
 }: {
   rule: RuleView;
   groupLocked: boolean;
   group?: GroupView;
   allGroups?: GroupView[];
+  fromSource?: boolean;
 }) {
   const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -810,7 +818,7 @@ function RuleRow({
           {rule.action}
         </span>
         <span className="text-white/85">{rule.name}</span>
-        <BindingChip rule={rule} />
+        <BindingChip rule={rule} fromSource={fromSource} />
         <span className="text-[11px] text-white/45">{summarise(rule.conditions, t)}</span>
       </motion.div>
       {!groupLocked && (
@@ -872,20 +880,39 @@ function RuleRow({
   );
 }
 
-function BindingChip({ rule }: { rule: RuleView }) {
+function SourceBadge({ sourceId }: { sourceId: string }) {
+  const { t } = useTranslation();
+  const { state } = useSubs();
+  const name = state.load.kind === "ready" ? state.load.subs.find((s) => s.id === sourceId)?.name : undefined;
+  return (
+    <span className="rounded bg-violet-500/15 px-2 py-0.5 text-[10.5px] text-violet-100/85">
+      {name ? t("routing.fromSubscription", { name }) : t("routing.fromSubscriptionUnknown")}
+    </span>
+  );
+}
+
+function BindingChip({ rule, fromSource = false }: { rule: RuleView; fromSource?: boolean }) {
   const { t } = useTranslation();
   const servers = useDash().allServers ?? [];
-  if (rule.action !== "proxy" || !rule.server_id) return null;
+  if (rule.action !== "proxy" || (!rule.server_id && !rule.server_name)) return null;
   const state = rule.binding?.state;
   const name = servers.find((s) => s.id === rule.server_id)?.name ?? rule.server_name ?? rule.server_id;
   if (state === "missing" || state === "unusable") {
     const reason = rule.binding?.reason;
     const reasonKey = reason === "dns" || reason === "config" || reason === "disabled" ? reason : "other";
+    const label = state === "missing"
+      ? t(fromSource ? "routing.binding.sourceMissing" : "routing.binding.missing")
+      : t(`routing.binding.reason.${reasonKey}`);
+    const consequence = state === "missing"
+      ? null
+      : fromSource
+        ? t(reasonKey === "disabled" ? "routing.binding.sourceSkipped" : "routing.binding.sourceBlocked")
+        : t("routing.binding.unusable");
     return (
       <span className="flex items-center gap-1 rounded bg-amber-500/15 px-2 py-0.5 text-[10.5px] text-amber-200">
-        <span>{state === "missing" ? t("routing.binding.missing") : t(`routing.binding.reason.${reasonKey}`)}</span>
+        <span>{label}</span>
         <span className="text-amber-100/70">{name}</span>
-        {state === "unusable" && <span className="text-amber-100/60">· {t("routing.binding.unusable")}</span>}
+        {consequence && <span className="text-amber-100/60">· {consequence}</span>}
       </span>
     );
   }

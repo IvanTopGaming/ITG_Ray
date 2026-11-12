@@ -592,8 +592,13 @@
         "config": "Server config isn't supported",
         "disabled": "Server is disabled",
         "other": "Server unavailable at connect"
-      }
-    }
+      },
+      "sourceMissing": "Server isn't in the subscription — rule skipped",
+      "sourceSkipped": "rule skipped",
+      "sourceBlocked": "traffic blocked"
+    },
+    "fromSubscription": "From subscription {{name}}",
+    "fromSubscriptionUnknown": "From a subscription"
   },
   "logs": {
     "title": "Logs",
