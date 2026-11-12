@@ -182,11 +182,12 @@ type RulesView struct {
 
 // GroupView is the wire shape for a single rule group.
 type GroupView struct {
-	ID      string     `json:"id"`
-	Name    string     `json:"name"`
-	Locked  bool       `json:"locked"`
-	Enabled bool       `json:"enabled"`
-	Rules   []RuleView `json:"rules"`
+	ID       string     `json:"id"`
+	Name     string     `json:"name"`
+	Locked   bool       `json:"locked"`
+	Enabled  bool       `json:"enabled"`
+	Rules    []RuleView `json:"rules"`
+	SourceID string     `json:"sourceId,omitempty"`
 }
 
 // RuleView is the wire shape for a single rule.

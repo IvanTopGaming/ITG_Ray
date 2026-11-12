@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/itg-team/itg-ray/internal/logging"
+	"github.com/itg-team/itg-ray/internal/ruleshare"
 	"github.com/itg-team/itg-ray/internal/server"
 )
 
@@ -43,10 +45,11 @@ type Subscription struct {
 // failure, the error string. Headers contains the parsed standard
 // subscription headers (quota/expiry/title) when Fetch succeeded.
 type SyncMeta struct {
-	LastUpdate time.Time
-	Status     string
-	Message    string
-	Headers    Headers
+	LastUpdate  time.Time
+	Status      string
+	Message     string
+	Headers     Headers
+	RoutingLink string
 }
 
 // Sync fetches the subscription, parses its body in any supported format,
@@ -132,6 +135,7 @@ func FetchParse(ctx context.Context, sub Subscription, timeout time.Duration) ([
 		incoming = append(incoming, server.New(parsed.Configs[i], server.OriginSubscription, sub.ID))
 	}
 
+	meta.RoutingLink = routingLink(res.Raw, parsed)
 	meta.Status = "ok"
 	meta.Message = fmt.Sprintf("imported=%d invalid=%d skipped=%d", len(incoming), parsed.Invalid, sumSkipped(parsed.Skipped))
 	slog.Info("sub fetched", slog.String("scope", "sub"), slog.String("id", sub.ID),
@@ -157,4 +161,11 @@ func noServersError(parsed ParseResult) error {
 	}
 	sort.Strings(protocols)
 	return fmt.Errorf("no usable VLESS servers: invalid=%d skipped=%d protocols=%s", parsed.Invalid, sumSkipped(parsed.Skipped), strings.Join(protocols, ","))
+}
+
+func routingLink(h http.Header, parsed ParseResult) string {
+	if v := strings.TrimSpace(h.Get("Routing")); strings.HasPrefix(v, ruleshare.ImportPrefix) {
+		return v
+	}
+	return parsed.RoutingLink
 }

@@ -50,6 +50,7 @@ export interface Group {
   locked?: boolean;
   enabled: boolean;
   rules: Rule[];
+  source_id?: string;
 }
 
 export interface GroupView {
@@ -58,6 +59,7 @@ export interface GroupView {
   locked: boolean;
   enabled: boolean;
   rules: RuleView[];
+  sourceId?: string;
 }
 
 export interface HelperStatusResult {

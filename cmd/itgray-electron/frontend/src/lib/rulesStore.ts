@@ -45,6 +45,7 @@ export type GroupView = {
   locked: boolean;
   enabled: boolean;
   rules: RuleView[];
+  sourceId?: string;
 };
 
 export type RulesState = {

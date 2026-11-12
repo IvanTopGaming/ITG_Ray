@@ -39,6 +39,10 @@ vi.mock("@/lib/rulesStore", async () => {
   };
 });
 
+vi.mock("@/lib/subsStore", () => ({
+  useSubs: () => ({ state: { load: { kind: "ready", subs: [{ id: "sub-1", name: "okins" }] } }, actions: {} }),
+}));
+
 const navigateMock = vi.fn();
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<any>("react-router-dom");
@@ -402,5 +406,49 @@ describe("moveRuleAcrossGroups", () => {
       </MemoryRouter>,
     );
     expect(screen.getByTestId("rule-row-r9")).toHaveAttribute("data-highlight", "true");
+  });
+});
+
+describe("Routing page — subscription groups", () => {
+  const provider = {
+    id: "src-sub-1",
+    name: "Provider rules",
+    locked: true,
+    enabled: true,
+    sourceId: "sub-1",
+    rules: [
+      { id: "src-sub-1-0", name: "YouTube", enabled: true, action: "proxy", conditions: { domains: [{ kind: "suffix", value: "youtube.com" }] }, server_name: "NL 2", server_source_id: "sub-1", binding: { state: "missing" } },
+    ],
+  };
+
+  beforeEach(() => {
+    rulesEditGroupMock.mockReset();
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, user, provider], loading: false, lastError: null, bootstrapped: true });
+  });
+
+  it("shows which subscription the group comes from", () => {
+    renderRouting();
+    expect(screen.getByText("From subscription okins")).toBeInTheDocument();
+  });
+
+  it("can be switched off but not edited", async () => {
+    renderRouting();
+    expect(screen.queryByLabelText("Provider rules menu")).toBeNull();
+    await userEvent.click(screen.getByRole("switch", { name: "Toggle Provider rules" }));
+    expect(rulesEditGroupMock).toHaveBeenCalledWith("src-sub-1", "Provider rules", false);
+  });
+
+  it("explains that a rule whose server left the subscription is skipped", () => {
+    renderRouting();
+    expect(screen.getByText("Server isn't in the subscription — rule skipped")).toBeInTheDocument();
+    expect(screen.getByText("NL 2")).toBeInTheDocument();
+  });
+
+  it("is rendered below user groups and is not draggable", () => {
+    renderRouting();
+    const names = screen.getAllByText(/^(Safety|My Rules|Provider rules)$/).map((el) => el.textContent);
+    expect(names).toEqual(["Safety", "My Rules", "Provider rules"]);
+    expect(screen.getByLabelText("Drag My Rules")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Drag Provider rules")).toBeNull();
   });
 });

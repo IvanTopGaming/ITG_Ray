@@ -95,6 +95,43 @@ func planBoundServers(model rules.Model, servers []server.Server, mainID string,
 	return plan
 }
 
+func confineSourceRules(model rules.Model, servers []server.Server, bindings map[string]routebind.Binding) rules.Model {
+	sourceOf := make(map[string]string, len(servers))
+	for i := range servers {
+		sourceOf[servers[i].ID] = servers[i].SourceID
+	}
+	out := rules.Model{DefaultAction: model.DefaultAction, Groups: make([]rules.Group, 0, len(model.Groups))}
+	for _, g := range model.Groups {
+		if !g.FromSource() {
+			out.Groups = append(out.Groups, g)
+			continue
+		}
+		kept := make([]rules.Rule, 0, len(g.Rules))
+		for _, r := range g.Rules {
+			if r.Action != rules.ActionProxy || (r.ServerID == "" && r.ServerName == "") {
+				kept = append(kept, r)
+				continue
+			}
+			b, ok := bindings[r.ID]
+			switch {
+			case !ok, b.State == routebind.StateMissing:
+				continue
+			case b.State == routebind.StateUnusable && b.Reason == "disabled":
+				continue
+			case sourceOf[r.ServerID] != g.SourceID:
+				continue
+			case b.State == routebind.StateUnusable:
+				r.Action = rules.ActionBlock
+				r.ClearServerBinding()
+			}
+			kept = append(kept, r)
+		}
+		g.Rules = kept
+		out.Groups = append(out.Groups, g)
+	}
+	return out
+}
+
 // Default port assignments for non-user-configurable internal endpoints.
 // SOCKS/HTTP inbound ports are now sourced from config.Network.SysProxy
 // (Tier 2b); TUN CIDR is sourced from config.Network.TUN.IPv4CIDR.
@@ -160,7 +197,9 @@ func buildConfigs(dataDir, configPath string, store *rules.Store, geoMgr *geo.Ma
 
 		servers, _ := server.Load(filepath.Join(dataDir, "servers.json"))
 		model, bindings := routebind.Resolve(loadRulesFromDataDir(dataDir, store), servers)
+		model = confineSourceRules(model, servers, bindings)
 		plan := planBoundServers(model, servers, srv.ID, bindings)
+		model = confineSourceRules(model, servers, bindings)
 		secret, err := clashapi.LoadOrCreateSecret(dataDir)
 		if err != nil {
 			return nil, nil, err

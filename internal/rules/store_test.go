@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -72,5 +73,30 @@ func TestStore_SaveIsAtomic_NoPartialFileVisible(t *testing.T) {
 		require.NoError(t, err)
 		var probe Model
 		require.NoError(t, json.Unmarshal(raw, &probe), "every visible state must be a complete JSON document")
+	}
+}
+
+func TestStore_SaveKeepsSourceGroupsBelowUserGroups(t *testing.T) {
+	s := NewStore(t.TempDir())
+	m := DefaultModel()
+	m.Groups = append(m.Groups[:1], append([]Group{{ID: "src-a", Name: "Provider", SourceID: "a", Locked: true, Enabled: true}}, m.Groups[1:]...)...)
+	m.Groups = append(m.Groups, Group{ID: "g-new", Name: "Later user group", Enabled: true})
+	if err := s.Save(m); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	got, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	var ids []string
+	for _, g := range got.Groups {
+		ids = append(ids, g.ID)
+	}
+	want := []string{"safety", "user", "g-new", "src-a"}
+	if strings.Join(ids, ",") != strings.Join(want, ",") {
+		t.Fatalf("order = %v, want %v", ids, want)
+	}
+	if got.Groups[3].SourceID != "a" {
+		t.Fatalf("source id not persisted: %+v", got.Groups[3])
 	}
 }

@@ -60,7 +60,7 @@ func (s *Store) Load() (Model, error) {
 func (s *Store) Save(m Model) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	b, err := json.MarshalIndent(m, "", "  ")
+	b, err := json.MarshalIndent(m.SourceGroupsLast(), "", "  ")
 	if err != nil {
 		return err
 	}

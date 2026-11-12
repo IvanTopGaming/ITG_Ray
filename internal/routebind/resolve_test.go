@@ -52,6 +52,12 @@ func TestResolve(t *testing.T) {
 		{name: "disabled", rule: bound("a", "sub", "NL"), servers: []server.Server{disabled}, state: StateUnusable, reason: "disabled", wantID: "a"},
 		{name: "direct rule ignored", rule: rules.Rule{Action: rules.ActionDirect, ServerID: "a"}, servers: []server.Server{srv("a", "sub", "NL")}, absent: true, wantID: "a"},
 		{name: "unbound proxy ignored", rule: rules.Rule{Action: rules.ActionProxy}, servers: []server.Server{srv("a", "sub", "NL")}, absent: true},
+		{name: "name-only binds within its sub", rule: bound("", "sub", "NL"), servers: []server.Server{srv("x", "other", "NL"), srv("b", "sub", "NL")}, state: StateRebound, wantID: "b"},
+		{name: "name-only never crosses subs", rule: bound("", "sub", "NL"), servers: []server.Server{srv("x", "other", "NL"), srv("m", "", "NL")}, state: StateMissing},
+		{name: "name-only in its sub but disabled", rule: bound("", "sub", "NL"), servers: []server.Server{disabled}, state: StateUnusable, reason: "disabled", wantID: "a"},
+		{name: "imported name binds when unique", rule: bound("", "", "NL"), servers: []server.Server{srv("b", "sub", "NL"), srv("c", "sub", "FI")}, state: StateRebound, wantID: "b"},
+		{name: "imported name ambiguous", rule: bound("", "", "NL"), servers: []server.Server{srv("b", "sub", "NL"), srv("c", "other", "NL")}, state: StateMissing},
+		{name: "imported name unknown", rule: bound("", "", "NL"), servers: []server.Server{srv("c", "sub", "FI")}, state: StateMissing},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

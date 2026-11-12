@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -140,11 +141,18 @@ func main() {
 	// modify their own copy and save, silently dropping the other's change.
 	storeLock := bindings.NewStoreLock()
 
+	var rulesSvc *bindings.RulesService
 	subsSvc := bindings.NewSubsService(bindings.SubsDeps{
 		SubStore:    subStore,
 		ServerStore: serverStore,
 		Hub:         h,
 		StoreLock:   storeLock,
+		ApplyRouting: func(subID, subName, link string) error {
+			if rulesSvc == nil {
+				return errors.New("rules service not ready")
+			}
+			return rulesSvc.ApplyProviderRouting(subID, subName, link)
+		},
 		SettingsView: func() hub.SettingsView {
 			view, verr := configStore.View()
 			if verr != nil {
@@ -198,7 +206,7 @@ func main() {
 	}
 
 	ruleStore := rules.NewStore(dataDir)
-	rulesSvc := bindings.NewRulesService(bindings.RulesDeps{
+	rulesSvc = bindings.NewRulesService(bindings.RulesDeps{
 		Store:       ruleStore,
 		Hub:         h,
 		Issues:      bindingIssues,
