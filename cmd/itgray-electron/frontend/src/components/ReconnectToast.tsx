@@ -40,7 +40,7 @@ export function ReconnectToast({
           )}
           <button
             onClick={onDismiss}
-            className="rounded-full px-2.5 py-1 text-[11.5px] font-medium text-amber-50/85 transition-colors hover:bg-amber-100/20 hover:text-amber-50"
+            className="rounded-full bg-amber-100/25 px-2.5 py-1 text-[11.5px] font-semibold text-amber-50 transition-colors hover:bg-amber-100/40"
           >
             {dismissLabel}
           </button>
