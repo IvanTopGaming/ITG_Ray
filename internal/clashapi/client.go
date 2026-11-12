@@ -108,11 +108,18 @@ func (c *Client) Connections(ctx context.Context) (stats.Snapshot, error) {
 				ProcessPath   string `json:"processPath"`
 			} `json:"metadata"`
 		} `json:"connections"`
+		DownloadTotal *uint64 `json:"downloadTotal"`
+		UploadTotal   *uint64 `json:"uploadTotal"`
 	}
 	if err := c.do(ctx, http.MethodGet, "/connections", nil, &raw); err != nil {
 		return stats.Snapshot{}, err
 	}
 	snap := stats.Snapshot{Conns: make([]stats.Conn, 0, len(raw.Connections))}
+	if raw.DownloadTotal != nil && raw.UploadTotal != nil {
+		snap.DownTotal = *raw.DownloadTotal
+		snap.UpTotal = *raw.UploadTotal
+		snap.HasTotals = true
+	}
 	for _, rc := range raw.Connections {
 		snap.Conns = append(snap.Conns, stats.Conn{
 			ID:      rc.ID,

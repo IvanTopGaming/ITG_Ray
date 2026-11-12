@@ -27,7 +27,10 @@ type Conn struct {
 }
 
 type Snapshot struct {
-	Conns []Conn
+	Conns     []Conn
+	DownTotal uint64
+	UpTotal   uint64
+	HasTotals bool
 }
 
 type ConnSource interface {
@@ -67,6 +70,8 @@ type Collector struct {
 
 	mu           sync.Mutex
 	prev         map[string]connState
+	prevTotals   connState
+	totalsKnown  bool
 	lastTick     time.Time
 	pending      map[pendingKey]Delta
 	live         []LiveConn
@@ -169,6 +174,7 @@ func (c *Collector) Tick(ctx context.Context) {
 	}
 	next := make(map[string]connState, len(snap.Conns))
 	live := make([]LiveConn, 0, len(snap.Conns))
+	var sumUp, sumDown uint64
 	for _, conn := range snap.Conns {
 		route, server := c.route(conn.Chains)
 		app := AppName(conn.Process)
@@ -180,6 +186,10 @@ func (c *Collector) Tick(ctx context.Context) {
 			d = Delta{Up: conn.Up, Down: conn.Down, Conns: 1}
 		}
 		next[conn.ID] = connState{up: conn.Up, down: conn.Down}
+		if route != "" {
+			sumUp += d.Up
+			sumDown += d.Down
+		}
 		if route != "" && (d.Up > 0 || d.Down > 0 || d.Conns > 0) {
 			c.addPending(now, Dims{App: app, RuleID: ruleID, Route: route, ServerID: server}, d)
 		}
@@ -209,9 +219,27 @@ func (c *Collector) Tick(ctx context.Context) {
 		}
 		return live[i].Start.After(live[j].Start)
 	})
+	if snap.HasTotals {
+		if c.totalsKnown && snap.UpTotal >= c.prevTotals.up && snap.DownTotal >= c.prevTotals.down {
+			restUp := residual(snap.UpTotal-c.prevTotals.up, sumUp)
+			restDown := residual(snap.DownTotal-c.prevTotals.down, sumDown)
+			if restUp > 0 || restDown > 0 {
+				c.addPending(now, Dims{}, Delta{Up: restUp, Down: restDown})
+			}
+		}
+		c.prevTotals = connState{up: snap.UpTotal, down: snap.DownTotal}
+		c.totalsKnown = true
+	}
 	c.prev = next
 	c.live = live
 	c.lastTick = now
+}
+
+func residual(total, attributed uint64) uint64 {
+	if total <= attributed {
+		return 0
+	}
+	return total - attributed
 }
 
 func (c *Collector) OnLogLine(source, message string) {

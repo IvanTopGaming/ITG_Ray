@@ -193,3 +193,41 @@ func TestCollector_TransientErrorDoesNotDoubleCount(t *testing.T) {
 	require.Equal(t, uint64(1500), ov.Down)
 	require.Equal(t, 1, ov.Rules[0].Conns)
 }
+
+func (f *collectorFixture) tickTotals(t *testing.T, down, up uint64, conns ...Conn) {
+	t.Helper()
+	f.src.snap = Snapshot{Conns: conns, DownTotal: down, UpTotal: up, HasTotals: true}
+	f.c.Tick(context.Background())
+	f.now = f.now.Add(time.Second)
+}
+
+func TestCollector_ClosedAndShortConnectionsReachTotals(t *testing.T) {
+	f := newCollectorFixture(t)
+	a := Conn{ID: "a", Process: "/usr/bin/a", Rule: "final", Chains: []string{"proxy"}, Down: 1000, Up: 10}
+	f.tickTotals(t, 1000, 10, a)
+	f.tickTotals(t, 1800, 30)
+	ov := f.overview(t)
+	require.Equal(t, uint64(1800), ov.Down)
+	require.Equal(t, uint64(30), ov.Up)
+	require.Equal(t, uint64(1000), ov.DownProxy)
+	require.Equal(t, "a", ov.Apps[0].App)
+	require.Equal(t, uint64(1000), ov.Apps[0].Down)
+}
+
+func TestCollector_TotalsResetIsNewBaseline(t *testing.T) {
+	f := newCollectorFixture(t)
+	f.tickTotals(t, 5000, 500)
+	f.tickTotals(t, 100, 10)
+	f.tickTotals(t, 300, 20)
+	ov := f.overview(t)
+	require.Equal(t, uint64(200), ov.Down)
+	require.Equal(t, uint64(10), ov.Up)
+}
+
+func TestCollector_ResidualNeverNegative(t *testing.T) {
+	f := newCollectorFixture(t)
+	f.tickTotals(t, 0, 0)
+	f.tickTotals(t, 100, 0, Conn{ID: "x", Process: "/usr/bin/a", Rule: "final", Chains: []string{"direct"}, Down: 400})
+	ov := f.overview(t)
+	require.Equal(t, uint64(400), ov.Down)
+}

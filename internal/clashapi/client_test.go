@@ -102,3 +102,17 @@ func TestClient_ConnectionsParsesSingboxShape(t *testing.T) {
 	require.Equal(t, "178.248.239.46", snap.Conns[1].DestIP)
 	require.Equal(t, "final", snap.Conns[1].Rule)
 }
+
+func TestClient_ConnectionsCarriesTotals(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(singbox1144Connections))
+	}))
+	t.Cleanup(ts.Close)
+	_, portStr, _ := net.SplitHostPort(ts.Listener.Addr().String())
+	port, _ := strconv.Atoi(portStr)
+	snap, err := New(port, "sec").Connections(context.Background())
+	require.NoError(t, err)
+	require.True(t, snap.HasTotals)
+	require.Equal(t, uint64(16100), snap.DownTotal)
+	require.Equal(t, uint64(3783), snap.UpTotal)
+}
