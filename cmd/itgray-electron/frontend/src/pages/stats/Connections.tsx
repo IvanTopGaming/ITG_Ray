@@ -85,7 +85,15 @@ export function Connections({ visible, onCount }: { visible: boolean; onCount: (
         </div>
       ) : (
         <div className="glass-regular overflow-x-auto rounded-2xl p-1.5">
-          <table className="w-full border-collapse text-[12.5px]">
+          <table className="w-full min-w-[820px] table-fixed border-collapse text-[12.5px]">
+            <colgroup>
+              <col className="w-[15%]" />
+              <col />
+              <col className="w-[15%]" />
+              <col className="w-[200px]" />
+              <col className="w-[190px]" />
+              <col className="w-[104px]" />
+            </colgroup>
             <thead>
               <tr className="text-left text-[10px] uppercase tracking-[0.08em] text-white/40">
                 <th className="px-2.5 py-2 font-medium">{t("stats.live.app")}</th>
@@ -99,23 +107,23 @@ export function Connections({ visible, onCount }: { visible: boolean; onCount: (
             <tbody>
               {rows.map((c) => (
                 <tr key={c.id} className="border-t border-white/[0.05]">
-                  <td className="max-w-[140px] truncate px-2.5 py-2 text-white/85">{c.app || "—"}</td>
-                  <td className="max-w-[260px] truncate px-2.5 py-2 font-mono text-[11.5px] text-white/80" title={c.host}>
+                  <td className="truncate px-2.5 py-2 text-white/85">{c.app || "—"}</td>
+                  <td className="truncate px-2.5 py-2 font-mono text-[11.5px] text-white/80" title={c.host}>
                     {c.host || "—"}
                   </td>
-                  <td className="max-w-[160px] truncate px-2.5 py-2 text-white/55">
+                  <td className="truncate px-2.5 py-2 text-white/55">
                     {c.ruleId === "final" ? t("stats.rules.default") : c.ruleName || "—"}
                   </td>
-                  <td className="whitespace-nowrap px-2.5 py-2">
+                  <td className="truncate px-2.5 py-2">
                     <span className={cn("rounded px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider", routeBadge(c.route))}>
                       {t(`stats.live.routes.${c.route || "proxy"}`)}
                     </span>
                     {c.serverName && <span className="ml-2 text-[11px] text-sky-100/70">{c.serverName}</span>}
                   </td>
                   <td className="whitespace-nowrap px-2.5 py-2 text-right font-mono text-[11px] tabular-nums text-white/55">
-                    <span>{formatRate(c.downBps)}</span>
+                    <span className="inline-block w-[11ch] text-right">{formatRate(c.downBps)}</span>
                     <span className="px-1 text-white/30">·</span>
-                    <span>{formatRate(c.upBps)}</span>
+                    <span className="inline-block w-[11ch] text-right">{formatRate(c.upBps)}</span>
                   </td>
                   <td className="px-2.5 py-2 text-right">
                     <AddRuleMenu conn={c} groups={groups} onCreate={create} />
