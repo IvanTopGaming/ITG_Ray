@@ -138,6 +138,12 @@ contextBridge.exposeInMainWorld("itg", {
       }>,
     openReleases: (htmlUrl?: string) =>
       ipcRenderer.invoke("update.openReleases", htmlUrl) as Promise<void>,
+    pending: () =>
+      ipcRenderer.invoke("update.pending") as Promise<{ latest: string; htmlUrl?: string } | null>,
+    skip: (version: string) => ipcRenderer.invoke("update.skip", version) as Promise<void>,
+    getAutoCheck: () => ipcRenderer.invoke("update.getAutoCheck") as Promise<boolean>,
+    setAutoCheck: (enabled: boolean) =>
+      ipcRenderer.invoke("update.setAutoCheck", enabled) as Promise<boolean>,
   },
   on,
 });

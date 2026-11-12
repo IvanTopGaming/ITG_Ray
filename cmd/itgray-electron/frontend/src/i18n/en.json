@@ -477,7 +477,9 @@
       "updateError": "Couldn't check for updates.",
       "download": "Download",
       "openReleases": "Open releases page",
-      "updateAurHint": "Installed from the AUR — update via your package manager (pacman)."
+      "updateAurHint": "Installed from the AUR — update via your package manager (pacman).",
+      "autoCheck": "Check for updates automatically",
+      "autoCheckHint": "Once per launch, ask GitHub for the latest release. Nothing is downloaded."
     }
   },
   "subscriptions": {
@@ -702,6 +704,40 @@
         "direct": "Direct",
         "block": "Block"
       }
+    }
+  },
+  "notifications": {
+    "actions": {
+      "install": "Install",
+      "start": "Start",
+      "update": "Update",
+      "restart": "Restart"
+    },
+    "helperMissing": {
+      "title": "Helper isn't installed",
+      "body": "ITG Ray needs its helper service to connect.",
+      "bodyTun": "TUN mode needs the helper service — install it to connect in TUN.",
+      "titlePackaged": "Helper isn't running",
+      "bodyPackaged": "The itgray-helper service isn't running, so ITG Ray can't connect."
+    },
+    "helperStopped": {
+      "title": "Helper is stopped",
+      "body": "Start the helper service to be able to connect."
+    },
+    "helperOutdated": {
+      "title": "Helper is out of date",
+      "body": "Installed {{installed}}, the app is {{expected}}.",
+      "dropsConnection": "Updating briefly drops the connection."
+    },
+    "helperFailed": {
+      "title": "Helper action failed"
+    },
+    "update": {
+      "title": "Version {{version}} is available",
+      "body": "A new release is out on GitHub.",
+      "bodyPackaged": "A new release is out — update itgray-bin with your package manager.",
+      "open": "Open release",
+      "skip": "Skip this version"
     }
   }
 }

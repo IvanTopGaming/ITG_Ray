@@ -40,7 +40,11 @@ vi.mock('@/lib/itg/runtime', () => ({
   Quit: vi.fn(),
 }));
 
+vi.mock('@/lib/helperNotifications', () => ({ useHelperNotifications: vi.fn() }));
+vi.mock('@/lib/updateNotifications', () => ({ useUpdateNotifications: vi.fn() }));
+
 import { AppShell } from './AppShell';
+import { notify, __resetNotificationsForTests } from '@/lib/notificationStore';
 import {
   snapshotFromConnectedPayload,
   clearConnectSnapshot,
@@ -331,5 +335,14 @@ describe('AppShell reconnect pill', () => {
     });
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
     expect(getDesiredServer()).toBeNull();
+  });
+});
+
+describe('AppShell notifications', () => {
+  it('renders notifications from the store in the corner stack', async () => {
+    await renderShell();
+    act(() => notify({ id: 'n1', tone: 'info', title: 'Version 9.9.9 is available', persistent: true }));
+    expect(await screen.findByText('Version 9.9.9 is available')).toBeInTheDocument();
+    act(() => __resetNotificationsForTests());
   });
 });

@@ -19,6 +19,9 @@ import { setPendingImportLink } from "@/lib/deeplinkStore";
 import { ReconnectToast } from "./ReconnectToast";
 import { useTrayBridge } from "@/lib/trayBridge";
 import { ConfirmDialog } from "./controls/ConfirmDialog";
+import { NotificationStack } from "./NotificationStack";
+import { useHelperNotifications } from "@/lib/helperNotifications";
+import { useUpdateNotifications } from "@/lib/updateNotifications";
 
 export function AppShell() {
   const reconnectNeeded = useReconnectNeeded();
@@ -26,6 +29,8 @@ export function AppShell() {
   const [settings] = useSettings();
   const navigate = useNavigate();
   useTrayBridge(navigate, settings.language);
+  useHelperNotifications(t);
+  useUpdateNotifications(t);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   useEffect(() => {
     if (i18n.language !== settings.language)
@@ -142,6 +147,7 @@ export function AppShell() {
         onReconnect={handleReconnect}
         onDismiss={handleDismiss}
       />
+      <NotificationStack raised={reconnectNeeded} />
       <ConfirmDialog
         open={confirmDiscard}
         title={t("appShell.discardRulesTitle")}

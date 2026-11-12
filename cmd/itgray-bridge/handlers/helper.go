@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"time"
 )
 
 // Helper is the surface HelperHandlers needs from bindings.HelperService.
@@ -24,7 +25,8 @@ type Helper interface {
 
 // HelperHandlers groups methods under the "helper." namespace.
 type HelperHandlers struct {
-	Svc Helper
+	Svc           Helper
+	HelperVersion func(ctx context.Context) (string, error)
 }
 
 // helperStatus is the JSON-RPC result shape for helper.status. Mirrors
@@ -36,13 +38,17 @@ type HelperHandlers struct {
 var helperIsPackageManaged = detectPackageManagedHelper
 
 type helperStatus struct {
-	State          string `json:"state"`
-	PackageManaged bool   `json:"packageManaged"`
+	State           string `json:"state"`
+	PackageManaged  bool   `json:"packageManaged"`
+	Version         string `json:"version,omitempty"`
+	ExpectedVersion string `json:"expectedVersion,omitempty"`
 }
+
+const helperVersionTimeout = time.Second
 
 // Status returns the helper service state ("running" / "stopped" / "missing").
 // Nil-safe: returns {state:""} (no error) when Svc is unset.
-func (h HelperHandlers) Status(_ context.Context, _ json.RawMessage) (any, error) {
+func (h HelperHandlers) Status(ctx context.Context, _ json.RawMessage) (any, error) {
 	managed := helperIsPackageManaged()
 	if h.Svc == nil {
 		return helperStatus{PackageManaged: managed}, nil
@@ -51,7 +57,17 @@ func (h HelperHandlers) Status(_ context.Context, _ json.RawMessage) (any, error
 	if err != nil {
 		return nil, err
 	}
-	return helperStatus{State: state, PackageManaged: managed}, nil
+	out := helperStatus{State: state, PackageManaged: managed}
+	if state == "running" && h.HelperVersion != nil {
+		vctx, cancel := context.WithTimeout(ctx, helperVersionTimeout)
+		v, verr := h.HelperVersion(vctx)
+		cancel()
+		if verr == nil && v != "" {
+			out.Version = v
+			out.ExpectedVersion = Version
+		}
+	}
+	return out, nil
 }
 
 // Install registers the helper service. The bridge always passes an empty

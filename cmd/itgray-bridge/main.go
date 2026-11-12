@@ -345,7 +345,7 @@ func main() {
 	d.Register("settings.get", settings.Get)
 	d.Register("settings.update", settings.Update)
 
-	helper := handlers.HelperHandlers{Svc: helperSvc}
+	helper := handlers.HelperHandlers{Svc: helperSvc, HelperVersion: helperVersionProbe(newLogReader(logHelperAddr))}
 	d.Register("helper.status", helper.Status)
 	d.Register("helper.install", helper.Install)
 	d.Register("helper.start", helper.Start)

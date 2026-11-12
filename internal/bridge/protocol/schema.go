@@ -175,7 +175,9 @@ type HelperStatusResult struct {
 	// manager rather than the in-app installer. The GUI hides its
 	// install/reinstall/uninstall actions in that case — those write to
 	// /usr/local and would fight the packaged copy.
-	PackageManaged bool `json:"packageManaged"`
+	PackageManaged  bool   `json:"packageManaged"`
+	Version         string `json:"version,omitempty"`
+	ExpectedVersion string `json:"expectedVersion,omitempty"`
 }
 
 // OnboardingService — methods under "onboarding." namespace.

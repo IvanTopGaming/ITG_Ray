@@ -22,6 +22,7 @@ import { Refresh as GeoRefresh } from '@/lib/itg/GeoService';
 import { useGeoProgress, geoBegin, geoEnd } from '@/lib/geoStore';
 import type { GeoPreset } from '@/lib/settings';
 import type { hub } from '@/lib/itg/models';
+import { GetAutoCheck, SetAutoCheck } from '@/lib/itg/UpdateService';
 
 const pageVariants: Variants = {
   hidden: { opacity: 0 },
@@ -88,6 +89,16 @@ export function Settings() {
   ];
   const [logDir, setLogDir] = useState<{ path: string; sizeBytes: number }>({ path: '', sizeBytes: 0 });
   const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'uptodate' | 'available' | 'error'>('idle');
+  const [autoCheck, setAutoCheck] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    void GetAutoCheck().then((v) => { if (alive) setAutoCheck(v); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const toggleAutoCheck = (v: boolean) => {
+    setAutoCheck(v);
+    void SetAutoCheck(v).then(setAutoCheck).catch(() => setAutoCheck(!v));
+  };
   const [updateInfo, setUpdateInfo] = useState<{ latest?: string; htmlUrl?: string }>({});
   const [stuck, setStuck] = useState(false);
   const [about, setAbout] = useState<hub.AboutSettings | null>(null);
@@ -890,6 +901,9 @@ export function Settings() {
               {updateState === 'checking' ? t('settings.about.checking') : t('settings.about.checkNow')}
             </button>
           </div>
+        </SettingRow>
+        <SettingRow label={t('settings.about.autoCheck')} hint={t('settings.about.autoCheckHint')}>
+          <Toggle value={autoCheck} aria-label={t('settings.about.autoCheck')} onChange={toggleAutoCheck} />
         </SettingRow>
         {updateState === 'available' && isPackagedHelper && (
           <p className="text-[11.5px] leading-snug text-white/[0.45] -mt-1">
