@@ -39,3 +39,28 @@ func TestRulesHandlers_GroupAdd_RoundTripsID(t *testing.T) {
 	require.True(t, ok, "handler returns map[string]string{id} for the dispatcher to marshal")
 	require.NotEmpty(t, out["id"])
 }
+
+func TestRulesHandlers_RuleAdd_BeforeID(t *testing.T) {
+	h := newRulesHandlers(t)
+	add := func(cidr, before string) string {
+		params, _ := json.Marshal(map[string]any{"groupId": "user", "beforeId": before, "rule": map[string]any{
+			"name": "x", "enabled": true, "action": "direct", "conditions": map[string]any{"ip_cidrs": []string{cidr}},
+		}})
+		res, err := h.RuleAdd(context.Background(), params)
+		require.NoError(t, err)
+		return res.(map[string]string)["id"]
+	}
+	first := add("1.1.1.1/32", "")
+	second := add("2.2.2.2/32", first)
+	res, _ := h.List(context.Background(), nil)
+	v := res.(hub.RulesView)
+	var ids []string
+	for _, g := range v.Groups {
+		if g.ID == "user" {
+			for _, r := range g.Rules {
+				ids = append(ids, r.ID)
+			}
+		}
+	}
+	require.Equal(t, []string{second, first}, ids)
+}

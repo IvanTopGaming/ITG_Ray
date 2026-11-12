@@ -220,4 +220,23 @@ describe("RuleEditor", () => {
     expect(saved.server_source_id).toBeUndefined();
     expect(saved.server_name).toBeUndefined();
   });
+
+  it("create mode with a prefill from statistics inserts above the target rule", async () => {
+    useRulesMock.mockReturnValue({ ...okRules, groups: [safety, user] });
+    rulesAddRuleMock.mockResolvedValue("r-new");
+    render(
+      <MemoryRouter initialEntries={[{ pathname: "/routing/new", state: { mode: "create", groupId: "user", beforeId: "r1", prefill: { name: "example.com", conditions: { domains: [{ kind: "suffix", value: "example.com" }] } } } }]}>
+        <Routes>
+          <Route path="/routing/:ruleId" element={<RuleEditor />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.getByLabelText("Name")).toHaveValue("example.com");
+    await userEvent.click(screen.getByRole("button", { name: /create rule/i }));
+    expect(rulesAddRuleMock).toHaveBeenCalledWith(
+      "user",
+      expect.objectContaining({ name: "example.com", conditions: expect.objectContaining({ domains: [{ kind: "suffix", value: "example.com" }] }) }),
+      "r1",
+    );
+  });
 });

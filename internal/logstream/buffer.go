@@ -36,6 +36,13 @@ type Buffer struct {
 	pending    []Entry
 	flushArmed bool
 	flushEvery time.Duration
+	taps       []func(source, message string)
+}
+
+func (b *Buffer) OnLine(fn func(source, message string)) {
+	b.mu.Lock()
+	b.taps = append(b.taps, fn)
+	b.mu.Unlock()
 }
 
 func New(h *hub.Hub, capPerSource int) *Buffer {
@@ -47,6 +54,12 @@ func New(h *hub.Hub, capPerSource int) *Buffer {
 
 func (b *Buffer) Add(source, level, message string, t time.Time) {
 	b.mu.Lock()
+	taps := b.taps
+	defer func() {
+		for _, fn := range taps {
+			fn(source, message)
+		}
+	}()
 	b.seq++
 	e := Entry{Seq: b.seq, Time: t, Level: level, Source: source, Message: logging.Redact(message)}
 	ring := append(b.perSrc[source], e) //nolint:gocritic // intentional: bounded append into a temp, capped, then stored back

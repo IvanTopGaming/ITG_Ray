@@ -119,6 +119,11 @@ contextBridge.exposeInMainWorld("itg", {
     setRoutingMode: (params: { mode: string }) => rpc("run.setRoutingMode", params),
     getRoutingMode: () => rpc("run.getRoutingMode"),
   },
+  stats: {
+    overview: (params: { period: string }) => rpc("stats.overview", params),
+    connections: () => rpc("stats.connections"),
+    clear: () => rpc("stats.clear"),
+  },
   tray: {
     report: (state: Record<string, unknown>) => ipcRenderer.send("tray.report", state),
     takePendingNavigate: () =>

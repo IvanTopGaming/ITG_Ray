@@ -1,4 +1,4 @@
-// Package stats persists connection records and hourly rollups to SQLite.
+// Package stats persists hourly traffic rollups (no destinations) to SQLite.
 package stats
 
 import (
@@ -8,40 +8,27 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 1
+const schemaVersion = 2
 
 const schema = `
 CREATE TABLE IF NOT EXISTS schema_version (v INTEGER NOT NULL);
-
-CREATE TABLE IF NOT EXISTS connections (
-	id              INTEGER PRIMARY KEY AUTOINCREMENT,
-	started_at      INTEGER NOT NULL,
-	ended_at        INTEGER,
-	process_name    TEXT,
-	src_addr        TEXT,
-	dst_domain      TEXT,
-	dst_ip          TEXT,
-	dst_port        INTEGER,
-	protocol        TEXT,
-	rule_id         TEXT,
-	action          TEXT,
-	server_id       TEXT,
-	bytes_up        INTEGER DEFAULT 0,
-	bytes_down      INTEGER DEFAULT 0
+DROP TABLE IF EXISTS connections;
+DROP TABLE IF EXISTS hourly_rollup;
+CREATE TABLE IF NOT EXISTS rollup (
+	hour_utc   INTEGER NOT NULL,
+	app        TEXT    NOT NULL,
+	rule_id    TEXT    NOT NULL,
+	route      TEXT    NOT NULL,
+	server_id  TEXT    NOT NULL,
+	bytes_up   INTEGER NOT NULL DEFAULT 0,
+	bytes_down INTEGER NOT NULL DEFAULT 0,
+	conns      INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY (hour_utc, app, rule_id, route, server_id)
 );
-CREATE INDEX IF NOT EXISTS idx_conn_started   ON connections(started_at);
-CREATE INDEX IF NOT EXISTS idx_conn_ended     ON connections(ended_at);
-CREATE INDEX IF NOT EXISTS idx_conn_process   ON connections(process_name);
-CREATE INDEX IF NOT EXISTS idx_conn_domain    ON connections(dst_domain);
-
-CREATE TABLE IF NOT EXISTS hourly_rollup (
-	hour_utc        INTEGER NOT NULL,
-	dim_kind        TEXT    NOT NULL,
-	dim_value       TEXT    NOT NULL,
-	bytes_up        INTEGER NOT NULL,
-	bytes_down      INTEGER NOT NULL,
-	connections     INTEGER NOT NULL,
-	PRIMARY KEY (hour_utc, dim_kind, dim_value)
+CREATE INDEX IF NOT EXISTS idx_rollup_hour ON rollup(hour_utc);
+CREATE TABLE IF NOT EXISTS sessions (
+	start_utc INTEGER NOT NULL,
+	end_utc   INTEGER NOT NULL
 );
 `
 
@@ -77,6 +64,9 @@ func Open(path string) (*sql.DB, error) {
 			_ = db.Close()
 			return nil, err
 		}
+	} else if _, err := db.Exec("UPDATE schema_version SET v = ?", schemaVersion); err != nil {
+		_ = db.Close()
+		return nil, err
 	}
 	return db, nil
 }

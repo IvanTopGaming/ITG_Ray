@@ -392,4 +392,15 @@ describe("moveRuleAcrossGroups", () => {
     expect(screen.getByText(text)).toBeInTheDocument();
     expect(screen.getByText(/using main/i)).toBeInTheDocument();
   });
+
+  it("highlights the rule passed in navigation state", () => {
+    const bound = { ...user, rules: [{ id: "r9", name: "Video", enabled: true, action: "proxy", conditions: { processes: ["firefox"] } }] };
+    useRulesMock.mockReturnValue({ defaultAction: "proxy", groups: [safety, bound], loading: false, lastError: null, bootstrapped: true });
+    render(
+      <MemoryRouter initialEntries={[{ pathname: "/routing", state: { highlightRuleId: "r9" } }]}>
+        <Routing />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId("rule-row-r9")).toHaveAttribute("data-highlight", "true");
+  });
 });

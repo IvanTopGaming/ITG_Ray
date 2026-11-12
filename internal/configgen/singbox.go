@@ -87,6 +87,7 @@ type SingboxInput struct {
 	ExtraProxies []SingboxProxy
 	RuleOutbound func(r *rules.Rule) string
 	ClashAPI     *ClashAPI
+	MarkRules    bool
 }
 
 // logLevelOrDefault returns a valid sing-box log level, defaulting to
@@ -342,10 +343,16 @@ func collectRuleSetTags(route map[string]any) []string {
 			tags = append(tags, s)
 		}
 	}
-	for _, r := range rules {
+	var walk func(r any)
+	walk = func(r any) {
 		m, ok := r.(map[string]any)
 		if !ok {
-			continue
+			return
+		}
+		if nested, ok := m["rules"].([]any); ok {
+			for _, n := range nested {
+				walk(n)
+			}
 		}
 		switch v := m["rule_set"].(type) {
 		case []any:
@@ -359,6 +366,9 @@ func collectRuleSetTags(route map[string]any) []string {
 				appendTag(s)
 			}
 		}
+	}
+	for _, r := range rules {
+		walk(r)
 	}
 	return tags
 }
@@ -415,6 +425,21 @@ func hasEquivalentLanBypass(routeRules any) bool {
 		}
 		if _, conditional := m["clash_mode"]; conditional {
 			return false
+		}
+		if m["type"] == "logical" {
+			nested, ok := m["rules"].([]any)
+			if !ok || m["mode"] != "or" || len(nested) != 2 {
+				return false
+			}
+			marker, ok := nested[1].(map[string]any)
+			if !ok || len(marker) != 1 || marker["inbound"] == nil {
+				return false
+			}
+			inner, ok := nested[0].(map[string]any)
+			if !ok {
+				return false
+			}
+			m = inner
 		}
 		present := map[string]bool{}
 		switch xs := m["ip_cidr"].(type) {
@@ -552,7 +577,7 @@ func applyTunModeKillswitch(route map[string]any, lanBypassPrepended bool, block
 // engine driving routing decisions. The "proxy" outbound is a SOCKS5 client
 // pointed at the embedded xray-core's local listener.
 func BuildSingbox(in *SingboxInput) ([]byte, error) {
-	ruleBytes, err := rules.CompileWith(in.Rules, in.RuleOutbound)
+	ruleBytes, err := rules.CompileOpts(in.Rules, rules.CompileOptions{OutboundFor: in.RuleOutbound, Mark: in.MarkRules})
 	if err != nil {
 		slog.Error("singbox build failed", slog.String("scope", "configgen"),
 			slog.String("stage", "compile rules"), slog.String("err", err.Error()))
@@ -686,6 +711,23 @@ func BuildSingbox(in *SingboxInput) ([]byte, error) {
 			{"type": "block", "tag": "block"},
 		},
 		"route": route,
+	}
+	if in.MarkRules {
+		route["find_process"] = true
+		outbounds := doc["outbounds"].([]map[string]any)
+		for gi := range in.Rules.Groups {
+			g := &in.Rules.Groups[gi]
+			if !g.Enabled {
+				continue
+			}
+			for ri := range g.Rules {
+				r := &g.Rules[ri]
+				if r.Enabled && r.Action == rules.ActionBlock {
+					outbounds = append(outbounds, map[string]any{"type": "block", "tag": rules.BlockOutbound(r.ID)})
+				}
+			}
+		}
+		doc["outbounds"] = outbounds
 	}
 	if len(in.ExtraProxies) > 0 {
 		outbounds := doc["outbounds"].([]map[string]any)

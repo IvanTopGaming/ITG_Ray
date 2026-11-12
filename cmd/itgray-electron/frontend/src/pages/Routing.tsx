@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, type HTMLAttributes, type SyntheticEvent } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Lock, ChevronRight, Plus, MoreHorizontal, GripVertical, Import } from "lucide-react";
 import { DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -753,6 +753,8 @@ function RuleRow({
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const menuPopRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const location = useLocation();
+  const highlighted = (location.state as { highlightRuleId?: string } | null)?.highlightRuleId === rule.id;
   // group + allGroups are kept in the signature for backwards compatibility
   // with parent call sites; the menu no longer reads cross-group context.
   void group;
@@ -786,10 +788,13 @@ function RuleRow({
   }, [menuOpen]);
   return (
     <motion.div
+      data-testid={`rule-row-${rule.id}`}
+      data-highlight={highlighted ? "true" : undefined}
       onClick={groupLocked ? undefined : () => navigate(`/routing/${rule.id}`)}
       className={cn(
         "group flex items-center justify-between rounded-md text-[12.5px]",
         groupLocked ? "bg-white/[0.02] px-3 py-2" : "bg-white/[0.04] hover:bg-white/[0.06] cursor-pointer",
+        highlighted && "ring-1 ring-accent-start/70 shadow-[0_0_18px_-4px_rgba(126,212,255,0.6)]",
       )}
     >
       <motion.div

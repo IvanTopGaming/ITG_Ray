@@ -174,6 +174,7 @@ export function buildTrayMenu(view: TrayView, t: TrayStrings): TrayItem[] {
     SEP,
     { label: t.open, command: { kind: "open" } },
     { label: t.logs, command: { kind: "navigate", path: "/logs" } },
+    { label: t.stats, command: { kind: "navigate", path: "/stats" } },
     SEP,
     { label: t.quit, command: { kind: "quit" } },
   ];

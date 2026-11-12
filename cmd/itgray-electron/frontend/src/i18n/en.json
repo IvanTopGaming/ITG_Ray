@@ -6,7 +6,8 @@
     "subscriptions": "Subscriptions",
     "routing": "Routing",
     "logs": "Logs",
-    "settings": "Settings"
+    "settings": "Settings",
+    "stats": "Statistics"
   },
   "status": {
     "running": "running",
@@ -450,7 +451,11 @@
       "folderHint": "sing-box, xray and bridge logs ({{mb}} MB)",
       "openFolderButton": "Open folder",
       "clearOldLogs": "Clear old logs",
-      "clearOldLogsHint": "Delete log files older than 7 days."
+      "clearOldLogsHint": "Delete log files older than 7 days.",
+      "stats": "Traffic statistics",
+      "statsHint": "Hourly totals for the last 30 days. Hosts are never stored.",
+      "statsClear": "Clear statistics",
+      "statsCleared": "Statistics cleared"
     },
     "about": {
       "title": "About",
@@ -612,5 +617,87 @@
       "direct": "Everything direct — VPN bypassed"
     },
     "needsConnection": "Connect to switch the routing mode"
+  },
+  "stats": {
+    "title": "Statistics",
+    "description": "Where your traffic went: per app, per rule and per route. Hosts are never saved to disk.",
+    "tabs": {
+      "overview": "Overview",
+      "connections": "Connections · {{count}}"
+    },
+    "period": {
+      "today": "Today",
+      "7d": "7 days",
+      "30d": "30 days"
+    },
+    "tiles": {
+      "down": "↓ Downloaded",
+      "up": "↑ Uploaded",
+      "blocked": "Blocked",
+      "blockedHint": "connections",
+      "online": "Online",
+      "sessions_one": "{{count}} session",
+      "sessions_other": "{{count}} sessions",
+      "blockedNeedsInfo": "Not counted at the “Error” log level — switch logs to Info"
+    },
+    "proxy": "proxy",
+    "direct": "direct",
+    "duration": {
+      "hm": "{{h}}h {{m}}m",
+      "m": "{{m}}m"
+    },
+    "chart": {
+      "hourly": "Traffic by hour",
+      "daily": "Traffic by day",
+      "direction": "↓ / ↑",
+      "route": "Proxy / direct",
+      "legendDown": "Downloaded (up)",
+      "legendUp": "Uploaded (down)",
+      "series": {
+        "down": "Downloaded",
+        "upNeg": "Uploaded",
+        "up": "Uploaded",
+        "proxy": "Proxy",
+        "direct": "Direct"
+      }
+    },
+    "apps": {
+      "title": "Top apps",
+      "app": "App",
+      "proxyShare": "via proxy"
+    },
+    "rules": {
+      "title": "Top rules",
+      "default": "Default",
+      "deleted": "Deleted rule"
+    },
+    "noData": "Nothing yet",
+    "empty": "No traffic recorded for this period yet. Statistics are collected while ITG Ray is open and connected.",
+    "addRule": {
+      "button": "Rule",
+      "title": "What to take from this connection?",
+      "app": "App: {{app}}",
+      "exact": "Exactly {{host}}",
+      "suffix": "{{domain}} and subdomains",
+      "ip": "IP {{ip}}",
+      "andHint": "All ticked conditions must match together",
+      "create": "Create rule",
+      "untitled": "New rule"
+    },
+    "live": {
+      "memoryOnly": "Only what is open right now — kept in memory, never saved",
+      "filter": "Filter by app or host",
+      "empty": "No active connections right now",
+      "noMatch": "Nothing matches the filter",
+      "app": "App",
+      "host": "Host",
+      "rule": "Rule",
+      "route": "Route",
+      "routes": {
+        "proxy": "Proxy",
+        "direct": "Direct",
+        "block": "Block"
+      }
+    }
   }
 }

@@ -34,7 +34,12 @@ const sectionVariants: Variants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.24, ease: SNAP_EASE } },
 };
 
-type CreateState = { mode: "create"; groupId: string };
+type CreateState = {
+  mode: "create";
+  groupId: string;
+  beforeId?: string;
+  prefill?: { name?: string; conditions?: RuleView["conditions"] };
+};
 
 function isCreateState(s: unknown): s is CreateState {
   return !!s && typeof s === "object" && (s as { mode?: unknown }).mode === "create"
@@ -64,9 +69,17 @@ export function RuleEditor() {
 
   const initial = useMemo(
     () => isCreate
-      ? { rule: { id: "", ...EMPTY_DRAFT } as RuleView, groupId: createState?.groupId ?? "" }
+      ? {
+          rule: {
+            id: "",
+            ...EMPTY_DRAFT,
+            ...(createState?.prefill?.name ? { name: createState.prefill.name } : {}),
+            ...(createState?.prefill?.conditions ? { conditions: createState.prefill.conditions } : {}),
+          } as RuleView,
+          groupId: createState?.groupId ?? "",
+        }
       : findRule(groups, ruleId),
-    [groups, ruleId, isCreate, createState?.groupId],
+    [groups, ruleId, isCreate, createState?.groupId, createState?.prefill],
   );
   const [draft, setDraft] = useState<RuleView | null>(initial.rule);
   const [groupId, setGroupId] = useState<string>(initial.groupId);
@@ -111,7 +124,11 @@ export function RuleEditor() {
       if (isCreate) {
         const { id: _id, ...rest } = draft;
         void _id;
-        await rulesAddRule(groupId, rest);
+        const newId = createState?.beforeId
+          ? await rulesAddRule(groupId, rest, createState.beforeId)
+          : await rulesAddRule(groupId, rest);
+        navigate("/routing", { state: { highlightRuleId: newId } });
+        return;
       } else {
         if (groupId !== initial.groupId) {
           await rulesMoveRule(draft.id, groupId);

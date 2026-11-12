@@ -127,6 +127,16 @@ type SubsCancelSyncParams struct {
 	ID string `json:"id"`
 }
 
+type StatsService interface {
+	Overview(p StatsOverviewParams) (hub.StatsOverview, error)
+	Connections(p Empty) (hub.StatsConnections, error)
+	Clear(p Empty) (Empty, error)
+}
+
+type StatsOverviewParams struct {
+	Period string `json:"period"`
+}
+
 // SettingsService — methods under "settings." namespace.
 type SettingsService interface {
 	Get(p Empty) (hub.SettingsView, error)
@@ -221,8 +231,9 @@ type RulesGroupRemoveParams struct {
 }
 
 type RulesRuleAddParams struct {
-	GroupID string     `json:"groupId"`
-	Rule    rules.Rule `json:"rule"`
+	GroupID  string     `json:"groupId"`
+	Rule     rules.Rule `json:"rule"`
+	BeforeID string     `json:"beforeId,omitempty"`
 }
 
 type RulesRuleAddResult struct {

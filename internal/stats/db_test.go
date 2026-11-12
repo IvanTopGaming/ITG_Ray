@@ -39,7 +39,8 @@ func TestOpen_CreatesSchema(t *testing.T) {
 		require.NoError(t, rows.Scan(&n))
 		names = append(names, n)
 	}
-	require.Contains(t, names, "connections")
-	require.Contains(t, names, "hourly_rollup")
+	require.Contains(t, names, "rollup")
+	require.Contains(t, names, "sessions")
 	require.Contains(t, names, "schema_version")
+	require.NotContains(t, names, "connections")
 }

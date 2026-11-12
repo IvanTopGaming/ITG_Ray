@@ -215,3 +215,71 @@ type ImportPreview struct {
 	DirectCount int         `json:"directCount"`
 	BlockCount  int         `json:"blockCount"`
 }
+
+type StatsPoint struct {
+	Start      string `json:"start"`
+	Down       uint64 `json:"down"`
+	Up         uint64 `json:"up"`
+	DownProxy  uint64 `json:"downProxy"`
+	DownDirect uint64 `json:"downDirect"`
+	UpProxy    uint64 `json:"upProxy"`
+	UpDirect   uint64 `json:"upDirect"`
+}
+
+type StatsApp struct {
+	App       string `json:"app"`
+	Down      uint64 `json:"down"`
+	Up        uint64 `json:"up"`
+	DownProxy uint64 `json:"downProxy"`
+	UpProxy   uint64 `json:"upProxy"`
+}
+
+type StatsRule struct {
+	RuleID     string `json:"ruleId"`
+	RuleName   string `json:"ruleName"`
+	Action     string `json:"action"`
+	Route      string `json:"route"`
+	ServerID   string `json:"serverId,omitempty"`
+	ServerName string `json:"serverName,omitempty"`
+	Deleted    bool   `json:"deleted,omitempty"`
+	Conns      int    `json:"conns"`
+}
+
+type StatsOverview struct {
+	Period        string       `json:"period"`
+	Down          uint64       `json:"down"`
+	Up            uint64       `json:"up"`
+	DownProxy     uint64       `json:"downProxy"`
+	DownDirect    uint64       `json:"downDirect"`
+	UpProxy       uint64       `json:"upProxy"`
+	UpDirect      uint64       `json:"upDirect"`
+	Blocked       int          `json:"blocked"`
+	OnlineSeconds int64        `json:"onlineSeconds"`
+	Sessions      int          `json:"sessions"`
+	Series        []StatsPoint `json:"series"`
+	Apps          []StatsApp   `json:"apps"`
+	Rules         []StatsRule  `json:"rules"`
+}
+
+type StatsConn struct {
+	ID              string `json:"id"`
+	App             string `json:"app"`
+	Host            string `json:"host"`
+	Suffix          string `json:"suffix,omitempty"`
+	DestIP          string `json:"destIp,omitempty"`
+	Network         string `json:"network,omitempty"`
+	RuleID          string `json:"ruleId,omitempty"`
+	RuleName        string `json:"ruleName,omitempty"`
+	RuleGroupID     string `json:"ruleGroupId,omitempty"`
+	RuleGroupLocked bool   `json:"ruleGroupLocked,omitempty"`
+	Route           string `json:"route"`
+	ServerID        string `json:"serverId,omitempty"`
+	ServerName      string `json:"serverName,omitempty"`
+	DownBps         uint64 `json:"downBps"`
+	UpBps           uint64 `json:"upBps"`
+	Start           string `json:"start,omitempty"`
+}
+
+type StatsConnections struct {
+	Conns []StatsConn `json:"conns"`
+}

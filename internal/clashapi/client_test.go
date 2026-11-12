@@ -75,3 +75,44 @@ func TestClient_RejectsUnknownMode(t *testing.T) {
 	require.Error(t, c.SetMode(context.Background(), "turbo"))
 	require.Empty(t, *calls)
 }
+
+const singbox1144Connections = `{"connections":[{"chains":["proxy-x"],"download":5183,"id":"8d0d8a8e-1","metadata":{"destinationIP":"","destinationPort":"443","dnsMode":"normal","host":"example.com","network":"tcp","processPath":"/usr/bin/curl (itg)","sourceIP":"127.0.0.1","sourcePort":"41000","type":"mixed/in"},"rule":"domain_suffix=example.com || inbound=itg-rule-r123 => route(proxy-x)","rulePayload":"","start":"2026-11-12T08:00:00.123+03:00","upload":1909},{"chains":["direct"],"download":10917,"id":"8d0d8a8e-2","metadata":{"destinationIP":"178.248.239.46","destinationPort":"443","host":"","network":"udp","processPath":""},"rule":"final","start":"2026-11-12T08:00:01+03:00","upload":1874}],"downloadTotal":16100,"memory":0,"uploadTotal":3783}`
+
+func TestClient_ConnectionsParsesSingboxShape(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/connections", r.URL.Path)
+		require.Equal(t, "Bearer sec", r.Header.Get("Authorization"))
+		_, _ = w.Write([]byte(singbox1144Connections))
+	}))
+	t.Cleanup(ts.Close)
+	_, portStr, _ := net.SplitHostPort(ts.Listener.Addr().String())
+	port, _ := strconv.Atoi(portStr)
+	snap, err := New(port, "sec").Connections(context.Background())
+	require.NoError(t, err)
+	require.Len(t, snap.Conns, 2)
+	c := snap.Conns[0]
+	require.Equal(t, "8d0d8a8e-1", c.ID)
+	require.Equal(t, "example.com", c.Host)
+	require.Equal(t, "/usr/bin/curl (itg)", c.Process)
+	require.Equal(t, []string{"proxy-x"}, c.Chains)
+	require.Equal(t, uint64(1909), c.Up)
+	require.Equal(t, uint64(5183), c.Down)
+	require.Equal(t, "tcp", c.Network)
+	require.False(t, c.Start.IsZero())
+	require.Equal(t, "178.248.239.46", snap.Conns[1].DestIP)
+	require.Equal(t, "final", snap.Conns[1].Rule)
+}
+
+func TestClient_ConnectionsCarriesTotals(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(singbox1144Connections))
+	}))
+	t.Cleanup(ts.Close)
+	_, portStr, _ := net.SplitHostPort(ts.Listener.Addr().String())
+	port, _ := strconv.Atoi(portStr)
+	snap, err := New(port, "sec").Connections(context.Background())
+	require.NoError(t, err)
+	require.True(t, snap.HasTotals)
+	require.Equal(t, uint64(16100), snap.DownTotal)
+	require.Equal(t, uint64(3783), snap.UpTotal)
+}
