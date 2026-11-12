@@ -65,7 +65,7 @@ export function MirrorChart({ series, period }: { series: StatsPoint[]; period: 
               tick={{ fontSize: 9, fill: "rgba(255,255,255,0.4)", fontFamily: "ui-monospace, monospace" }}
               axisLine={false}
               tickLine={false}
-              width={64}
+              width={72}
               tickFormatter={(v: number) => formatBytesShort(Math.abs(v))}
             />
             <Tooltip
