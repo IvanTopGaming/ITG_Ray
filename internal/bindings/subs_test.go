@@ -113,7 +113,7 @@ func TestSubsService_Add_FetchesProviderName(t *testing.T) {
 	require.Eventually(t, func() bool {
 		subs, err := store.Load()
 		return err == nil && len(subs) == 1 && subs[0].Name == "Provider" && subs[0].LastStatus == "ok"
-	}, 3*time.Second, 10*time.Millisecond)
+	}, testWait, 10*time.Millisecond)
 }
 
 // newSubsServiceForTest builds a SubsService over fresh FileStores rooted in

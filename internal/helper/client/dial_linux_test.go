@@ -41,7 +41,7 @@ func TestDialReconnectsAfterCanceledCall(t *testing.T) {
 	var reconnected net.Conn
 	select {
 	case reconnected = <-accepted:
-	case <-time.After(time.Second):
+	case <-time.After(testWait):
 		t.Fatal("client did not reconnect")
 	}
 	defer func() { _ = reconnected.Close() }()

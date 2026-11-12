@@ -169,8 +169,8 @@ func TestForwarderExitsOnContextCancel(t *testing.T) {
 	cancel()
 	select {
 	case <-done:
-	case <-time.After(time.Second):
-		t.Fatalf("Run did not exit within 1s of ctx cancel")
+	case <-time.After(testWait):
+		t.Fatalf("Run did not exit after ctx cancel")
 	}
 }
 
@@ -260,7 +260,7 @@ func TestStartFlushesBufferedEventsAfterCancel(t *testing.T) {
 	// publishes definitely land in the channel buffer, not a fast-pickup).
 	select {
 	case <-em.gate:
-	case <-time.After(time.Second):
+	case <-time.After(testWait):
 		t.Fatalf("drain never entered Emit")
 	}
 

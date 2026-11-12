@@ -80,7 +80,7 @@ func TestListen_ChownsSocketToAllowedUID(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Listen returned error: %v", err)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(testWait):
 		t.Fatal("Listen did not return after ctx cancel")
 	}
 }

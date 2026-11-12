@@ -68,8 +68,8 @@ func TestDriver_Run_ReturnsOnContextCancel(t *testing.T) {
 		if err != nil && !errors.Is(err, context.Canceled) {
 			t.Fatalf("Run returned %v, want nil or context.Canceled", err)
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("Run did not return within 2s of cancel")
+	case <-time.After(testWait):
+		t.Fatal("Run did not return after cancel")
 	}
 }
 

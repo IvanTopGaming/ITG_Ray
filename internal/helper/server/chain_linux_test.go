@@ -158,7 +158,7 @@ func TestReadChainCounters_DoesNotWedgeStopChain(t *testing.T) {
 
 	select {
 	case <-fake.started:
-	case <-time.After(time.Second):
+	case <-time.After(testWait):
 		t.Fatal("fake Counters was never invoked")
 	}
 
@@ -173,7 +173,7 @@ func TestReadChainCounters_DoesNotWedgeStopChain(t *testing.T) {
 
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(testWait):
 		t.Fatal("OpStopChain wedged behind an in-flight counters read (chainMu held across the gRPC call)")
 	}
 }

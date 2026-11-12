@@ -21,8 +21,8 @@ func TestHub_PublishToOneSubscriber(t *testing.T) {
 	case e := <-rcv:
 		require.Equal(t, EventVPNStatus, e.Name)
 		require.Equal(t, "connected", e.Payload["v"])
-	case <-time.After(time.Second):
-		t.Fatal("no event delivered within 1s")
+	case <-time.After(testWait):
+		t.Fatal("no event delivered")
 	}
 }
 
@@ -40,7 +40,7 @@ func TestHub_PublishToManySubscribers(t *testing.T) {
 		select {
 		case e := <-c:
 			require.Equal(t, EventVPNSpeed, e.Name, "subscriber %d", i)
-		case <-time.After(time.Second):
+		case <-time.After(testWait):
 			t.Fatalf("subscriber %d didn't receive", i)
 		}
 	}
@@ -128,7 +128,7 @@ func TestHub_CloseUnblocksAllSubscribers(t *testing.T) {
 	select {
 	case _, ok := <-c:
 		require.False(t, ok)
-	case <-time.After(time.Second):
+	case <-time.After(testWait):
 		t.Fatal("Close didn't close subscriber channel")
 	}
 }
