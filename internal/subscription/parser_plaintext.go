@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"strings"
 
+	"github.com/itg-team/itg-ray/internal/ruleshare"
 	"github.com/itg-team/itg-ray/internal/vless"
 )
 
@@ -12,9 +13,10 @@ import (
 // Configs holds the vless entries extracted; Skipped counts other URI schemes
 // by name (e.g. "vmess", "trojan"); Invalid counts vless URIs that failed to parse.
 type ParseResult struct {
-	Configs []vless.Config
-	Skipped map[string]int
-	Invalid int
+	Configs     []vless.Config
+	Skipped     map[string]int
+	Invalid     int
+	RoutingLink string
 }
 
 // ParsePlaintext parses a newline-separated list of URIs and keeps only valid vless:// entries.
@@ -25,6 +27,12 @@ func ParsePlaintext(s string) (ParseResult, error) {
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, ruleshare.ImportPrefix) {
+			if r.RoutingLink == "" {
+				r.RoutingLink = line
+			}
 			continue
 		}
 		scheme := schemeOf(line)

@@ -138,11 +138,29 @@ func (r *Rule) Validate() error {
 // Group bundles rules under a user-facing label. Locked groups (e.g. "Safety")
 // cannot be removed by the UI.
 type Group struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Locked  bool   `json:"locked,omitempty"`
-	Enabled bool   `json:"enabled"`
-	Rules   []Rule `json:"rules"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Locked   bool   `json:"locked,omitempty"`
+	Enabled  bool   `json:"enabled"`
+	Rules    []Rule `json:"rules"`
+	SourceID string `json:"source_id,omitempty"`
+}
+
+func (g *Group) FromSource() bool { return g.SourceID != "" }
+
+func (m Model) SourceGroupsLast() Model {
+	out := Model{DefaultAction: m.DefaultAction, Groups: make([]Group, 0, len(m.Groups))}
+	for _, g := range m.Groups {
+		if !g.FromSource() {
+			out.Groups = append(out.Groups, g)
+		}
+	}
+	for _, g := range m.Groups {
+		if g.FromSource() {
+			out.Groups = append(out.Groups, g)
+		}
+	}
+	return out
 }
 
 // Model is the top-level routing configuration: ordered groups and the

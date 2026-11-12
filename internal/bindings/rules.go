@@ -116,7 +116,7 @@ func groupsToViews(groups []rules.Group) []hub.GroupView {
 			})
 		}
 		out = append(out, hub.GroupView{
-			ID: g.ID, Name: g.Name, Locked: g.Locked, Enabled: g.Enabled, Rules: rs,
+			ID: g.ID, Name: g.Name, Locked: g.Locked, Enabled: g.Enabled, Rules: rs, SourceID: g.SourceID,
 		})
 	}
 	return out
@@ -178,11 +178,15 @@ func (s *RulesService) GroupEdit(id, name string, enabled bool) error {
 	if idx < 0 {
 		return fmt.Errorf("group not found: %s", id)
 	}
-	if m.Groups[idx].Locked {
+	switch {
+	case m.Groups[idx].FromSource():
+		m.Groups[idx].Enabled = enabled
+	case m.Groups[idx].Locked:
 		return errLockedGroup
+	default:
+		m.Groups[idx].Name = name
+		m.Groups[idx].Enabled = enabled
 	}
-	m.Groups[idx].Name = name
-	m.Groups[idx].Enabled = enabled
 	if err := s.store.Save(m); err != nil {
 		return err
 	}
@@ -425,6 +429,7 @@ func (s *RulesService) ReplaceAll(next rules.Model) error {
 	if err := guardSafetyUnchanged(cur, next); err != nil {
 		return err
 	}
+	next = keepStoredSourceGroups(cur, next)
 	if err := s.store.Save(next); err != nil {
 		return err
 	}

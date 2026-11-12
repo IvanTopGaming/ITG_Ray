@@ -63,6 +63,7 @@ type SubsDeps struct {
 
 	SettingsView func() hub.SettingsView
 	ResolveInput subscription.InputResolver
+	ApplyRouting func(subID, subName, link string) error
 }
 
 // SubsService implements the Subs.* Wails bindings. C.T7 ships List + Add
@@ -280,12 +281,24 @@ func (s *SubsService) Remove(id string) error {
 		return err
 	}
 
+	s.applyRouting(id, "", "")
+
 	// Published outside the lock so a subscriber can't re-enter the stores
 	// while it is still held.
 	if serversChanged {
 		s.d.Hub.Publish(hub.Event{Name: hub.EventServersChanged})
 	}
 	return nil
+}
+
+func (s *SubsService) applyRouting(id, name, link string) {
+	if s.d.ApplyRouting == nil {
+		return
+	}
+	if err := s.d.ApplyRouting(id, name, link); err != nil {
+		slog.Warn("sub routing not applied", slog.String("scope", "subs"),
+			slog.String("id", id), slog.String("err", logging.RedactError(err)))
+	}
 }
 
 func (s *SubsService) Edit(id, rawURL, userAgent string) (hub.SubView, error) {
@@ -507,6 +520,10 @@ func (s *SubsService) syncOne(parent context.Context, id string) error {
 			slog.String("id", id), slog.String("err", err.Error()))
 	}
 	s.d.StoreLock.Unlock()
+
+	if syncOK && syncErr == nil {
+		s.applyRouting(id, found.Name, meta.RoutingLink)
+	}
 
 	s.d.Hub.Publish(hub.Event{
 		Name: hub.EventSubSynced,
